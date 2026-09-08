@@ -59,6 +59,22 @@ func test_every_manifest_kind_field_is_a_valid_gst_layer_kind() -> void:
 			assert_true(valid_kinds.has(input["kind"]), "%s input %s kind is a valid GSTLayer.Kind value" % [id, input["name"]])
 
 
+## GSTLayer._property_type_for maps exactly these five type strings; any
+## other value falls back to TYPE_FLOAT with a push_warning naming the entry
+## and param (docs/PLAN.md phase 4 fix pass 2, item 1). Every real manifest
+## param type must be one of the known set so the inspector column never
+## silently falls back for shipped data.
+func test_every_manifest_param_type_is_known() -> void:
+	var lib: GSTLibrary = GSTLibrary.new()
+	lib.scan()
+	var known_types: Array[String] = ["int", "float", "color", "vec2", "vec3"]
+	for id: String in lib.entries.keys():
+		var manifest_entry: GSTManifestEntry = lib.get_entry(id)
+		for param: Dictionary in manifest_entry.params:
+			var param_type: String = String(param.get("type", ""))
+			assert_true(known_types.has(param_type), "%s param %s has known type '%s'" % [id, param["name"], param_type])
+
+
 func test_add_entry_flags_a_duplicate_function_name() -> void:
 	var lib: GSTLibrary = GSTLibrary.new()
 	var first: GSTManifestEntry = GSTManifestEntry.new()

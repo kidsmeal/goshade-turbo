@@ -152,7 +152,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 
 ## Phase 4: Editor main screen UI and undo
 
-**Status:** pending
+**Status:** committed (c40118d)
 **Goal:** A main screen tab with the three-column layout, a working stack list, the picker popup, the inspector column, and undo on every structural edit.
 **Files:**
 - `addons/goshade_turbo/plugin.gd` (modify: `_has_main_screen`, `_get_plugin_name`, `_get_plugin_icon`, `_make_visible`)
@@ -163,16 +163,29 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 - `addons/goshade_turbo/ui/gst_output_block.tscn` / `.gd` (create, color picker + alpha picker at the panel bottom)
 - `addons/goshade_turbo/ui/gst_undo.gd` (create, wraps `EditorUndoRedoManager` for add/remove/reorder/slot change/output change)
 - `addons/goshade_turbo/assets/gst_icon.svg` (create)
+- `addons/goshade_turbo/model/gst_layer.gd` (modify: dynamic inspector properties for `params` via `_get_property_list` / `_get` / `_set` with `PROPERTY_HINT_RANGE` from the manifest, so decision 13's inspector column shows sliders; the layer holds a non-exported `manifest: GSTManifestEntry` reference set by the panel on add and on load)
+- `tests/gst_editor_smoke.gd` (create, `@tool` script the plugin runs when the `GST_EDITOR_SMOKE` environment variable is set: performs the phase 4 verification steps programmatically inside a real editor session, prints one `SMOKE <item> PASS|FAIL <detail>` line per item, then quits the editor)
+- `docs/EDITOR_SMOKE.md` (create, per-phase record of editor smoke results, method, and engine version; phases 5-8 append)
+- `addons/goshade_turbo/codegen/gst_codegen.gd` (modify: `_main_output_line` defaults `output_color` to the top color layer; `_alpha_expr` resolves an unset alpha to `texture` when a texture source exists else `none`, and `color_alpha` reads the resolved color id)
+- `addons/goshade_turbo/model/gst_stack.gd` (modify: `output_alpha` defaults to `&""` so unset and explicit `none` are distinct)
+- `tests/test_output_block.gd` (modify: default resolution tests)
+- `docs/DESIGN.md` (modify: decision 12 accepts a field output color layer)
+- `**/*.gd.uid`, `**/*.tscn` sidecars and scenes generated or created alongside the scripts above
+- `NOW.md`, `docs/PLAN.md` (orchestrator state, edited by the pipeline scripts and the orchestrator)
+- `tests/test_library_index.gd` (modify: every manifest param type is a known type string)
+- `addons/goshade_turbo/assets/gst_icon.svg.import` and any other `.import` sidecar Godot generates for assets under `addons/goshade_turbo/assets/`
 
-**Verification:** manual runtime check with a pass condition, because no automated harness drives the editor:
-- Enable the plugin, open the tab, add a generator and a field op from the picker, wire the field op's slot to the generator, set the output color layer.
-- Press Ctrl+Z five times: the output change, the slot change, the reorder, the second add, and the first add each revert in order, and the stack list redraws to match after every step. Pass condition is all five reverting; anything sticking is a fail.
+**Verification:** editor smoke script (`godot --editor --path .` with `GST_EDITOR_SMOKE=4`, results recorded in `docs/EDITOR_SMOKE.md`) covering each item below, plus a manual pass by the user before release:
+- Enable the plugin, open the tab, add a generator, a field op, and a second generator from the picker, wire the field op's slot to the first generator, move the second generator down one position (allowed, it references nothing), attempt to move the first generator above the field op (refused with the reason shown in the message label, no undo action registered), set the output color layer.
+- Undo six times: the output change, the allowed reorder, the slot change, the third add, the second add, and the first add each revert in order, and the stack list redraws to match after every step. Pass condition is all six reverting and the undo history then empty; anything sticking is a fail.
+- The output block shows the effective defaults (decision 12) when `output_color` or `output_alpha` is unset: the top color layer, and `texture` alpha when a texture source exists else `none`.
 - Opening the picker from a field slot lists only field-kind entries; the search box filters within that set.
 - A reorder that would move a layer above one it references shows the refusal reason in the UI rather than performing it.
 
-**Exit criteria:** All five undo operations round-trip, the picker filters by slot kind, refusals surface their reason string in the UI.
+**Exit criteria:** All six undo operations round-trip and the history is then empty, the picker filters by slot kind, refusals surface their reason string in the UI, the output block shows decision 12 defaults and codegen resolves the same defaults.
 **Blockers:** none beyond phase 1 spike results.
 **Wires:** `plugin.gd` registers the main screen tab, making the panel reachable from the editor.
+**Wired-by:** phase 5 (`GSTMainPanel.get_preview_slot()` is where the preview column mounts), phase 6 (`GSTMainPanel.set_stack()` is the open and reopen entry point).
 
 ## Phase 5: Preview column
 

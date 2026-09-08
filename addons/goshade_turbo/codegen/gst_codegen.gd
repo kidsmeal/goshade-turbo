@@ -133,6 +133,15 @@ static func _stack_has_screen_source(stack: GSTStack) -> bool:
 	return false
 
 
+## True when any "source/texture" layer exists in the stack (decision 12
+## unset-alpha default).
+static func _stack_has_texture_source(stack: GSTStack) -> bool:
+	for layer: GSTLayer in stack.layers:
+		if layer.entry == "source/texture":
+			return true
+	return false
+
+
 ## True when any slot assignment or the output alpha mode converts a color
 ## layer to a field through luminance (decision 2, decision 12), so
 ## _luma_function must be declared. Structural, not a text scan, so it does
@@ -535,27 +544,47 @@ static func _solo_output_line(stack: GSTStack, layer_id: StringName) -> String:
 	return "COLOR = vec4(vec3(%s), 1.0);" % local
 
 
+## When stack.output_color is unset, defaults to the top (highest stack
+## index) color-kind layer (decision 12, docs/PLAN.md Phase 4 amendment item
+## 2). Returns a fixed black opaque line when no color layer exists at all,
+## rather than emitting an undefined GLSL identifier for an empty layer id.
 static func _main_output_line(stack: GSTStack) -> String:
-	var layer: GSTLayer = GSTStackOps.find_layer(stack, stack.output_color)
-	var local: String = GSTUniformNames.local_var(stack.output_color)
+	var output_id: StringName = stack.output_color if stack.output_color != &"" else _default_color_layer_id(stack)
+	if output_id == &"":
+		return "COLOR = vec4(0.0, 0.0, 0.0, 1.0);"
+	var layer: GSTLayer = GSTStackOps.find_layer(stack, output_id)
+	var local: String = GSTUniformNames.local_var(output_id)
 	if layer != null and layer.kind_out == GSTLayer.Kind.FIELD:
 		return "COLOR = vec4(vec3(%s), 1.0);" % local
 	return "COLOR = vec4(%s.rgb, %s);" % [local, _alpha_expr(stack)]
+
+
+static func _default_color_layer_id(stack: GSTStack) -> StringName:
+	for i: int in range(stack.layers.size() - 1, -1, -1):
+		var layer: GSTLayer = stack.layers[i]
+		if layer.kind_out == GSTLayer.Kind.COLOR:
+			return layer.id
+	return &""
 
 
 ## Four alpha modes (decision 12): none -> 1.0, texture -> texture(TEXTURE,
 ## UV).a (same expression regardless of how many texture layers exist, B7),
 ## color_alpha -> the output color layer's own alpha, a layer id -> that
 ## field layer's local, or luma(local) when the referenced layer is itself
-## color kind.
+## color kind. An unset mode (&"") resolves to texture when the stack has a
+## "source/texture" layer, else none; &"none" is always the explicit 1.0,
+## never reinterpreted by that default.
 static func _alpha_expr(stack: GSTStack) -> String:
 	var mode: StringName = stack.output_alpha
-	if mode == &"none" or mode == &"":
+	if mode == &"":
+		mode = &"texture" if _stack_has_texture_source(stack) else &"none"
+	if mode == &"none":
 		return "1.0"
 	if mode == &"texture":
 		return "texture(TEXTURE, UV).a"
 	if mode == &"color_alpha":
-		return "%s.a" % GSTUniformNames.local_var(stack.output_color)
+		var color_id: StringName = stack.output_color if stack.output_color != &"" else _default_color_layer_id(stack)
+		return "%s.a" % GSTUniformNames.local_var(color_id)
 	var layer: GSTLayer = GSTStackOps.find_layer(stack, mode)
 	var local: String = GSTUniformNames.local_var(mode)
 	if layer != null and layer.kind_out == GSTLayer.Kind.COLOR:
