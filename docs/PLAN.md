@@ -35,16 +35,16 @@ Eight phases build a `canvas_item` shader-stack editor plugin: data model and he
 
 ## Blockers / Open Questions
 
-B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 remain open and gate the phases named.
+B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 2026-09-08. B2 remains open and gates phase 8.
 
 - **B1 (resolved):** `docs/` un-ignored in `.gitignore`. `docs/DESIGN.md`, this plan, `docs/SPIKE_NOTES.md`, and screenshots are tracked. Owner: user.
 - **B2 (gates phase 8's version matrix only):** Only `Godot_v4.6.2-stable_win64.exe` is installed. The checklist requires "Runs on 4.4, 4.6, 4.7". 4.4 and 4.7 binaries must be obtained before phase 8 can close. Phases 1-7 proceed on 4.6.2.
 - **B3 (resolved):** `group_uniforms L<position>_<function>;` with a two-digit zero-padded stack position, e.g. `group_uniforms L03_fbm;`. One identifier, sorts by stack position in the inspector, no subgroup nesting. Verified to compile on 4.6.2. Owner: user.
 - **B4 (resolved):** Coord-block uniforms keep the short form `l<id>_scale`, `l<id>_offset`, `l<id>_rotation`, `l<id>_scroll`, `l<id>_warp_strength`. The coord block is not a function param, so it carries no function segment. Slider uniforms keep `l<id>_<function>_<param>`. Owner: user.
 - **B5 (resolved):** `local_pos` is normalized. `vertex()` divides `VERTEX` by the node's rect size, passed as a `uniform vec2 gst_rect_size` that the plugin and the preview set from the target node. A coord-block `scale` of `1.0` then matches `uv`. The exported shader defaults `gst_rect_size` to `vec2(1.0)` and the README documents that a user must set it on nodes they attach the shader to. Owner: user.
-- **B6 (gates phase 3):** Decision 21 states a filter input "must be a source layer". The design does not say whether a filter may take another filter's output. Decide: refuse (filters chain only off `texture`/`screen`) or allow filter-of-filter.
-- **B7 (gates phase 6):** Decision 12 defaults output alpha to texture alpha "when a texture source exists". Undefined when the stack has two or more `texture` layers. Decide the tiebreak (lowest id, topmost, or leave `none`).
-- **B8 (gates phase 6):** Decision 8 defines reopen-from-header behavior when the body differs from a fresh codegen. Undefined when a `.gdshader` has no `// stack:` header at all, or the header JSON fails to parse. Decide the message and whether reopen is refused or offered as a new empty stack.
+- **B6 (resolved):** Filter-of-filter is refused in v0.1. A `samples_source` slot accepts only a `texture` or `screen` layer, matching decision 21 literally. The refusal reason names the slot and the offending layer. Owner: user.
+- **B7 (resolved):** With two or more `texture` layers, output alpha defaults to `texture` alpha, which reads `texture(TEXTURE, UV).a` and is the same value for every texture layer, so no tiebreak is needed for the alpha expression. The output block's default color layer stays the top color layer. Owner: user.
+- **B8 (resolved):** Reopen of a `.gdshader` with no `// stack:` header, an unparsable header, or an unknown schema version is refused with a message naming the file and the reason. No new empty stack is offered. Owner: user.
 
 ## Phase 1: Scaffold, data model, layer identity, test runner
 
@@ -85,7 +85,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 remain open and g
 
 ## Phase 2: Codegen core - generators and field ops
 
-**Status:** pending
+**Status:** review failed
 **Goal:** A `GSTCodegen` that turns a stack of generators and field ops into compiling `.gdshader` text.
 **Files:**
 - `addons/goshade_turbo/codegen/gst_codegen.gd` (create)
@@ -101,6 +101,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 remain open and g
 - `tests/test_coord_space.gd` (create)
 - `tests/test_solo_output.gd` (create)
 - `tests/gst_shader_compile.gd` (create, helper: build a `Shader`, set code, return `get_shader_uniform_list().size() > 0`)
+- `tests/test_library_index.gd` (modify: roster count from 3 to 22, duplicate-function assertion over the full real scan)
 
 **Verification:** `godot --headless --path . -s res://tests/run_codegen_tests.gd` exits 0, with tests covering:
 - One generator plus one field op emits exactly two `fragment()` locals in stack order.
@@ -140,7 +141,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 remain open and g
 - Every color entry and every filter entry compiles alone.
 
 **Exit criteria:** Full v0.1 roster categories exist as manifests, every entry compiles alone, filter refusal is enforced at slot assignment rather than at codegen.
-**Blockers:** B6 (filter-of-filter), B7 (multi-texture alpha default).
+**Blockers:** none (B6, B7 resolved).
 **Wired-by:** phase 5.
 
 ## Phase 4: Editor main screen UI and undo
@@ -209,7 +210,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 remain open and g
 - Manual: export to a path that already holds a differing body and the confirmation dialog appears before any write.
 
 **Exit criteria:** Round trip is byte-exact, the overwrite check catches a one-character body edit, no export path writes without confirmation when a difference exists.
-**Blockers:** B8 (missing or unparsable header behavior).
+**Blockers:** none (B8 resolved).
 **Wires:** save / open / export buttons in the main panel.
 
 ## Phase 7: Three-recipe proof and the rendered-check harness
