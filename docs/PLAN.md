@@ -48,7 +48,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 remain open and g
 
 ## Phase 1: Scaffold, data model, layer identity, test runner
 
-**Status:** ready to commit
+**Status:** committed (a1fe516)
 **Goal:** A loadable Godot project with an enabled `GST` plugin skeleton, the four resource classes, and a green headless test runner.
 **Files:**
 - `project.godot` (create)
