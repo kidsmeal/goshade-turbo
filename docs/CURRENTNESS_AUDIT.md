@@ -48,7 +48,7 @@ A deferred note is not a dropped note - it lives here until someone clears it. R
 the work lands or the reason expires; `/claudhd:audit` prunes stale ones.
 Format: `- [ ] <note, with file:line>: <why deferred> (phase N, <feature or plan name>)`.
 
-(empty)
+- [ ] README.md must state the `godot --headless --path . --import` prerequisite before the test command (docs/PLAN.md phase 8 README entry): README is a phase 8 deliverable, does not exist yet (phase 1, GoShade Turbo v0.1)
 
 ## Rule of thumb
 - Roadmap says what to do next.

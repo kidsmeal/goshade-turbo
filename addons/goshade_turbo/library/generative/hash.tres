@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/hash"
+function = "hash"
+description = "pseudo-random scalar field from a 2D point, no periodicity guarantees"
+source_math = "sin/dot pseudo-random hash, a common GLSL technique. The Book of Shaders, ch. 10 \"Random\", https://thebookofshaders.com/10/"
+source_code_url = "Capsule Castle, shaders/sprite/SpriteGoldFoil.gdshader, function random()"
+source_code_license = "same author, no external license, ported verbatim"
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
+}
+"

@@ -8,8 +8,8 @@ _Committed, so it follows your branch: `git checkout` swaps this cursor to that 
 
 This file is generated (design section 4): the facts below (Mode, Position, from, Counts, Last touched) render from `.now/state.json`, never hand-typed. The Active thread's two lines are the one piece of human prose, prompted at boundaries and persisted as state fields too - so it survives a regeneration without ever being parsed back out of this file.
 
-Mode: design
-Position: designing docs/DESIGN.md
+Mode: (none - idle)
+Position: idle - pick a mode with /claudhd:start or /claudhd:design
 from: (unplanned work)
 Counts: queue 0 · quick fixes 0 · ideas untriaged 0
 

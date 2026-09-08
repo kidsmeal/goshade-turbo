@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/fbm"
+function = "fbm"
+description = "layered noise, cloud like, octaves control detail"
+source_math = "fractional Brownian motion: standard sum-of-octaves construction. See D. Ebert et al., \"Texturing & Modeling: A Procedural Approach\" (3rd ed., 2003), ch. 2."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 4,
+"max": 8,
+"min": 1,
+"name": "octaves",
+"type": "int"
+}, {
+"default": 0.5,
+"max": 0.8,
+"min": 0.2,
+"name": "gain",
+"type": "float"
+}])
+coord = true
+samples_source = false
+depends = Array[String](["generative/snoise"])
+code = "float fbm(vec2 p, int octaves, float gain) {
+	float sum = 0.0;
+	float amp = 0.5;
+	float freq = 1.0;
+	for (int i = 0; i < octaves; i++) {
+		sum += amp * snoise(p * freq);
+		freq *= 2.0;
+		amp *= gain;
+	}
+	return sum;
+}
+"
