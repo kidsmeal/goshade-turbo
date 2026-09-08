@@ -50,6 +50,12 @@ signal stack_changed
 @onready var _image_button: Button = %ImageButton
 @onready var _solo_check: CheckButton = %SoloCheck
 @onready var _coord_space_option: OptionButton = %CoordSpaceOption
+@onready var _new_button: Button = %NewButton
+@onready var _open_button: Button = %OpenButton
+@onready var _save_button: Button = %SaveButton
+@onready var _save_as_button: Button = %SaveAsButton
+@onready var _export_button: Button = %ExportButton
+@onready var _reopen_shader_button: Button = %ReopenShaderButton
 
 const COORD_SPACE_NAMES: Array[String] = ["uv", "screen_uv", "local"]
 
@@ -64,6 +70,19 @@ var _watched_history: UndoRedo = null
 ## _syncing guard for the same reason).
 var _syncing_coord_space: bool = false
 var _file_dialog: EditorFileDialog = null
+
+## The .tres this stack was last opened from or saved to; "" for a new,
+## never-saved stack, or after a reopen-from-.gdshader (decision 8: a
+## reopened stack has no .tres of its own to "Save" back onto, so it starts
+## unsaved like a new stack).
+var _current_path: String = ""
+var _open_dialog: EditorFileDialog = null
+var _save_as_dialog: EditorFileDialog = null
+var _export_dialog: EditorFileDialog = null
+var _reopen_shader_dialog: EditorFileDialog = null
+var _overwrite_dialog: ConfirmationDialog = null
+## The export target awaiting the overwrite confirmation dialog's answer.
+var _pending_export_path: String = ""
 
 
 func _ready() -> void:
@@ -87,7 +106,7 @@ func _ready() -> void:
 	# never green, across 8 further frames; a material created with real code
 	# before ever being assigned rendered correctly immediately). Every
 	# _resync_material() call after this first one is safe either way, since
-	# by then the shader already carries real code. _rebuild_undo() (called by
+	# by then the shader already carries real code. _install_stack() (called by
 	# set_undo_redo_manager right after this node enters the tree) resyncs
 	# again once the stack is actually editable, so no further call is needed
 	# here.
@@ -112,19 +131,72 @@ func _ready() -> void:
 	_file_dialog.file_selected.connect(_on_preview_image_selected)
 	add_child(_file_dialog)
 
+	_new_button.pressed.connect(_on_new_pressed)
+	_open_button.pressed.connect(_on_open_pressed)
+	_save_button.pressed.connect(_on_save_pressed)
+	_save_as_button.pressed.connect(_on_save_as_pressed)
+	_export_button.pressed.connect(_on_export_pressed)
+	_reopen_shader_button.pressed.connect(_on_reopen_shader_pressed)
+
+	_open_dialog = EditorFileDialog.new()
+	_open_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
+	_open_dialog.access = EditorFileDialog.ACCESS_RESOURCES
+	_open_dialog.add_filter("*.tres", "GoShade Turbo Stack")
+	_open_dialog.file_selected.connect(_on_open_file_selected)
+	add_child(_open_dialog)
+
+	_save_as_dialog = EditorFileDialog.new()
+	_save_as_dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
+	_save_as_dialog.access = EditorFileDialog.ACCESS_RESOURCES
+	_save_as_dialog.add_filter("*.tres", "GoShade Turbo Stack")
+	_save_as_dialog.file_selected.connect(_on_save_as_file_selected)
+	add_child(_save_as_dialog)
+
+	_export_dialog = EditorFileDialog.new()
+	_export_dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
+	_export_dialog.access = EditorFileDialog.ACCESS_RESOURCES
+	_export_dialog.add_filter("*.gdshader", "GoShade Turbo Shader")
+	_export_dialog.file_selected.connect(_on_export_file_selected)
+	add_child(_export_dialog)
+
+	_reopen_shader_dialog = EditorFileDialog.new()
+	_reopen_shader_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
+	_reopen_shader_dialog.access = EditorFileDialog.ACCESS_RESOURCES
+	_reopen_shader_dialog.add_filter("*.gdshader", "GoShade Turbo Shader")
+	_reopen_shader_dialog.file_selected.connect(_on_reopen_shader_file_selected)
+	add_child(_reopen_shader_dialog)
+
+	_overwrite_dialog = ConfirmationDialog.new()
+	_overwrite_dialog.confirmed.connect(_on_overwrite_confirmed)
+	add_child(_overwrite_dialog)
+
 
 ## Called once by plugin.gd right after instantiation (decision 20's
 ## EditorUndoRedoManager is only reachable through the EditorPlugin, not a
-## plain Control).
+## plain Control). Installs the initial, never-saved stack with no undo action
+## registered around it: there is nothing before the first stack to undo back
+## to.
 func set_undo_redo_manager(undo_redo: EditorUndoRedoManager) -> void:
 	_undo_redo = undo_redo
-	_rebuild_undo()
+	_install_stack(_stack, GSTUndo.new(_undo_redo, _stack, _library, _on_stack_changed))
 
 
-func _rebuild_undo() -> void:
-	if _undo_redo == null:
-		return
-	_undo = GSTUndo.new(_undo_redo, _stack, _library, _on_stack_changed)
+## Wires the stack-list/output-block/inspector columns, the watched undo
+## history, and the coord-space dropdown to `stack`/`undo`, and resyncs the
+## material. This is the do/undo primitive for a stack replacement (phase 6
+## fix pass 2, item 1; docs/PLAN.md Cross-cutting "EditorUndoRedoManager
+## integration"): replace_stack below registers this method as both the do
+## and the undo method of a "Replace stack" EditorUndoRedoManager action
+## (alongside a second do/undo pair for _current_path), so undo reinstalls the
+## exact previous GSTStack instance and its previous GSTUndo instance -- not a
+## freshly constructed one -- and every action already recorded through that
+## GSTUndo's own add_do_method(self, ...) bindings keeps landing on the
+## GSTStack/GSTLayer instances it actually closed over. Also called directly,
+## with no action registered, by set_undo_redo_manager for the very first
+## stack.
+func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
+	_stack = stack
+	_undo = undo
 	_stack_list.setup(_stack, _library, _undo)
 	_output_block.setup(_stack, _library, _undo)
 	_inspector_column.setup(_stack, _library, _undo)
@@ -135,15 +207,49 @@ func _rebuild_undo() -> void:
 	_resync_material()
 
 
+func _raw_set_current_path(path: String) -> void:
+	_current_path = path
+
+
+func _notify_replace() -> void:
+	stack_changed.emit()
+
+
 ## Wired-by: none (editor smoke seam)
 func get_stack() -> GSTStack:
 	return _stack
 
 
-func set_stack(stack: GSTStack) -> void:
-	_stack = stack
-	_rebuild_undo()
-	stack_changed.emit()
+## Installs new_stack (and new_path as the new _current_path) as an undoable
+## "Replace stack" action in the shared editor history, rather than mutating
+## _stack/_current_path directly: a structural edit made before New, Open, or
+## Reopen Shader now stays undoable afterward instead of being discarded
+## along with the replaced GSTStack (docs/PLAN.md Cross-cutting
+## "EditorUndoRedoManager integration", phase 6 fix pass 2 item 1).
+## custom_context is the old stack: on 4.6.2, get_object_history_id keys every
+## bare, non-scene GSTStack Resource into the one shared "Remote History"
+## bucket regardless of instance (verified: tests/gst_editor_smoke.gd
+## _run_phase6_new), so any stable object works here -- the old stack is used
+## since it is always available by the time this can be called (never before
+## set_undo_redo_manager has run). _on_new_pressed, open_path, and
+## reopen_shader_path call this instead of mutating _stack/_current_path
+## directly.
+func replace_stack(new_stack: GSTStack, new_path: String) -> void:
+	var old_stack: GSTStack = _stack
+	var old_undo: GSTUndo = _undo
+	var old_path: String = _current_path
+	var new_undo: GSTUndo = GSTUndo.new(_undo_redo, new_stack, _library, _on_stack_changed)
+	_install_stack(new_stack, new_undo)
+	_raw_set_current_path(new_path)
+	_undo_redo.create_action("GST: Replace stack", UndoRedo.MERGE_DISABLE, old_stack)
+	_undo_redo.add_do_method(self, "_install_stack", new_stack, new_undo)
+	_undo_redo.add_undo_method(self, "_install_stack", old_stack, old_undo)
+	_undo_redo.add_do_method(self, "_raw_set_current_path", new_path)
+	_undo_redo.add_undo_method(self, "_raw_set_current_path", old_path)
+	_undo_redo.add_do_method(self, "_notify_replace")
+	_undo_redo.add_undo_method(self, "_notify_replace")
+	_undo_redo.commit_action(false)
+	_notify_replace()
 
 
 ## Wired-by: none (editor smoke seam)
@@ -193,6 +299,156 @@ func get_solo_check() -> CheckButton:
 ## Wired-by: none (editor smoke seam)
 func get_message_label() -> Label:
 	return _message_label
+
+
+## The .tres this stack was last opened from or saved to, or "" for a new or
+## reopened-from-.gdshader stack (see _current_path).
+## Wired-by: none (editor smoke seam)
+func get_current_path() -> String:
+	return _current_path
+
+
+## Wired-by: none (editor smoke seam)
+func is_overwrite_dialog_visible() -> bool:
+	return _overwrite_dialog != null and _overwrite_dialog.visible
+
+
+## Wired-by: none (editor smoke seam)
+func is_export_dialog_visible() -> bool:
+	return _export_dialog != null and _export_dialog.visible
+
+
+## Wired-by: none (editor smoke seam)
+func hide_export_dialog() -> void:
+	if _export_dialog != null:
+		_export_dialog.hide()
+
+
+func _on_new_pressed() -> void:
+	replace_stack(GSTStack.new(), "")
+	_message_label.text = ""
+
+
+func _on_open_pressed() -> void:
+	_open_dialog.popup_centered_ratio()
+
+
+func _on_open_file_selected(path: String) -> void:
+	open_path(path)
+
+
+## Loads `path` through GSTStackIO and installs it via replace_stack (decision
+## 20: an undoable "Replace stack" action, same as New). A refusal (a missing
+## file or an unresolved entry) leaves the current stack untouched and shows
+## the reason in the message label. This is the Open button's own
+## file-selected handler (_on_open_file_selected calls it directly); public
+## so tests/gst_editor_smoke.gd can drive the same path without popping the
+## file dialog (docs/PLAN.md Phase 4 Files precedent, gst_stack_list.gd's
+## add_layer_by_entry_id).
+func open_path(path: String) -> void:
+	var result: Dictionary = GSTStackIO.load(path, _library)
+	if not result["ok"]:
+		_message_label.text = result["reason"]
+		return
+	replace_stack(result["stack"], path)
+	_message_label.text = ""
+
+
+func _on_save_pressed() -> void:
+	if _current_path.is_empty():
+		_on_save_as_pressed()
+		return
+	save_to_path(_current_path)
+
+
+func _on_save_as_pressed() -> void:
+	_save_as_dialog.popup_centered_ratio()
+
+
+func _on_save_as_file_selected(path: String) -> void:
+	save_to_path(path)
+
+
+## Saves the open stack to `path` through GSTStackIO. This is both the Save
+## button's own handler (when a current path already exists) and Save As's
+## file-selected handler; public so the smoke can drive it directly too.
+func save_to_path(path: String) -> void:
+	var result: Dictionary = GSTStackIO.save(_stack, path)
+	if not result["ok"]:
+		_message_label.text = result["reason"]
+		return
+	_current_path = path
+	_message_label.text = ""
+
+
+func _on_export_pressed() -> void:
+	_export_dialog.popup_centered_ratio()
+
+
+func _on_export_file_selected(path: String) -> void:
+	export_to_path(path, false)
+
+
+## Exports the open stack to `path` through GSTExport.write (decision 9: the
+## overwrite gate). When the target exists with a differing body and
+## `confirm` is false, shows the overwrite confirmation dialog and performs
+## no write; confirming it re-calls this with `confirm = true`. This is the
+## Export button's file-selected handler and the confirmation dialog's own
+## confirmed handler; public so the smoke can drive it directly too.
+func export_to_path(path: String, confirm: bool) -> void:
+	var result: Dictionary = GSTExport.write(_stack, _library, path, confirm)
+	if result["needs_confirmation"]:
+		_pending_export_path = path
+		_overwrite_dialog.dialog_text = "%s already holds a body that differs from this stack's codegen. Overwrite it?" % path
+		_overwrite_dialog.popup_centered()
+		return
+	# Any other outcome resolves the question the dialog was asking (a
+	# confirmed write, or a write that turned out not to need confirmation
+	# at all): closes it explicitly rather than relying on AcceptDialog's
+	# own auto-hide-on-confirmed, which only fires for an actual button
+	# press, not a direct confirm=true call (the smoke's own path here).
+	if _overwrite_dialog.visible:
+		_overwrite_dialog.hide()
+	if not result["ok"]:
+		_message_label.text = result["reason"]
+		return
+	_message_label.text = ""
+
+
+func _on_overwrite_confirmed() -> void:
+	export_to_path(_pending_export_path, true)
+	_pending_export_path = ""
+
+
+func _on_reopen_shader_pressed() -> void:
+	_reopen_shader_dialog.popup_centered_ratio()
+
+
+func _on_reopen_shader_file_selected(path: String) -> void:
+	reopen_shader_path(path)
+
+
+## Reopens a stack from an exported .gdshader's embedded header through
+## GSTExport.reopen (decision 8). A refusal (no header, unparsable header, or
+## an unknown schema -- B8) shows the reason in the message label and leaves
+## the current stack untouched; no new empty stack is offered. On success,
+## installs the rebuilt stack via replace_stack (an undoable "Replace stack"
+## action, same as New/Open) with an empty _current_path (a reopened stack has
+## no .tres of its own). When the file's body differs from a fresh codegen of
+## its own header
+## (decision 8's stale-body warning), that is shown instead of the plain
+## success clear. This is the Reopen Shader button's own file-selected
+## handler; public so the smoke can drive it directly too.
+func reopen_shader_path(path: String) -> void:
+	var result: Dictionary = GSTExport.reopen(path, _library)
+	if not result["ok"]:
+		_message_label.text = result["reason"]
+		return
+	replace_stack(result["stack"], "")
+	if result["body_differs"]:
+		_message_label.text = "%s reopened: its body differs from a fresh codegen of the header (hand edits detected, decision 8)" % path
+	else:
+		_message_label.text = ""
 
 
 func _on_layer_selected(layer_id: StringName) -> void:

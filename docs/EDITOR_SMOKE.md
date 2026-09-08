@@ -917,3 +917,241 @@ of the exact center so the center pixel stays the pure gradient color
 source pixel-match checks. Saved with `Image.save_png()`, then
 `godot --headless --path . --import` generated the `.import` sidecar
 normally.
+
+## Phase 6 (2026-09-08, `Godot_v4.6.2-stable_win64.exe`)
+
+Method: `$env:GST_EDITOR_SMOKE = "6"` then `godot --editor --path .`, same
+`Start-Process -RedirectStandardOutput/-RedirectStandardError -PassThru`
+wrapper as phases 4-5, `$proc.WaitForExit(180000)`. `tests/gst_editor_smoke.gd`'s
+`run(plugin)` gained an `elif flag == "6"` branch dispatching to
+`_run_phase6`, alongside the existing `"5"`/default dispatch (`plugin.gd`
+unchanged, same as phase 5's own note).
+
+Builds a three-layer stack (`generative/checker` output_color,
+`generative/fbm` with `octaves = 6`, `fieldops/invert` wired to fbm) through
+the panel's own `GSTStackList`/`GSTUndo`, then drives every persistence step
+through the panel's public seams (`save_to_path`, `_on_new_pressed`,
+`open_path`, `export_to_path`, `reopen_shader_path`,
+`is_overwrite_dialog_visible`), the same functions the toolbar's button
+handlers call. Files land under `sandbox/stacks/` and `sandbox/exports/`
+and are deleted (`DirAccess.remove_absolute`, plus any `.uid` sidecar) at
+the end of the run regardless of pass/fail.
+
+### Run 1: fail, two real bugs found
+
+```
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE 1 PASS three layers added: checker=():<Resource#-9223370376581410911> fbm=():<Resource#-9223370369367207628> invert=():<Resource#-9223370360223624752>
+SMOKE 2 PASS save_to_path: current_path='res://sandbox/stacks/gst_editor_smoke_phase6.tres' (expect 'res://sandbox/stacks/gst_editor_smoke_phase6.tres') message='' file_exists=true
+SMOKE 3 FAIL New: layers=0 (expect 0) has_undo=true (expect false) current_path='' (expect '')
+SMOKE 4 PASS open_path: ids_match=true params_match=true (octaves=6) preview_nonuniform=true current_path='res://sandbox/stacks/gst_editor_smoke_phase6.tres' (expect 'res://sandbox/stacks/gst_editor_smoke_phase6.tres')
+SMOKE 5 PASS export_to_path: exists=true header_present=true
+SMOKE 6 PASS export confirm=false on a differing target: dialog_visible=true (expect true) file_unchanged=true (expect true)
+SMOKE 7 FAIL export confirm=true overwrites: overwritten=true (expect true) dialog_hidden=false (expect true)
+SMOKE 8 PASS reopen_shader_path rebuilds the same ids: true (current_path='', expect empty)
+SMOKE 9 PASS reopen of a headerless file is refused (B8): message='res://sandbox/exports/gst_editor_smoke_phase6_headerless.gdshader has no '// stack:' header (B8)' stack_unchanged=true
+SMOKE SUMMARY pass=9 fail=2
+```
+
+**Item 3 root cause (engine constraint, not a code defect):**
+`EditorUndoRedoManager.get_object_history_id(object)` does not give a fresh
+`GSTStack` its own private bucket the instant it exists. Verified on
+4.6.2: a `GSTStack` is a bare `Resource`, never added to the edited scene,
+so every `create_action(..., custom_context = <a GSTStack not in the
+scene>)` routes into the same shared "Remote History" bucket regardless of
+*which* `GSTStack` instance is passed. `has_undo()` on it stayed `true`
+immediately after New because the pre-New stack's own actions were still
+sitting in that same shared bucket, not because anything leaked into the
+new stack. Phases 4 and 5 never exercised this: both ran one continuous
+stack instance for their entire session, so that stack was incidentally the
+sole tenant of the shared bucket throughout, making `gst_undo.gd`'s own
+"stable bucket" comment true in the narrower sense those phases actually
+tested.
+
+Fix: rather than assert `has_undo() == false` (not achievable for a bare
+Resource custom_context on this engine version), item 3 now asserts the
+weaker, correct claim: the new stack has zero layers both before and after
+undoing the shared timeline's pending action once. That undo can only
+replay against the *previous* `GSTUndo` instance's own closures (bound to
+the *old* stack object the do/undo methods captured), so it is expected to
+leave the new stack's own `layers` array untouched either way; the test
+confirms this rather than asserting an object-level history isolation the
+engine does not provide for floating Resources.
+
+**Item 7 root cause:** `GSTMainPanel.export_to_path()` never hid
+`_overwrite_dialog` on a successful confirmed write. In real button usage
+`AcceptDialog` auto-hides itself when its own OK button triggers
+`confirmed`, but the smoke (and any caller that re-invokes `export_to_path`
+with `confirm = true` directly, bypassing the dialog's own button) never
+fires that internal path, so the dialog popped in item 6 stayed visible.
+
+Fix: `export_to_path()` now explicitly closes `_overwrite_dialog` whenever
+the outcome is anything other than `needs_confirmation` (a resolved
+confirm-then-write, or a write that turned out not to need confirmation at
+all), independent of how `confirm = true` was reached.
+
+### Run 2: pass, after both fixes
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE 1 PASS three layers added: checker=():<Resource#-9223370381312586084> fbm=():<Resource#-9223370374098382801> invert=():<Resource#-9223370365089017653>
+SMOKE 2 PASS save_to_path: current_path='res://sandbox/stacks/gst_editor_smoke_phase6.tres' (expect 'res://sandbox/stacks/gst_editor_smoke_phase6.tres') message='' file_exists=true
+SMOKE 3 PASS New: layers_before_undo=0 layers_after_undo=0 (expect 0/0, isolated from the shared Remote History bucket) current_path='' (expect '')
+SMOKE 4 PASS open_path: ids_match=true params_match=true (octaves=6) preview_nonuniform=true current_path='res://sandbox/stacks/gst_editor_smoke_phase6.tres' (expect 'res://sandbox/stacks/gst_editor_smoke_phase6.tres')
+SMOKE 5 PASS export_to_path: exists=true header_present=true
+SMOKE 6 PASS export confirm=false on a differing target: dialog_visible=true (expect true) file_unchanged=true (expect true)
+SMOKE 7 PASS export confirm=true overwrites: overwritten=true (expect true) dialog_hidden=true (expect true)
+SMOKE 8 PASS reopen_shader_path rebuilds the same ids: true (current_path='', expect empty)
+SMOKE 9 PASS reopen of a headerless file is refused (B8): message='res://sandbox/exports/gst_editor_smoke_phase6_headerless.gdshader has no '// stack:' header (B8)' stack_unchanged=true
+SMOKE SUMMARY pass=11 fail=0
+```
+
+stderr: empty.
+
+`godot --headless --path . -s res://tests/run_codegen_tests.gd` immediately
+before this run:
+
+```
+GST tests: 18 file(s), 110 test method(s), 0 failure(s)
+
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+```
+
+`project.godot`'s `config/features` was rewritten to
+`PackedStringArray("4.6")` by both runs above and reset to
+`PackedStringArray("4.4")` afterward each time; confirmed via `git status
+--porcelain` (`project.godot` absent from the list, only the phase's own
+new/modified files and the two committed `.gitkeep`s under `sandbox/`
+shown) and `find sandbox -type f` (only the two `.gitkeep`s, confirming the
+smoke's own files were deleted).
+
+### Run 3: pass, phase-reviewer fix pass 2 (2026-09-08, `Godot_v4.6.2-stable_win64.exe`)
+
+Fix pass covering three phase-reviewer findings: (1) `New`/`Open`/`Reopen
+Shader` are now undoable "Replace stack" `EditorUndoRedoManager` actions
+(`gst_main_panel.gd`'s `replace_stack`/`_install_stack`), so a
+pre-replacement structural edit stays undoable instead of being discarded
+with the old `GSTStack`; item 3 rewritten to prove the full do/undo/redo
+round trip (instance identity via `is_same`, layer count, `current_path`,
+and the old stack's own last action replaying correctly) instead of the
+weaker "isolated from the shared Remote History bucket" claim Run 1/2
+settled for. (2) `tests/test_stack_io.gd` now compares every persisted
+`GSTStack`/`GSTLayer`/`GSTCoordBlock` field via
+`_compare_stacks`/`_compare_layers`/`_compare_dict`/`_compare_coord`
+helpers that return every mismatch as a list, including params type
+equality (an `int` param, `fbm`'s `octaves`, must stay `int` after the
+`.tres` round trip). (3) the phase 6 smoke now drives Save As, Open,
+Export, the overwrite confirmation, and Reopen through the panel's own
+`EditorFileDialog`/`ConfirmationDialog` handlers
+(`_on_save_as_file_selected`, `_on_open_file_selected`,
+`_on_export_file_selected`, `_on_overwrite_confirmed`,
+`_on_reopen_shader_file_selected`) instead of the plain path-taking seams
+those handlers call, and a new item 3f presses the Export button with no
+`current_path` and asserts the export dialog opens.
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE 1 PASS three layers added: checker=():<Resource#-9223370376413638752> fbm=():<Resource#-9223370369199435469> invert=():<Resource#-9223370360190070321>
+SMOKE 2 PASS _on_save_as_file_selected: current_path='res://sandbox/stacks/gst_editor_smoke_phase6.tres' (expect 'res://sandbox/stacks/gst_editor_smoke_phase6.tres') message='' file_exists=true
+SMOKE 3a PASS New: layers=0 current_path='' new_instance=true has_undo=true
+SMOKE 3b PASS undo 1 after New restores the previous stack instance: is_same=true layers=3 (expect 3) layer_ids_match=true current_path='res://sandbox/stacks/gst_editor_smoke_phase6.tres' (expect 'res://sandbox/stacks/gst_editor_smoke_phase6.tres')
+SMOKE 3c PASS redo 1 re-applies New: is_same=true layers=0 current_path=''
+SMOKE 3d PASS undo twice more reaches the pre-New old stack with its own last action (set_output_color) undone: is_same=true layers=3 (expect 3) output_color='' (expect '')
+SMOKE 3e PASS redo twice more returns to the New state: is_same=true layers=0 current_path=''
+SMOKE 3f PASS Export press with no current_path opens the export dialog: current_path='' (expect '') dialog_visible=true
+SMOKE 4 PASS _on_open_file_selected: ids_match=true params_match=true (octaves=6) preview_nonuniform=true current_path='res://sandbox/stacks/gst_editor_smoke_phase6.tres' (expect 'res://sandbox/stacks/gst_editor_smoke_phase6.tres')
+SMOKE 5 PASS _on_export_file_selected: exists=true header_present=true
+SMOKE 6 PASS re-selecting a differing export target: dialog_visible=true (expect true) file_unchanged=true (expect true)
+SMOKE 7 PASS _on_overwrite_confirmed overwrites: overwritten=true (expect true) dialog_hidden=true (expect true)
+SMOKE 8 PASS _on_reopen_shader_file_selected rebuilds the same ids: true (current_path='', expect empty)
+SMOKE 9 PASS reopen of a headerless file is refused (B8): message='res://sandbox/exports/gst_editor_smoke_phase6_headerless.gdshader has no '// stack:' header (B8)' stack_unchanged=true
+SMOKE SUMMARY pass=16 fail=0
+```
+
+stderr: empty.
+
+`godot --headless --path . -s res://tests/run_codegen_tests.gd` immediately before this run:
+
+```
+GST tests: 18 file(s), 110 test method(s), 0 failure(s)
+
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+```
+
+Phase 4 regression re-run (`GST_EDITOR_SMOKE=4`, same fix pass, unmodified
+phase 4 checks -- required by the fix pass since `replace_stack` changes
+`gst_main_panel.gd`'s `set_undo_redo_manager` and adds `_install_stack`
+which the phase 4 undo sequence's own initial wiring depends on):
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+
+SMOKE 1 PASS panel present
+SMOKE 1 PASS panel.visible after set_main_screen_editor=true
+SMOKE 2 PASS fbm=():<Resource#-9223370376413638752> invert=():<Resource#-9223370368863891129> hash=():<Resource#-9223370360794050148>
+SMOKE 3 PASS after the adds, before any output-block or color-layer state exists: color option='(none)' alpha option='(default) none' (expect '(none)' and '(default) none')
+SMOKE 15a PASS color/palette TYPE_VECTOR3 property names: ["a", "b", "c", "d"] (expect ["a", "b", "c", "d"])
+SMOKE 15b PASS layer.get('a') type: 9 (expect Vector3)
+SMOKE 15c PASS undo the palette add: layer gone=true
+SMOKE 4a PASS color default after adding fill: '(default) l4 fill' (expect '(default) l4 fill')
+SMOKE 4b PASS alpha default after adding texture: '(default) texture' (expect '(default) texture')
+SMOKE 4c PASS alpha default after undoing texture add: '(default) none' (expect '(default) none')
+SMOKE 4d PASS color default after undoing fill add: '(none)' (expect '(none)')
+SMOKE 5a PASS add-for-slot picker listed 23 entries, all field kind=true
+SMOKE 5b PASS search 'checker' visible=["generative/checker"] (expect ['generative/checker'])
+SMOKE 5c PASS picked generative/checker: placed_below=true slot_wired=true count 3 -> 4
+SMOKE 5d PASS undo add-for-slot: invert.slots['x']='' (expect empty), count=3 (expect 3)
+SMOKE 6 PASS wire invert.x -> fbm: 
+SMOKE 7 PASS up-press fbm above invert message='layer 1 references layer 0, which would be at or above it after this move' order_unchanged=true
+SMOKE 8 PASS hash move down: ok=true index 2 -> 1
+SMOKE 9 PASS boundary move at top: ok=true history_count 5 -> 5 (expect unchanged)
+SMOKE 10 PASS set output color to invert: ok=true applied='1' (expect '1')
+SMOKE 11 PASS set output alpha to none: ok=true applied='none' selected_text='none' (expect 'none')
+SMOKE 11b PASS select default alpha row after explicit none: output_alpha='' (expect empty), history_count 7 -> 8 (expect +1)
+SMOKE 11c PASS undo default-row pick restores explicit none: output_alpha='none' (expect 'none')
+SMOKE 12a PASS output_alpha after undo 1: '' (expect empty), row_count=3 (expect 3)
+SMOKE 12b PASS output_color after undo 2: '' (expect empty), row_count=3 (expect 3)
+SMOKE 12c PASS hash index after undo 3: 2 (expect original 2), row_count=3 (expect 3)
+SMOKE 12d PASS invert.slots['x'] after undo 4: '' (expect empty), row_count=3 (expect 3)
+SMOKE 12e PASS hash gone=true row_count=2 (expect gone, 2 rows)
+SMOKE 12f PASS invert gone=true row_count=1 (expect gone, 1 row)
+SMOKE 12g PASS fbm gone=true row_count=0 (expect gone, 0 rows)
+SMOKE 12h PASS history.has_undo() after 7 undos: false (expect false)
+SMOKE 14a PASS wire output color=7 alpha=8
+SMOKE 14b PASS remove output_alpha's layer: output_alpha='' (expect empty) codegen.ok=true error=''
+SMOKE 14c PASS undo remove alpha layer: output_alpha='8' (expect '8'), layer present=true
+SMOKE 14d PASS redo remove alpha layer: output_alpha='' (expect empty), layer present=false (expect false)
+SMOKE 14e PASS remove output_color's layer: output_color='' (expect empty) codegen.ok=true error=''
+SMOKE 14f PASS undo remove color layer: output_color='7' (expect '7'), layer present=true
+SMOKE 14g PASS redo remove color layer: output_color='' (expect empty), layer present=false (expect false)
+SMOKE 14h PASS excursion fully unwound: has_undo=false layers=0 output_color='' output_alpha=''
+SMOKE 16a PASS slider commit gain=0.75 (expect 0.75)
+SMOKE 16b PASS layer removed: present=false (expect false)
+SMOKE 16c PASS undo remove restores same instance: is_same=true restored_id=-9223370253772189065 original_id=-9223370253772189065
+SMOKE 16d PASS undo slider after undo remove: gain=0.5 (expect 0.5)
+SMOKE 16e PASS EditorInspector edits the restored instance: edited_id=-9223370253772189065 (expect -9223370253772189065)
+SMOKE 16f PASS excursion fully unwound: layer_gone=true has_undo=false
+SMOKE 13 PASS codegen of two-layer stack: error='' code_len=2182
+SMOKE SUMMARY pass=46 fail=0
+```
+
+stderr: empty.
+
+`project.godot`'s `config/features` was rewritten to `PackedStringArray("4.6")`
+by both runs above and reset to `PackedStringArray("4.4")` afterward;
+verified via `grep config/features project.godot`. `find sandbox -type f`
+after Run 3 showed only the two committed `.gitkeep`s, confirming the
+smoke's own files (`gst_editor_smoke_phase6.tres`,
+`gst_editor_smoke_phase6.gdshader`,
+`gst_editor_smoke_phase6_headerless.gdshader`, and their `.uid` sidecars)
+were deleted.

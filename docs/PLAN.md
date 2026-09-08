@@ -215,7 +215,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the u
 
 ## Phase 6: Persistence and export
 
-**Status:** pending
+**Status:** committed (dc78be5)
 **Goal:** Save and reopen a stack `.tres`, export a self-contained `.gdshader` with a JSON header, reopen from that header, and refuse a silent overwrite of a hand-edited body.
 **Files:**
 - `addons/goshade_turbo/io/gst_stack_io.gd` (create, save/load `GSTStack` `.tres`)
@@ -231,6 +231,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the u
 - `tests/gst_editor_smoke.gd` (modify: `GST_EDITOR_SMOKE=6` section covering the manual item below through the panel's button handlers)
 - `docs/EDITOR_SMOKE.md` (append: phase 6 run)
 - `sandbox/stacks/`, `sandbox/exports/` (create, gitkept, where the smoke writes its files; smoke output under `sandbox/` is deleted at the end of the run)
+- `tests/test_codegen_generator.gd` (modify: the no-warp assertion scopes to the body below the header, since the real header serializes every coord field)
 - `NOW.md`, `docs/PLAN.md` (orchestrator state), `**/*.gd.uid` sidecars
 
 **Verification:** `godot --headless --path . -s res://tests/run_codegen_tests.gd` exits 0, with tests covering:
@@ -317,6 +318,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the u
 - Changes: routes structural edits through the editor's global undo history, shared with every other editor action.
 - Affects: add, remove, reorder, slot change, output change. Slider edits come from the inspector and are not routed here.
 - Ordering: phase 4. Any structural mutation added in phases 5-8 must go through `gst_undo.gd`, never mutate a `GSTStack` directly.
+- Stack replacement (phase 6 review round 1): `New`, `Open`, and `Reopen Shader` are themselves undoable actions ("Replace stack") in the same history. Undo reinstalls the previous `GSTStack` instance and its `GSTUndo`, so every earlier action stays valid against the instance it was recorded on. Nothing clears the editor's global history, because non-scene resources share it with unrelated editor actions on 4.6.2 (verified in phase 6 smoke run 1).
 - Migration/rollback: an unregistered mutation leaves the editor's undo history desynced from the stack. The phase 4 five-step undo check is the guard; re-run it after any later phase adds a structural edit.
 
 **Global script class cache (`.godot/global_script_class_cache.cfg`)**

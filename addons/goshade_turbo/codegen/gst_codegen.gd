@@ -100,20 +100,14 @@ static func generate_result(stack: GSTStack, library: GSTLibrary, solo_layer_id:
 	return result
 
 
-## License notice plus the one-line stack header (design decision 8).
+## License notice plus the one-line stack header (design decision 8). The
+## header line itself is produced by gst_header.gd (docs/PLAN.md Phase 6),
+## one call site, so the on-the-wire JSON schema lives in exactly one file.
 static func _header_lines(stack: GSTStack) -> Array[String]:
 	return [
 		"// GoShade Turbo generated shader. MIT License.",
-		"// stack: %s" % _stack_header_json(stack),
+		GSTHeader.header_line(stack),
 	]
-
-
-## Placeholder for the on-the-wire stack JSON (docs/DESIGN.md decision 8,
-## header schema owned by phase 6 / gst_header.gd). One function, one call
-## site above, so phase 6 replaces this body without touching the header
-## line's format.
-static func _stack_header_json(_stack: GSTStack) -> String:
-	return "{}"
 
 
 static func _stack_has_generator(stack: GSTStack) -> bool:

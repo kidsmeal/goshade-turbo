@@ -3,12 +3,13 @@ extends RefCounted
 
 ## Runs inside a real editor session (godot --editor --path .) when
 ## GST_EDITOR_SMOKE is set, driven by plugin.gd's _enter_tree. Performs the
-## phase 4 or phase 5 verification steps programmatically depending on the
-## env var's value ("5" selects phase 5, anything else keeps running phase
-## 4), prints one "SMOKE <item> PASS|FAIL <detail>" line per item, then
-## quits the editor. Never fabricates a pass: every assertion below is a
-## real check against the running panel. Design: docs/PLAN.md Phase 4
-## Verification (amended), Phase 5 Verification.
+## phase 4, 5, or 6 verification steps programmatically depending on the env
+## var's value ("5" selects phase 5, "6" selects phase 6, anything else keeps
+## running phase 4), prints one "SMOKE <item> PASS|FAIL <detail>" line per
+## item, then quits the editor. Never fabricates a pass: every assertion
+## below is a real check against the running panel. Design: docs/PLAN.md
+## Phase 4 Verification (amended), Phase 5 Verification, Phase 6
+## Verification.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -22,6 +23,8 @@ func run(plugin: EditorPlugin) -> void:
 	var flag: String = OS.get_environment("GST_EDITOR_SMOKE")
 	if flag == "5":
 		await _run_phase5(plugin)
+	elif flag == "6":
+		await _run_phase6(plugin)
 	else:
 		await _run_phase4(plugin)
 
@@ -792,6 +795,271 @@ func _run_phase5_codegen_error(plugin: EditorPlugin, panel: GSTMainPanel, librar
 	await plugin.get_tree().process_frame
 	var recovered: bool = panel.get_message_label().text.is_empty()
 	_check("8b", recovered, "recovery after removing the filter: message='%s'" % [panel.get_message_label().text])
+
+
+## Phase 6: persistence and export (docs/PLAN.md Phase 6 Verification).
+## Builds a three-layer stack through the panel, then round-trips it through
+## save/New/open (.tres, GSTStackIO) and export/mutate/confirm/reopen
+## (.gdshader, GSTExport), driving every step through the panel's own
+## EditorFileDialog/ConfirmationDialog file-selected and confirmed handlers
+## (_on_save_as_file_selected, _on_open_file_selected,
+## _on_export_file_selected, _on_overwrite_confirmed,
+## _on_reopen_shader_file_selected) rather than the plain path-taking
+## open_path/save_to_path/export_to_path/reopen_shader_path seams those
+## handlers themselves call, so this exercises the exact call chain a real
+## dialog interaction produces, including the overwrite ConfirmationDialog
+## actually showing (phase 6 fix pass 2, item 3). Files land under
+## sandbox/stacks/ and sandbox/exports/ and are deleted at the end of the run
+## regardless of pass/fail.
+func _run_phase6(plugin: EditorPlugin) -> void:
+	for i: int in range(5):
+		await plugin.get_tree().process_frame
+
+	var panel: GSTMainPanel = plugin.get_panel() as GSTMainPanel
+	_check("setup1", panel != null, "panel is null" if panel == null else "panel present")
+	if panel == null:
+		_finish(plugin)
+		return
+
+	EditorInterface.set_main_screen_editor("GoShade Turbo")
+	await plugin.get_tree().process_frame
+	_check("setup2", panel.visible, "panel.visible after set_main_screen_editor=%s" % [panel.visible])
+
+	var stack_path: String = "res://sandbox/stacks/gst_editor_smoke_phase6.tres"
+	var export_path: String = "res://sandbox/exports/gst_editor_smoke_phase6.gdshader"
+	var headerless_path: String = "res://sandbox/exports/gst_editor_smoke_phase6_headerless.gdshader"
+
+	var ids: Dictionary = await _run_phase6_build_and_save(plugin, panel, stack_path)
+	await _run_phase6_new(plugin, panel, ids)
+	await _run_phase6_export_dialog_opens(plugin, panel)
+	await _run_phase6_open(plugin, panel, stack_path, ids)
+	await _run_phase6_export_and_overwrite_gate(plugin, panel, export_path)
+	await _run_phase6_reopen(plugin, panel, export_path, ids)
+	await _run_phase6_headerless_reopen_refusal(plugin, panel, headerless_path)
+
+	var smoke_paths: Array[String] = [stack_path, export_path, headerless_path]
+	_cleanup_phase6_files(smoke_paths)
+	_finish(plugin)
+
+
+## Item 1: a checker generator (output_color, renders a real checkerboard --
+## the same proven-non-uniform layer phase 5's own render check uses), an
+## fbm generator with a non-default int param, and an invert field op wired
+## to fbm. Item 2: the Save As dialog's own file-selected handler,
+## _on_save_as_file_selected, writes under sandbox/stacks/.
+func _run_phase6_build_and_save(plugin: EditorPlugin, panel: GSTMainPanel, stack_path: String) -> Dictionary:
+	var stack_list: GSTStackList = panel.get_stack_list()
+	var undo: GSTUndo = panel.get_undo()
+
+	var checker: GSTLayer = stack_list.add_layer_by_entry_id("generative/checker")
+	var fbm: GSTLayer = stack_list.add_layer_by_entry_id("generative/fbm")
+	var invert: GSTLayer = stack_list.add_layer_by_entry_id("fieldops/invert")
+	undo.assign_slot(invert.id, "x", fbm.id)
+	fbm.params["octaves"] = 6
+	undo.set_output_color(checker.id)
+	await plugin.get_tree().process_frame
+	_check("1", checker != null and fbm != null and invert != null, "three layers added: checker=%s fbm=%s invert=%s" % [checker, fbm, invert])
+
+	panel._on_save_as_file_selected(stack_path)
+	var save_ok: bool = panel.get_current_path() == stack_path and panel.get_message_label().text.is_empty() and FileAccess.file_exists(stack_path)
+	_check("2", save_ok, "_on_save_as_file_selected: current_path='%s' (expect '%s') message='%s' file_exists=%s" % [panel.get_current_path(), stack_path, panel.get_message_label().text, FileAccess.file_exists(stack_path)])
+
+	return {"checker": checker.id, "fbm": fbm.id, "invert": invert.id}
+
+
+## Item 3 (phase 6 fix pass 2, item 1; docs/PLAN.md Cross-cutting
+## "EditorUndoRedoManager integration"): New is itself an undoable "Replace
+## stack" action (gst_main_panel.gd's replace_stack), not a history reset, so
+## a pre-New structural edit stays undoable afterward instead of being
+## discarded along with the replaced GSTStack.
+##
+## get_object_history_id() does not give a GSTStack its own private bucket
+## the moment it exists: verified on 4.6.2, a GSTStack is a bare Resource
+## never added to the edited scene, so EditorUndoRedoManager routes every
+## custom_context = stack action for every such Resource, across every
+## instance, into the one shared "Remote History" bucket for the life of the
+## editor session. replace_stack relies on exactly this: the "Replace stack"
+## action lands in the same bucket as the old stack's own prior actions, so
+## one continuous Ctrl+Z chain walks through both.
+##
+## Sequence: has_undo() is true right after New; one undo restores the exact
+## previous GSTStack instance (is_same), its three layers, and current_path;
+## one redo re-applies New (zero layers, empty path); undoing twice more
+## reaches the pre-New state of the old stack with its own last committed
+## action (set_output_color in _run_phase6_build_and_save) undone too,
+## proving the old stack's own GSTUndo instance -- not a freshly constructed
+## one -- is still the one driving replay for its actions; redoing twice more
+## returns to the New state so _run_phase6_open below continues from there
+## unchanged.
+func _run_phase6_new(plugin: EditorPlugin, panel: GSTMainPanel, ids: Dictionary) -> void:
+	var old_stack: GSTStack = panel.get_stack()
+	var old_path: String = panel.get_current_path()
+	var old_layer_count: int = old_stack.layers.size()
+
+	panel._on_new_pressed()
+	await plugin.get_tree().process_frame
+	var new_stack: GSTStack = panel.get_stack()
+	var history: UndoRedo = _get_history(new_stack)
+	var new_ok: bool = new_stack.layers.is_empty() and panel.get_current_path().is_empty() and not is_same(new_stack, old_stack)
+	var has_undo_now: bool = history != null and history.has_undo()
+	_check("3a", new_ok and has_undo_now, "New: layers=%d current_path='%s' new_instance=%s has_undo=%s" % [new_stack.layers.size(), panel.get_current_path(), not is_same(new_stack, old_stack), has_undo_now])
+
+	history.undo()
+	await plugin.get_tree().process_frame
+	var restored_1: GSTStack = panel.get_stack()
+	var layer_ids_match: bool = restored_1.layers.size() == 3 and restored_1.layers[0].id == ids["checker"] and restored_1.layers[1].id == ids["fbm"] and restored_1.layers[2].id == ids["invert"]
+	var undo1_ok: bool = is_same(restored_1, old_stack) and restored_1.layers.size() == old_layer_count and layer_ids_match and panel.get_current_path() == old_path
+	_check("3b", undo1_ok, "undo 1 after New restores the previous stack instance: is_same=%s layers=%d (expect %d) layer_ids_match=%s current_path='%s' (expect '%s')" % [is_same(restored_1, old_stack), restored_1.layers.size(), old_layer_count, layer_ids_match, panel.get_current_path(), old_path])
+
+	history.redo()
+	await plugin.get_tree().process_frame
+	var restored_2: GSTStack = panel.get_stack()
+	var redo1_ok: bool = is_same(restored_2, new_stack) and restored_2.layers.is_empty() and panel.get_current_path().is_empty()
+	_check("3c", redo1_ok, "redo 1 re-applies New: is_same=%s layers=%d current_path='%s'" % [is_same(restored_2, new_stack), restored_2.layers.size(), panel.get_current_path()])
+
+	history.undo()
+	await plugin.get_tree().process_frame
+	history.undo()
+	await plugin.get_tree().process_frame
+	var restored_3: GSTStack = panel.get_stack()
+	var output_color_reverted: bool = restored_3.output_color == &""
+	var undo_twice_more_ok: bool = is_same(restored_3, old_stack) and restored_3.layers.size() == old_layer_count and output_color_reverted
+	_check("3d", undo_twice_more_ok, "undo twice more reaches the pre-New old stack with its own last action (set_output_color) undone: is_same=%s layers=%d (expect %d) output_color='%s' (expect '')" % [is_same(restored_3, old_stack), restored_3.layers.size(), old_layer_count, String(restored_3.output_color)])
+
+	history.redo()
+	await plugin.get_tree().process_frame
+	history.redo()
+	await plugin.get_tree().process_frame
+	var final_stack: GSTStack = panel.get_stack()
+	var final_ok: bool = is_same(final_stack, new_stack) and final_stack.layers.is_empty() and panel.get_current_path().is_empty() and final_stack.output_color == &""
+	_check("3e", final_ok, "redo twice more returns to the New state: is_same=%s layers=%d current_path='%s'" % [is_same(final_stack, new_stack), final_stack.layers.size(), panel.get_current_path()])
+
+
+## (phase 6 fix pass 2, item 3): pressing the Export button with no
+## current_path (the panel is on the empty New'd stack here) always opens the
+## export EditorFileDialog -- Export never silently writes without the user
+## picking a target, unlike Save which falls back to the current path when
+## one exists.
+func _run_phase6_export_dialog_opens(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
+	var path_before: String = panel.get_current_path()
+	panel._on_export_pressed()
+	await plugin.get_tree().process_frame
+	var dialog_visible: bool = panel.is_export_dialog_visible()
+	_check("3f", path_before.is_empty() and dialog_visible, "Export press with no current_path opens the export dialog: current_path='%s' (expect '') dialog_visible=%s" % [path_before, dialog_visible])
+	panel.hide_export_dialog()
+
+
+## Item 4: the Open dialog's own file-selected handler, _on_open_file_selected,
+## reloads the same three layer ids in the same order, fbm's non-default
+## octaves param survives, and the preview (driven from the checker
+## output_color) renders non-uniform pixels again.
+func _run_phase6_open(plugin: EditorPlugin, panel: GSTMainPanel, stack_path: String, ids: Dictionary) -> void:
+	panel._on_open_file_selected(stack_path)
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+
+	var stack: GSTStack = panel.get_stack()
+	var ids_match: bool = stack.layers.size() == 3 and stack.layers[0].id == ids["checker"] and stack.layers[1].id == ids["fbm"] and stack.layers[2].id == ids["invert"]
+	var opened_fbm: GSTLayer = stack.layers[1] if stack.layers.size() > 1 else null
+	var params_match: bool = opened_fbm != null and int(opened_fbm.params.get("octaves", -1)) == 6
+	var img: Image = panel.get_preview().get_viewport_image()
+	var nonuniform: bool = img != null and not _image_is_uniform(img)
+	_check("4", ids_match and params_match and nonuniform, "_on_open_file_selected: ids_match=%s params_match=%s (octaves=%s) preview_nonuniform=%s current_path='%s' (expect '%s')" % [ids_match, params_match, opened_fbm.params.get("octaves") if opened_fbm != null else null, nonuniform, panel.get_current_path(), stack_path])
+
+
+## Item 5: the Export dialog's own file-selected handler, _on_export_file_selected,
+## writes a real file with a header line. Items 6-7: mutating one body byte on
+## disk makes a re-selected export path trigger the overwrite check and show
+## the ConfirmationDialog, leaving the file untouched; the dialog's own
+## confirmed handler, _on_overwrite_confirmed, then overwrites it and hides
+## the dialog.
+func _run_phase6_export_and_overwrite_gate(plugin: EditorPlugin, panel: GSTMainPanel, export_path: String) -> void:
+	panel._on_export_file_selected(export_path)
+	await plugin.get_tree().process_frame
+	var export_exists: bool = FileAccess.file_exists(export_path)
+	var header_present: bool = export_exists and GSTOverwriteCheck.find_header_line(_read_file(export_path))["found"]
+	_check("5", export_exists and header_present, "_on_export_file_selected: exists=%s header_present=%s" % [export_exists, header_present])
+
+	var mutated_text: String = _mutate_body_line(_read_file(export_path))
+	_write_file(export_path, mutated_text)
+
+	panel._on_export_file_selected(export_path)
+	await plugin.get_tree().process_frame
+	var dialog_visible: bool = panel.is_overwrite_dialog_visible()
+	var file_unchanged: bool = _read_file(export_path) == mutated_text
+	_check("6", dialog_visible and file_unchanged, "re-selecting a differing export target: dialog_visible=%s (expect true) file_unchanged=%s (expect true)" % [dialog_visible, file_unchanged])
+
+	panel._on_overwrite_confirmed()
+	await plugin.get_tree().process_frame
+	var overwritten: bool = _read_file(export_path) != mutated_text
+	var dialog_hidden: bool = not panel.is_overwrite_dialog_visible()
+	_check("7", overwritten and dialog_hidden, "_on_overwrite_confirmed overwrites: overwritten=%s (expect true) dialog_hidden=%s (expect true)" % [overwritten, dialog_hidden])
+
+
+## Item 8: the Reopen Shader dialog's own file-selected handler,
+## _on_reopen_shader_file_selected, rebuilds a stack with the same three layer
+## ids the original build produced (decision 22: ids are stable across save,
+## export, and reopen).
+func _run_phase6_reopen(plugin: EditorPlugin, panel: GSTMainPanel, export_path: String, ids: Dictionary) -> void:
+	panel._on_reopen_shader_file_selected(export_path)
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var stack: GSTStack = panel.get_stack()
+	var ids_match: bool = stack.layers.size() == 3 and stack.layers[0].id == ids["checker"] and stack.layers[1].id == ids["fbm"] and stack.layers[2].id == ids["invert"]
+	_check("8", ids_match, "_on_reopen_shader_file_selected rebuilds the same ids: %s (current_path='%s', expect empty)" % [ids_match, panel.get_current_path()])
+
+
+## Item 9: a hand-written .gdshader with no "// stack:" header is refused
+## (B8), the reason lands in the message label, and no new empty stack
+## replaces the one reopen() just rebuilt in item 8.
+func _run_phase6_headerless_reopen_refusal(plugin: EditorPlugin, panel: GSTMainPanel, headerless_path: String) -> void:
+	_write_file(headerless_path, "shader_type canvas_item;\nvoid fragment() { COLOR = vec4(1.0); }\n")
+	var stack_before: GSTStack = panel.get_stack()
+
+	panel._on_reopen_shader_file_selected(headerless_path)
+	await plugin.get_tree().process_frame
+	var refused: bool = panel.get_message_label().text.contains("header")
+	var stack_unchanged: bool = panel.get_stack() == stack_before
+	_check("9", refused and stack_unchanged, "reopen of a headerless file is refused (B8): message='%s' stack_unchanged=%s" % [panel.get_message_label().text, stack_unchanged])
+
+
+func _cleanup_phase6_files(paths: Array[String]) -> void:
+	for path: String in paths:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
+		var uid_path: String = path + ".uid"
+		if FileAccess.file_exists(uid_path):
+			DirAccess.remove_absolute(uid_path)
+
+
+func _read_file(path: String) -> String:
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return ""
+	var text: String = file.get_as_text()
+	file.close()
+	return text
+
+
+func _write_file(path: String, text: String) -> void:
+	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(text)
+	file.close()
+
+
+## Appends a trailing space to the first non-empty line strictly after the
+## header line -- a real one-byte body mutation that never touches the
+## header's own JSON (mirrors tests/test_overwrite_check.gd's
+## _mutate_body_char).
+func _mutate_body_line(text: String) -> String:
+	var lines: PackedStringArray = text.split("\n")
+	for i: int in range(lines.size()):
+		if lines[i].begins_with(GSTHeader.HEADER_PREFIX):
+			for j: int in range(i + 1, lines.size()):
+				if not lines[j].is_empty():
+					lines[j] = lines[j] + " "
+					return "\n".join(lines)
+	return text
 
 
 ## True when a sparse grid sample of img shows no variation at all (used as

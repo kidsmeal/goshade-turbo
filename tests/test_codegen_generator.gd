@@ -78,7 +78,14 @@ func test_no_warp_axes_emits_neither_warp_term_nor_warp_strength_uniform() -> vo
 
 	var code: String = GSTCodegen.generate(stack, lib)
 
-	assert_false(code.contains("warp_strength"), "no warp axis is set, so no warp_strength uniform or term is emitted")
+	# Lines 0-1 are the header block (license notice, stack header); phase 6's
+	# real stack header always serializes the coord block's "warp_strength"
+	# JSON key regardless of whether a warp axis is set (docs/PLAN.md Phase 6
+	# Build: the header is full data fidelity, not a mirror of codegen's own
+	# conditional emission), so the substring check below is scoped to
+	# everything after the header block.
+	var body: String = "\n".join(code.split("\n").slice(2))
+	assert_false(body.contains("warp_strength"), "no warp axis is set, so no warp_strength uniform or term is emitted")
 	assert_true(GSTShaderCompile.compiles(code), "a generator with no warp axes still compiles")
 
 
