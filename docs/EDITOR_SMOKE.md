@@ -1155,3 +1155,271 @@ smoke's own files (`gst_editor_smoke_phase6.tres`,
 `gst_editor_smoke_phase6.gdshader`,
 `gst_editor_smoke_phase6_headerless.gdshader`, and their `.uid` sidecars)
 were deleted.
+
+## Phase 7 (2026-09-08, `Godot_v4.6.2-stable_win64.exe`)
+
+Method: `$env:GST_EDITOR_SMOKE="7"; godot --editor --path .`, captured
+stdout/stderr via `Start-Process -RedirectStandardOutput/-RedirectStandardError`
+with a 180s timeout, `config/features` reset to `"4.4"` afterward.
+
+### Run 1: fail, root cause identified
+
+For each of the three recipes, the smoke builds the same stack through
+`GSTUndo`'s public actions (add, wire, output) plus real
+`EditorUndoRedoManager` property actions for params (the same shape a slider
+commit uses), captures the shader text, undoes to `has_undo() == false`
+(asserts the stack is empty), redoes to `has_redo() == false` (asserts the
+shader text is byte-equal to the capture and the preview renders
+non-uniform), then calls `panel.open_recipe(name)` and checks the panel lands
+on the same codegen text a fresh, independent `GSTStackIO.load` of that
+recipe file produces.
+
+`dissolve`'s own round trip passed. `sprite_holographic`'s and `outline`'s
+`_redo_match` checks failed: the shader text after the full redo-to-end pass
+was byte-identical to **`dissolve`'s own** codegen output (verified by a
+temporary debug dump of both texts), not the recipe actually built in that
+iteration.
+
+Root cause: `gst_main_panel.gd::replace_stack` registered its "Replace
+stack" `EditorUndoRedoManager` action with `custom_context = old_stack` (the
+stack being replaced). `dissolve`'s own `open_recipe("dissolve")` call
+installs a `GSTStack` loaded from a real `res://` path via `GSTStackIO.load`.
+The next recipe's own `New` press then runs `replace_stack` with
+`old_stack` = that path-bearing, just-loaded stack. On 4.6.2,
+`EditorUndoRedoManager.get_object_history_id()` routes a path-bearing
+`Resource` to a **different** history bucket than a bare, path-less
+`GSTStack.new()` (verified empirically here; the existing phase 6 cross-cutting
+note "every custom_context = stack action ... routes into the one shared
+bucket" was verified there only for path-less `New` calls, never for a
+`New` following an `Open`-like load). The smoke's own `history` reference
+(and `gst_main_panel.gd::_get_history()`, used by the live
+`_on_history_version_changed` resync) was fetched once from the original
+path-less stack and therefore never observed the second recipe's own `New`
+action at all: that action alone landed in the other bucket. Full redo of
+the observed bucket replayed `New -> dissolve build -> open_recipe(dissolve)`
+correctly, then replayed the *next* recipe's own build actions (their own
+`GSTUndo` instance, bound to their own path-less stack, still lived in the
+shared bucket) directly on top of `dissolve`'s reinstalled stack state --
+mutating an object `panel._stack` no longer pointed at, so every
+`_resync_material()` triggered along the way kept re-codegenning
+`dissolve`'s own stack.
+
+```
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE dissolve_build PASS dissolve: built stack produces non-empty shader text (len=4314)
+SMOKE dissolve_undo_empty PASS dissolve: stack empty and has_undo()=false after undoing to the end: layers=0 has_undo=false
+SMOKE dissolve_redo_match PASS dissolve: redo-to-end shader text byte-equal to the build capture=true has_redo=false
+SMOKE dissolve_redo_render PASS dissolve: preview renders non-uniform pixels after redo (img_null=false)
+SMOKE dissolve_open_match PASS dissolve: open_recipe panel shader text equals a fresh codegen of the recipe file=true (fresh_ok=true)
+SMOKE dissolve_open_render PASS dissolve: preview renders non-uniform pixels after open_recipe (img_null=false)
+SMOKE sprite_holographic_build PASS sprite_holographic: built stack produces non-empty shader text (len=2294)
+SMOKE sprite_holographic_undo_empty PASS sprite_holographic: stack empty and has_undo()=false after undoing to the end: layers=0 has_undo=false
+SMOKE sprite_holographic_redo_match FAIL sprite_holographic: redo-to-end shader text byte-equal to the build capture=false has_redo=false
+SMOKE sprite_holographic_redo_render PASS sprite_holographic: preview renders non-uniform pixels after redo (img_null=false)
+SMOKE sprite_holographic_open_match PASS sprite_holographic: open_recipe panel shader text equals a fresh codegen of the recipe file=true (fresh_ok=true)
+SMOKE sprite_holographic_open_render PASS sprite_holographic: preview renders non-uniform pixels after open_recipe (img_null=false)
+SMOKE outline_build PASS outline: built stack produces non-empty shader text (len=1649)
+SMOKE outline_undo_empty PASS outline: stack empty and has_undo()=false after undoing to the end: layers=0 has_undo=false
+SMOKE outline_redo_match FAIL outline: redo-to-end shader text byte-equal to the build capture=false has_redo=false
+SMOKE outline_redo_render PASS outline: preview renders non-uniform pixels after redo (img_null=false)
+SMOKE outline_open_match PASS outline: open_recipe panel shader text equals a fresh codegen of the recipe file=true (fresh_ok=true)
+SMOKE outline_open_render PASS outline: preview renders non-uniform pixels after open_recipe (img_null=false)
+SMOKE SUMMARY pass=18 fail=2
+```
+
+Fix: `gst_main_panel.gd` gained a dedicated field `_history_context: Resource
+= Resource.new()`, created once and never given a `resource_path`, used as
+`custom_context` in place of `old_stack`/`_stack` in both `replace_stack`'s
+own action and `_get_history()`'s lookup. A bare, always path-less anchor
+stays in the one shared bucket regardless of what was opened in between,
+since bucket routing keys off path-less-ness, not literal object identity
+(confirmed by Run 2 below). This is a general fix to existing phase 4/6
+code (`gst_main_panel.gd`, already in this phase's Files list for the
+Recipes menu), not new phase 7 machinery; `gst_undo.gd`'s own
+`_create_action` (unrelated file, outside this phase's Files list) still
+keys its context off the live `_stack` instance directly, which remains
+correct for every path this smoke exercises (every recipe build starts from
+a fresh `New`, i.e. a path-less stack) but is not proven safe for a
+structural edit made directly on a stack immediately after `Open`/`Reopen
+Shader`/`open_recipe`, with no intervening `New` -- flagged as an open
+finding in the phase report, not fixed here.
+
+### Run 2: pass, after the `_history_context` fix
+
+```
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE dissolve_build PASS dissolve: built stack produces non-empty shader text (len=4314)
+SMOKE dissolve_undo_empty PASS dissolve: stack empty and has_undo()=false after undoing to the end: layers=0 has_undo=false
+SMOKE dissolve_redo_match PASS dissolve: redo-to-end shader text byte-equal to the build capture=true has_redo=false
+SMOKE dissolve_redo_render PASS dissolve: preview renders non-uniform pixels after redo (img_null=false)
+SMOKE dissolve_open_match PASS dissolve: open_recipe panel shader text equals a fresh codegen of the recipe file=true (fresh_ok=true)
+SMOKE dissolve_open_render PASS dissolve: preview renders non-uniform pixels after open_recipe (img_null=false)
+SMOKE sprite_holographic_build PASS sprite_holographic: built stack produces non-empty shader text (len=2294)
+SMOKE sprite_holographic_undo_empty PASS sprite_holographic: stack empty and has_undo()=false after undoing to the end: layers=0 has_undo=false
+SMOKE sprite_holographic_redo_match PASS sprite_holographic: redo-to-end shader text byte-equal to the build capture=true has_redo=false
+SMOKE sprite_holographic_redo_render PASS sprite_holographic: preview renders non-uniform pixels after redo (img_null=false)
+SMOKE sprite_holographic_open_match PASS sprite_holographic: open_recipe panel shader text equals a fresh codegen of the recipe file=true (fresh_ok=true)
+SMOKE sprite_holographic_open_render PASS sprite_holographic: preview renders non-uniform pixels after open_recipe (img_null=false)
+SMOKE outline_build PASS outline: built stack produces non-empty shader text (len=1649)
+SMOKE outline_undo_empty PASS outline: stack empty and has_undo()=false after undoing to the end: layers=0 has_undo=false
+SMOKE outline_redo_match PASS outline: redo-to-end shader text byte-equal to the build capture=true has_redo=false
+SMOKE outline_redo_render PASS outline: preview renders non-uniform pixels after redo (img_null=false)
+SMOKE outline_open_match PASS outline: open_recipe panel shader text equals a fresh codegen of the recipe file=true (fresh_ok=true)
+SMOKE outline_open_render PASS outline: preview renders non-uniform pixels after open_recipe (img_null=false)
+SMOKE SUMMARY pass=20 fail=0
+```
+
+stderr: empty.
+
+The `_history_context` fix was re-verified against phases 4, 5, and 6
+(re-running each phase's own smoke unchanged) to confirm no regression:
+phase 4 `pass=46 fail=0`, phase 5 `pass=18 fail=0`, phase 6 `pass=16 fail=0`,
+all identical to their previously recorded runs above.
+
+`project.godot`'s `config/features` was rewritten to `PackedStringArray("4.6")`
+by every run above and reset to `PackedStringArray("4.4")` afterward;
+verified via `grep config/features project.godot`. `find sandbox -type f`
+after the final run showed only the two committed `.gitkeep`s and the three
+committed reference stacks (`sandbox/stacks/dissolve.tres`,
+`sandbox/stacks/outline.tres`, `sandbox/stacks/sprite_holographic.tres`,
+themselves generated once by a throwaway headless script and committed as
+data, never written by the smoke).
+
+### Rendered check: `godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd`
+
+Run via `Start-Process` (not `--headless`, per the plan's verified engine
+facts) with redirected stdout/stderr and a 180s timeout. Checks every
+`.tres` under `addons/goshade_turbo/recipes/` and `sandbox/stacks/` (six
+files: the three recipes plus their three sandbox copies).
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+OpenGL API 3.3.0 NVIDIA 610.88 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+
+RENDER res://addons/goshade_turbo/recipes/dissolve.tres PASS [] has_TIME=false
+RENDER res://addons/goshade_turbo/recipes/outline.tres PASS [] has_TIME=false
+RENDER res://addons/goshade_turbo/recipes/sprite_holographic.tres PASS [] has_TIME=true
+RENDER res://sandbox/stacks/dissolve.tres PASS [] has_TIME=false
+RENDER res://sandbox/stacks/outline.tres PASS [] has_TIME=false
+RENDER res://sandbox/stacks/sprite_holographic.tres PASS [] has_TIME=true
+run_render_checks: PASS, 6 stack(s) checked
+```
+
+stderr: empty. `config/features` unaffected by this run (`-s`, no editor
+session).
+
+### Run 3: pass, `gst_undo.gd` history anchor fix (scoped fix, 2026-09-08, `Godot_v4.6.2-stable_win64.exe`)
+
+Run 1's own fix note flagged an open finding: `gst_undo.gd::_create_action`
+still keyed `custom_context` off the live `_stack` instance, "not proven safe
+for a structural edit made directly on a stack immediately after
+`Open`/`Reopen Shader`/`open_recipe`, with no intervening `New`." This run
+closes that finding.
+
+`GSTUndo._init` now takes `history_context: Resource` (the panel's
+`_history_context`, the same bare, always path-less `Resource.new()`
+`replace_stack`/`_get_history()` already use) and `_create_action` passes it
+as `custom_context` in place of `_stack`. `gst_main_panel.gd` passes
+`_history_context` at both `GSTUndo.new()` call sites
+(`set_undo_redo_manager`, `replace_stack`). `GSTMainPanel` gained
+`get_watched_history() -> UndoRedo` (editor smoke seam), returning
+`_watched_history` directly so the smoke can drive `undo()`/`redo()` against
+the exact bucket the panel watches instead of recomputing one.
+
+`tests/gst_editor_smoke.gd` gained `_run_phase7_history_anchor`, two
+excursions: `open_recipe("dissolve")` with no `New` in between, then
+`GSTUndo.add_layer("generative/hash", ...)` with nothing wired -- asserts
+`panel.get_watched_history().has_undo()` is true and the shader text resynced
+after the add, then `history.undo()` -- asserts the layer is gone from
+`stack.layers` and the shader text's codegen body (below the `// stack:`
+header line, since the header's `next_id` never reverts on undo of an add
+per decision 22 and would otherwise legitimately differ) equals the
+post-open capture, then `history.redo()` -- asserts the layer is back. The
+`Reopen Shader` path repeats the add/undo pair (no redo) after exporting the
+open dissolve stack to `sandbox/exports/gst_editor_smoke_phase7_history.gdshader`
+and calling `reopen_shader_path` on it, then deletes the export and its
+`.uid` sidecar.
+
+Command run the same way as Runs 1-2 (`Start-Process` with redirected
+stdout/stderr, 180s timeout, `GST_EDITOR_SMOKE=7`).
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE dissolve_build PASS dissolve: built stack produces non-empty shader text (len=4314)
+SMOKE dissolve_undo_empty PASS dissolve: stack empty and has_undo()=false after undoing to the end: layers=0 has_undo=false
+SMOKE dissolve_redo_match PASS dissolve: redo-to-end shader text byte-equal to the build capture=true has_redo=false
+SMOKE dissolve_redo_render PASS dissolve: preview renders non-uniform pixels after redo (img_null=false)
+SMOKE dissolve_open_match PASS dissolve: open_recipe panel shader text equals a fresh codegen of the recipe file=true (fresh_ok=true)
+SMOKE dissolve_open_render PASS dissolve: preview renders non-uniform pixels after open_recipe (img_null=false)
+SMOKE sprite_holographic_build PASS sprite_holographic: built stack produces non-empty shader text (len=2294)
+SMOKE sprite_holographic_undo_empty PASS sprite_holographic: stack empty and has_undo()=false after undoing to the end: layers=0 has_undo=false
+SMOKE sprite_holographic_redo_match PASS sprite_holographic: redo-to-end shader text byte-equal to the build capture=true has_redo=false
+SMOKE sprite_holographic_redo_render PASS sprite_holographic: preview renders non-uniform pixels after redo (img_null=false)
+SMOKE sprite_holographic_open_match PASS sprite_holographic: open_recipe panel shader text equals a fresh codegen of the recipe file=true (fresh_ok=true)
+SMOKE sprite_holographic_open_render PASS sprite_holographic: preview renders non-uniform pixels after open_recipe (img_null=false)
+SMOKE outline_build PASS outline: built stack produces non-empty shader text (len=1649)
+SMOKE outline_undo_empty PASS outline: stack empty and has_undo()=false after undoing to the end: layers=0 has_undo=false
+SMOKE outline_redo_match PASS outline: redo-to-end shader text byte-equal to the build capture=true has_redo=false
+SMOKE outline_redo_render PASS outline: preview renders non-uniform pixels after redo (img_null=false)
+SMOKE outline_open_match PASS outline: open_recipe panel shader text equals a fresh codegen of the recipe file=true (fresh_ok=true)
+SMOKE outline_open_render PASS outline: preview renders non-uniform pixels after open_recipe (img_null=false)
+SMOKE history_open_add PASS open_recipe(dissolve) + add generative/hash: has_undo=true resynced=true
+SMOKE history_open_undo PASS undo the add: layer_gone=true code_matches_post_open=true
+SMOKE history_open_redo PASS redo the add: layer_back=true
+SMOKE history_reopen_add PASS reopen_shader_path(dissolve export) + add generative/hash: has_undo=true resynced=true
+SMOKE history_reopen_undo PASS undo the add: layer_gone=true code_matches_post_reopen=true
+SMOKE SUMMARY pass=25 fail=0
+```
+
+stderr: empty. A first attempt at `history_open_undo`/`history_reopen_undo`
+compared the undo-time shader text byte-for-byte against the pre-add
+capture and failed both (`layer_gone=true code_matches_post_open=false`):
+not an anchor bug, but the header's `next_id` field legitimately bumping and
+never reverting on undo of an add (decision 22), diagnosed by inspection of
+`gst_header.gd`/`gst_codegen.gd` before the fix; both comparisons rescoped
+to `GSTOverwriteCheck.find_header_line(code)["body"]` (the same header-scoped
+comparison `tests/test_codegen_generator.gd` already uses per its own phase
+6 amendment), after which both passed as shown above. `find sandbox -type f`
+after this run showed only the two committed `.gitkeep`s and the three
+committed reference stacks, confirming
+`gst_editor_smoke_phase7_history.gdshader` and its `.uid` sidecar were
+deleted.
+
+### Regression re-runs: phases 6 and 4 (same session, same binary)
+
+Both re-run unchanged (no script edits in this scoped fix touched phase 4 or
+6 items) to confirm the `GSTUndo` constructor signature change
+(`history_context` added as a required parameter) did not regress either.
+
+Phase 6 (`GST_EDITOR_SMOKE=6`): `SMOKE SUMMARY pass=16 fail=0`, identical to
+the count recorded in the Phase 6 section above.
+
+Phase 4 (`GST_EDITOR_SMOKE=4`): `SMOKE SUMMARY pass=46 fail=0`, identical to
+Run 6's recorded count in the Phase 4 section above.
+
+`project.godot`'s `config/features` was rewritten to
+`PackedStringArray("4.6")` by every run in this section (phase 7 Run 3, then
+the phase 6 and phase 4 regressions) and reset to `PackedStringArray("4.4")`
+once after the last of the three; `git diff project.godot` empty afterward.
+
+### Phase 7 render check, orchestrator run after the review round 1 ordering fix (2026-09-08)
+
+Command: `godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd` on 4.6.2, GPU session. Exit 0.
+
+```
+RENDER res://addons/goshade_turbo/recipes/dissolve.tres PASS [] has_TIME=false
+RENDER res://addons/goshade_turbo/recipes/outline.tres PASS [] has_TIME=false
+RENDER res://addons/goshade_turbo/recipes/sprite_holographic.tres PASS [] has_TIME=true
+RENDER res://sandbox/stacks/dissolve.tres PASS [] has_TIME=false
+RENDER res://sandbox/stacks/outline.tres PASS [] has_TIME=false
+RENDER res://sandbox/stacks/sprite_holographic.tres PASS [] has_TIME=true
+run_render_checks: PASS, 6 stack(s) checked
+```
+
+The phase-reviewer's sandbox has no GPU; its run of the same command crashed with signal 11 before any `RENDER` line. That crash is environmental, not a code defect.

@@ -247,7 +247,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the u
 
 ## Phase 7: Three-recipe proof and the rendered-check harness
 
-**Status:** pending
+**Status:** committed (2dc1126)
 **Goal:** Dissolve, one sprite finish, and outline each build, save, reopen, export, and undo end to end, verified by an automated rendered check.
 **Files:**
 - `tests/run_render_checks.gd` (create, `extends SceneTree`, loads each stack, renders through a `SubViewport`, reads back the image)
@@ -257,11 +257,18 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the u
 - `addons/goshade_turbo/recipes/outline.tres` (create, source filter path)
 - `sandbox/stacks/` (create, the three recipes saved as user-side stacks)
 - `tests/test_recipe_roundtrip.gd` (create, headless: each recipe saves, reopens, exports, and re-codegens byte-equal)
+- `addons/goshade_turbo/ui/gst_main_panel.gd` / `.tscn` (modify: a `Recipes` `MenuButton` in the toolbar listing `addons/goshade_turbo/recipes/*.tres`, opening one goes through `replace_stack`; decision 16's randomize button lands on this row in phase 8)
+- `tests/gst_editor_smoke.gd` (modify: `GST_EDITOR_SMOKE=7` section: each recipe built through the panel's public add and wire methods, the shader text captured, undo to empty, redo to the same text byte for byte; each recipe opened from the `Recipes` menu renders non-uniform pixels)
+- `docs/EDITOR_SMOKE.md` (append: phase 7 run and the render-check command output)
+- `sandbox/stacks/*.tres` (create, the three recipes saved as user-side stacks)
+- `tests/gst_test_base.gd`, `tests/test_stack_io.gd` (modify: the stack comparison helper moves into the base class for reuse)
+- `addons/goshade_turbo/ui/gst_undo.gd` (modify: every action uses the panel's path-less history anchor resource as `custom_context`, because `EditorUndoRedoManager.get_object_history_id` routes a resource with a `res://` path to a different history than a path-less one on 4.6.2, verified in the phase 7 smoke)
+- `NOW.md`, `docs/PLAN.md` (orchestrator state), `**/*.gd.uid` sidecars
 
 **Verification:**
 - `godot --headless --path . -s res://tests/run_codegen_tests.gd` exits 0 including `test_recipe_roundtrip.gd`.
 - `godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd` exits 0 for all three recipes. This command is not headless by design; the dummy driver returns a null image (verified).
-- Manual: build each of the three recipes in the panel from the picker only, then undo every step back to an empty stack and redo forward to the same shader text.
+- Editor smoke (`GST_EDITOR_SMOKE=7`): build each of the three recipes in the panel through the same methods the picker calls, then undo every step back to an empty stack and redo forward to the same shader text.
 
 **Exit criteria:** Three recipes pass the rendered checks, the round-trip test is byte-exact, and the undo/redo walk returns identical shader text. Do not start phase 8 before this passes; it is the design's gate on writing the rest of the library (build order step 4).
 **Blockers:** rendered checks require a GPU session, so they cannot run in a headless CI container. Verified.
@@ -318,6 +325,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the u
 - Changes: routes structural edits through the editor's global undo history, shared with every other editor action.
 - Affects: add, remove, reorder, slot change, output change. Slider edits come from the inspector and are not routed here.
 - Ordering: phase 4. Any structural mutation added in phases 5-8 must go through `gst_undo.gd`, never mutate a `GSTStack` directly.
+- History anchor (phase 7): every GST action, structural or replace, uses one path-less `Resource` owned by the panel as `custom_context`, never the stack instance, so stacks loaded from `res://` and stacks created in memory share one history.
 - Stack replacement (phase 6 review round 1): `New`, `Open`, and `Reopen Shader` are themselves undoable actions ("Replace stack") in the same history. Undo reinstalls the previous `GSTStack` instance and its `GSTUndo`, so every earlier action stays valid against the instance it was recorded on. Nothing clears the editor's global history, because non-scene resources share it with unrelated editor actions on 4.6.2 (verified in phase 6 smoke run 1).
 - Migration/rollback: an unregistered mutation leaves the editor's undo history desynced from the stack. The phase 4 five-step undo check is the guard; re-run it after any later phase adds a structural edit.
 

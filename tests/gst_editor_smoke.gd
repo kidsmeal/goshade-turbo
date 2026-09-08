@@ -3,13 +3,13 @@ extends RefCounted
 
 ## Runs inside a real editor session (godot --editor --path .) when
 ## GST_EDITOR_SMOKE is set, driven by plugin.gd's _enter_tree. Performs the
-## phase 4, 5, or 6 verification steps programmatically depending on the env
-## var's value ("5" selects phase 5, "6" selects phase 6, anything else keeps
-## running phase 4), prints one "SMOKE <item> PASS|FAIL <detail>" line per
-## item, then quits the editor. Never fabricates a pass: every assertion
-## below is a real check against the running panel. Design: docs/PLAN.md
-## Phase 4 Verification (amended), Phase 5 Verification, Phase 6
-## Verification.
+## phase 4, 5, 6, or 7 verification steps programmatically depending on the
+## env var's value ("5" selects phase 5, "6" selects phase 6, "7" selects
+## phase 7, anything else keeps running phase 4), prints one "SMOKE <item>
+## PASS|FAIL <detail>" line per item, then quits the editor. Never fabricates
+## a pass: every assertion below is a real check against the running panel.
+## Design: docs/PLAN.md Phase 4 Verification (amended), Phase 5 Verification,
+## Phase 6 Verification, Phase 7 Verification.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -25,6 +25,8 @@ func run(plugin: EditorPlugin) -> void:
 		await _run_phase5(plugin)
 	elif flag == "6":
 		await _run_phase6(plugin)
+	elif flag == "7":
+		await _run_phase7(plugin)
 	else:
 		await _run_phase4(plugin)
 
@@ -1023,6 +1025,324 @@ func _run_phase6_headerless_reopen_refusal(plugin: EditorPlugin, panel: GSTMainP
 	_check("9", refused and stack_unchanged, "reopen of a headerless file is refused (B8): message='%s' stack_unchanged=%s" % [panel.get_message_label().text, stack_unchanged])
 
 
+## Phase 7: three-recipe proof and the rendered-check harness (docs/PLAN.md
+## Phase 7 Verification, design build order step 4). For each of the three
+## recipes: builds the same stack through GSTUndo's own public actions (add,
+## wire, output -- the same calls the picker/stack list/output block use) and
+## the same undoable-property pattern items 2 and 16a above already proved
+## for slider edits, captures the resulting shader text, undoes back to an
+## empty stack, redoes back to the captured text byte for byte with a
+## non-uniform preview, then loads the shipped recipe through the Recipes
+## menu's own open_recipe() and checks the panel lands on the same codegen
+## text a fresh, independent load of that same recipe file produces (ids may
+## differ between the panel-built stack and the shipped recipe's own ids, so
+## this compares against a fresh codegen of the recipe file, never against
+## the earlier capture).
+func _run_phase7(plugin: EditorPlugin) -> void:
+	for i: int in range(5):
+		await plugin.get_tree().process_frame
+
+	var panel: GSTMainPanel = plugin.get_panel() as GSTMainPanel
+	_check("setup1", panel != null, "panel is null" if panel == null else "panel present")
+	if panel == null:
+		_finish(plugin)
+		return
+
+	EditorInterface.set_main_screen_editor("GoShade Turbo")
+	await plugin.get_tree().process_frame
+	_check("setup2", panel.visible, "panel.visible after set_main_screen_editor=%s" % [panel.visible])
+
+	var library: GSTLibrary = panel.get_library()
+	# The shared "Remote History" bucket (docs/PLAN.md Cross-cutting
+	# "EditorUndoRedoManager integration"): get_object_history_id() resolves
+	# to the same UndoRedo regardless of which bare GSTStack instance is
+	# passed, so this one reference stays valid across every New/open_recipe
+	# replace_stack below.
+	var history: UndoRedo = _get_history(panel.get_stack())
+
+	await _run_phase7_dissolve(plugin, panel, history, library)
+	await _run_phase7_sprite_holographic(plugin, panel, history, library)
+	await _run_phase7_outline(plugin, panel, history, library)
+	await _run_phase7_history_anchor(plugin, panel)
+
+	_finish(plugin)
+
+
+## Alpha path proof (docs/PLAN.md Phase 7 Build): source/texture; fbm; a
+## primary smoothstep threshold on the fbm; alpha(texture) times that
+## threshold as output alpha; an edge band (a lower-edge smoothstep times the
+## inverted primary threshold) masking a color/mix between texture and an
+## orange fill for the output color. Mirrors addons/goshade_turbo/recipes/
+## dissolve.tres's own construction exactly.
+func _run_phase7_dissolve(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary) -> void:
+	panel._on_new_pressed()
+	await plugin.get_tree().process_frame
+	var undo: GSTUndo = panel.get_undo()
+
+	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
+
+	var fbm: GSTLayer = undo.add_layer("generative/fbm", GSTLayer.Kind.FIELD, true)
+	_set_coord_property(fbm.coord, panel.get_stack(), &"scale", Vector2(4.0, 4.0))
+
+	var threshold: GSTLayer = undo.add_layer("fieldops/smoothstep", GSTLayer.Kind.FIELD, false)
+	undo.assign_slot(threshold.id, "x", fbm.id)
+	_set_layer_param(panel, threshold, &"edge0", 0.0)
+	_set_layer_param(panel, threshold, &"edge1", 0.05)
+
+	var tex_alpha: GSTLayer = undo.add_layer("fieldops/alpha", GSTLayer.Kind.FIELD, false)
+	undo.assign_slot(tex_alpha.id, "color", texture.id)
+
+	var alpha_out: GSTLayer = undo.add_layer("fieldops/multiply", GSTLayer.Kind.FIELD, false)
+	undo.assign_slot(alpha_out.id, "a", tex_alpha.id)
+	undo.assign_slot(alpha_out.id, "b", threshold.id)
+
+	var edge_low: GSTLayer = undo.add_layer("fieldops/smoothstep", GSTLayer.Kind.FIELD, false)
+	undo.assign_slot(edge_low.id, "x", fbm.id)
+	_set_layer_param(panel, edge_low, &"edge0", -0.1)
+	_set_layer_param(panel, edge_low, &"edge1", -0.05)
+
+	var threshold_inv: GSTLayer = undo.add_layer("fieldops/invert", GSTLayer.Kind.FIELD, false)
+	undo.assign_slot(threshold_inv.id, "x", threshold.id)
+
+	var edge_band: GSTLayer = undo.add_layer("fieldops/multiply", GSTLayer.Kind.FIELD, false)
+	undo.assign_slot(edge_band.id, "a", edge_low.id)
+	undo.assign_slot(edge_band.id, "b", threshold_inv.id)
+
+	var fill: GSTLayer = undo.add_layer("color/fill", GSTLayer.Kind.COLOR, false)
+	_set_layer_param(panel, fill, &"color", Color(1.0, 0.5, 0.0, 1.0))
+
+	var mix: GSTLayer = undo.add_layer("color/mix", GSTLayer.Kind.COLOR, false)
+	undo.assign_slot(mix.id, "a", texture.id)
+	undo.assign_slot(mix.id, "b", fill.id)
+	undo.assign_slot(mix.id, "mask", edge_band.id)
+
+	undo.set_output_color(mix.id)
+	undo.set_output_alpha(alpha_out.id)
+
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+
+	await _run_phase7_recipe_checks(plugin, panel, history, library, "dissolve")
+
+
+## Color chain with scroll proof (docs/PLAN.md Phase 7 Build): a rotated,
+## scrolling stripes field drives the cosine rainbow palette (its default
+## a/b/c/d matches Capsule Castle's own SpriteHolographic.gdshader palette()
+## constants), screen-blended over the texture source. Mirrors
+## addons/goshade_turbo/recipes/sprite_holographic.tres's own construction
+## exactly.
+func _run_phase7_sprite_holographic(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary) -> void:
+	panel._on_new_pressed()
+	await plugin.get_tree().process_frame
+	var undo: GSTUndo = panel.get_undo()
+
+	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
+
+	var band: GSTLayer = undo.add_layer("generative/stripes", GSTLayer.Kind.FIELD, true)
+	_set_coord_property(band.coord, panel.get_stack(), &"scale", Vector2(2.83, 2.83))
+	_set_coord_property(band.coord, panel.get_stack(), &"rotation", -0.7853982)
+	_set_coord_property(band.coord, panel.get_stack(), &"scroll", Vector2(0.4, 0.0))
+
+	var palette: GSTLayer = undo.add_layer("color/palette", GSTLayer.Kind.COLOR, false)
+	undo.assign_slot(palette.id, "t", band.id)
+
+	var screen: GSTLayer = undo.add_layer("color/screen", GSTLayer.Kind.COLOR, false)
+	undo.assign_slot(screen.id, "a", texture.id)
+	undo.assign_slot(screen.id, "b", palette.id)
+	_set_layer_param(panel, screen, &"t", 0.6)
+
+	undo.set_output_color(screen.id)
+	undo.set_output_alpha(&"texture")
+
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+
+	await _run_phase7_recipe_checks(plugin, panel, history, library, "sprite_holographic")
+
+
+## Source filter path proof (docs/PLAN.md Phase 7 Build): filter/outline on
+## the texture source, a fill color for the outline, color/mix masked by the
+## outline layer (auto luma-converted, decision 2), output alpha the mix's
+## own color_alpha rather than "texture" so the outline ring drawn outside
+## the sprite silhouette stays visible. Mirrors
+## addons/goshade_turbo/recipes/outline.tres's own construction exactly.
+func _run_phase7_outline(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary) -> void:
+	panel._on_new_pressed()
+	await plugin.get_tree().process_frame
+	var undo: GSTUndo = panel.get_undo()
+
+	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
+
+	var outline: GSTLayer = undo.add_layer("filter/outline", GSTLayer.Kind.COLOR, false)
+	undo.assign_slot(outline.id, "source", texture.id)
+
+	var fill: GSTLayer = undo.add_layer("color/fill", GSTLayer.Kind.COLOR, false)
+	_set_layer_param(panel, fill, &"color", Color(0.0, 0.0, 0.0, 1.0))
+
+	var mix: GSTLayer = undo.add_layer("color/mix", GSTLayer.Kind.COLOR, false)
+	undo.assign_slot(mix.id, "a", texture.id)
+	undo.assign_slot(mix.id, "b", fill.id)
+	undo.assign_slot(mix.id, "mask", outline.id)
+
+	undo.set_output_color(mix.id)
+	undo.set_output_alpha(&"color_alpha")
+
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+
+	await _run_phase7_recipe_checks(plugin, panel, history, library, "outline")
+
+
+## Shared tail for all three recipe builders above: capture, undo to empty,
+## redo back to the capture (text byte-equal, preview non-uniform), then
+## open_recipe(recipe_name) and check the panel lands on the same codegen
+## text a fresh, independent GSTStackIO.load of
+## addons/goshade_turbo/recipes/<recipe_name>.tres produces.
+func _run_phase7_recipe_checks(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary, recipe_name: String) -> void:
+	var capture: String = panel.get_shader_material().shader.code
+	_check("%s_build" % recipe_name, not capture.is_empty(), "%s: built stack produces non-empty shader text (len=%d)" % [recipe_name, capture.length()])
+
+	while history.has_undo():
+		history.undo()
+	await plugin.get_tree().process_frame
+	var stack_after_undo: GSTStack = panel.get_stack()
+	var empty_after_undo: bool = stack_after_undo != null and stack_after_undo.layers.is_empty() and not history.has_undo()
+	_check("%s_undo_empty" % recipe_name, empty_after_undo, "%s: stack empty and has_undo()=false after undoing to the end: layers=%d has_undo=%s" % [recipe_name, stack_after_undo.layers.size() if stack_after_undo != null else -1, history.has_undo()])
+
+	while history.has_redo():
+		history.redo()
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var code_after_redo: String = panel.get_shader_material().shader.code
+	var redo_matches: bool = not history.has_redo() and code_after_redo == capture
+	_check("%s_redo_match" % recipe_name, redo_matches, "%s: redo-to-end shader text byte-equal to the build capture=%s has_redo=%s" % [recipe_name, code_after_redo == capture, history.has_redo()])
+
+	var img_after_redo: Image = panel.get_preview().get_viewport_image()
+	var redo_nonuniform: bool = img_after_redo != null and not _image_is_uniform(img_after_redo)
+	_check("%s_redo_render" % recipe_name, redo_nonuniform, "%s: preview renders non-uniform pixels after redo (img_null=%s)" % [recipe_name, img_after_redo == null])
+
+	panel.open_recipe(recipe_name)
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+
+	var fresh_load: Dictionary = GSTStackIO.load("res://addons/goshade_turbo/recipes/%s.tres" % recipe_name, library)
+	var fresh_ok: bool = fresh_load["ok"]
+	var fresh_code: String = ""
+	if fresh_ok:
+		var fresh_result: GSTCodegenResult = GSTCodegen.generate_result(fresh_load["stack"], library)
+		fresh_ok = fresh_result.ok()
+		fresh_code = fresh_result.code
+	var panel_code_after_open: String = panel.get_shader_material().shader.code
+	var open_matches: bool = fresh_ok and panel_code_after_open == fresh_code
+	_check("%s_open_match" % recipe_name, open_matches, "%s: open_recipe panel shader text equals a fresh codegen of the recipe file=%s (fresh_ok=%s)" % [recipe_name, open_matches, fresh_ok])
+
+	var img_after_open: Image = panel.get_preview().get_viewport_image()
+	var open_nonuniform: bool = img_after_open != null and not _image_is_uniform(img_after_open)
+	_check("%s_open_render" % recipe_name, open_nonuniform, "%s: preview renders non-uniform pixels after open_recipe (img_null=%s)" % [recipe_name, img_after_open == null])
+
+
+## History anchor regression (docs/PLAN.md Cross-cutting "EditorUndoRedoManager
+## integration", "History anchor (phase 7)"): a GSTUndo action committed while
+## the open stack carries a real res:// path (open_recipe / reopen_shader_path
+## both load through GSTStackIO, which sets resource_path on the returned
+## Resource) must land in the same UndoRedo bucket panel.get_watched_history()
+## resolves, not a bucket keyed off the path-bearing stack instance itself.
+## Drives panel.get_watched_history() directly (rather than the smoke's own
+## _get_history(stack) helper, which recomputes get_object_history_id(stack)
+## and would silently pass even if GSTUndo's own custom_context landed
+## elsewhere, since a fresh lookup off the same stack instance always agrees
+## with itself). The layer-gone-and-text-matches-post-open check after undo is
+## the real differentiator: add_layer's own commit_action(false) always
+## applies the mutation and calls _notify() synchronously regardless of which
+## bucket the action registers to, so has_undo()/resync alone would pass even
+## on the wrong bucket -- only calling undo() on the panel's actual watched
+## history and checking it removes the add (not some other action, e.g.
+## re-undoing the open_recipe/reopen_shader_path replace itself) proves the
+## anchor is shared.
+func _run_phase7_history_anchor(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
+	await _run_phase7_history_anchor_open_recipe(plugin, panel)
+	await _run_phase7_history_anchor_reopen_shader(plugin, panel)
+
+
+## The comparable part of a synced material's shader text: everything below
+## the "// stack: <json>" header line, excluding the header itself. The
+## header's next_id never reverts on undo of an add (decision 22: "undo
+## removes the layer from the array but never touches stack.next_id"), so a
+## full-text comparison across an add-then-undo would legitimately differ by
+## the header's next_id field alone, even with the layer content identical
+## (same pattern as tests/test_codegen_generator.gd's own header-scoped
+## comparison, docs/PLAN.md Phase 6 Files).
+func _codegen_body(code: String) -> String:
+	var found: Dictionary = GSTOverwriteCheck.find_header_line(code)
+	return found["body"] if found["found"] else code
+
+
+func _run_phase7_history_anchor_open_recipe(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
+	# No New in between: open_recipe alone puts a path-bearing GSTStack
+	# (loaded from res://addons/goshade_turbo/recipes/dissolve.tres) on the
+	# panel.
+	panel.open_recipe("dissolve")
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var post_open_code: String = panel.get_shader_material().shader.code
+	var history: UndoRedo = panel.get_watched_history()
+
+	var layer: GSTLayer = panel.get_undo().add_layer("generative/hash", GSTLayer.Kind.FIELD, true)
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var code_after_add: String = panel.get_shader_material().shader.code
+	var has_undo_now: bool = history.has_undo()
+	var resynced: bool = code_after_add != post_open_code
+	_check("history_open_add", has_undo_now and resynced, "open_recipe(dissolve) + add generative/hash: has_undo=%s resynced=%s" % [has_undo_now, resynced])
+
+	history.undo()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var layer_gone: bool = GSTStackOps.find_index(panel.get_stack(), layer.id) == -1
+	var code_after_undo: String = panel.get_shader_material().shader.code
+	var body_matches: bool = _codegen_body(code_after_undo) == _codegen_body(post_open_code)
+	_check("history_open_undo", layer_gone and body_matches, "undo the add: layer_gone=%s code_matches_post_open=%s" % [layer_gone, body_matches])
+
+	history.redo()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var layer_back: bool = GSTStackOps.find_index(panel.get_stack(), layer.id) != -1
+	_check("history_open_redo", layer_back, "redo the add: layer_back=%s" % [layer_back])
+
+
+func _run_phase7_history_anchor_reopen_shader(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
+	var export_path: String = "res://sandbox/exports/gst_editor_smoke_phase7_history.gdshader"
+
+	panel.open_recipe("dissolve")
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	panel.export_to_path(export_path, false)
+
+	panel.reopen_shader_path(export_path)
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var post_reopen_code: String = panel.get_shader_material().shader.code
+	var history: UndoRedo = panel.get_watched_history()
+
+	var layer: GSTLayer = panel.get_undo().add_layer("generative/hash", GSTLayer.Kind.FIELD, true)
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var code_after_add: String = panel.get_shader_material().shader.code
+	var has_undo_now: bool = history.has_undo()
+	var resynced: bool = code_after_add != post_reopen_code
+	_check("history_reopen_add", has_undo_now and resynced, "reopen_shader_path(dissolve export) + add generative/hash: has_undo=%s resynced=%s" % [has_undo_now, resynced])
+
+	history.undo()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var layer_gone: bool = GSTStackOps.find_index(panel.get_stack(), layer.id) == -1
+	var code_after_undo: String = panel.get_shader_material().shader.code
+	var body_matches: bool = _codegen_body(code_after_undo) == _codegen_body(post_reopen_code)
+	_check("history_reopen_undo", layer_gone and body_matches, "undo the add: layer_gone=%s code_matches_post_reopen=%s" % [layer_gone, body_matches])
+
+	_cleanup_phase6_files([export_path])
+
+
 func _cleanup_phase6_files(paths: Array[String]) -> void:
 	for path: String in paths:
 		if FileAccess.file_exists(path):
@@ -1148,6 +1468,23 @@ func _set_coord_property(coord: GSTCoordBlock, stack: GSTStack, property: String
 	editor_undo_redo.create_action("set coord %s" % property, UndoRedo.MERGE_DISABLE, stack)
 	editor_undo_redo.add_do_property(coord, property, value)
 	editor_undo_redo.add_undo_property(coord, property, old_value)
+	editor_undo_redo.commit_action()
+
+
+## Sets layer.<property_name> -- a manifest param, dynamic via
+## GSTLayer._get/_set -- through a real EditorUndoRedoManager property
+## action, the same shape a real inspector slider commit uses (item 2 and
+## item 16a above), rather than a raw Dictionary write straight into
+## layer.params (docs/PLAN.md Phase 7 Build: "set params via the layer
+## resources with undoable property actions"), so the phase 7 recipe builds
+## register real, undoable history for every param the same way a live edit
+## would.
+func _set_layer_param(panel: GSTMainPanel, layer: GSTLayer, property_name: StringName, value: Variant) -> void:
+	var old_value: Variant = layer.get(property_name)
+	var editor_undo_redo: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
+	editor_undo_redo.create_action("set %s" % property_name, UndoRedo.MERGE_DISABLE, panel.get_stack())
+	editor_undo_redo.add_do_property(layer, property_name, value)
+	editor_undo_redo.add_undo_property(layer, property_name, old_value)
 	editor_undo_redo.commit_action()
 
 

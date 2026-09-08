@@ -1,0 +1,106 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_s426a"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_jmpxe"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_s45qc"]
+
+[sub_resource type="Resource" id="Resource_r6rti"]
+script = ExtResource("1_s426a")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_cjlc7"]
+script = ExtResource("2_jmpxe")
+scale = Vector2(4, 4)
+
+[sub_resource type="Resource" id="Resource_ov7pc"]
+script = ExtResource("1_s426a")
+id = &"1"
+entry = "generative/fbm"
+coord = SubResource("Resource_cjlc7")
+
+[sub_resource type="Resource" id="Resource_e4qof"]
+script = ExtResource("1_s426a")
+id = &"2"
+entry = "fieldops/smoothstep"
+slots = {
+"x": &"1"
+}
+params = {
+"edge0": 0.0,
+"edge1": 0.05
+}
+
+[sub_resource type="Resource" id="Resource_fju58"]
+script = ExtResource("1_s426a")
+id = &"3"
+entry = "fieldops/alpha"
+slots = {
+"color": &"0"
+}
+
+[sub_resource type="Resource" id="Resource_rfctx"]
+script = ExtResource("1_s426a")
+id = &"4"
+entry = "fieldops/multiply"
+slots = {
+"a": &"3",
+"b": &"2"
+}
+
+[sub_resource type="Resource" id="Resource_4ciew"]
+script = ExtResource("1_s426a")
+id = &"5"
+entry = "fieldops/smoothstep"
+slots = {
+"x": &"1"
+}
+params = {
+"edge0": -0.1,
+"edge1": -0.05
+}
+
+[sub_resource type="Resource" id="Resource_an635"]
+script = ExtResource("1_s426a")
+id = &"6"
+entry = "fieldops/invert"
+slots = {
+"x": &"2"
+}
+
+[sub_resource type="Resource" id="Resource_4ov0d"]
+script = ExtResource("1_s426a")
+id = &"7"
+entry = "fieldops/multiply"
+slots = {
+"a": &"5",
+"b": &"6"
+}
+
+[sub_resource type="Resource" id="Resource_n0gpr"]
+script = ExtResource("1_s426a")
+id = &"8"
+entry = "color/fill"
+kind_out = 1
+params = {
+"color": Color(1, 0.5, 0, 1)
+}
+
+[sub_resource type="Resource" id="Resource_d1468"]
+script = ExtResource("1_s426a")
+id = &"9"
+entry = "color/mix"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"8",
+"mask": &"7"
+}
+
+[resource]
+script = ExtResource("3_s45qc")
+layers = Array[ExtResource("1_s426a")]([SubResource("Resource_r6rti"), SubResource("Resource_ov7pc"), SubResource("Resource_e4qof"), SubResource("Resource_fju58"), SubResource("Resource_rfctx"), SubResource("Resource_4ciew"), SubResource("Resource_an635"), SubResource("Resource_4ov0d"), SubResource("Resource_n0gpr"), SubResource("Resource_d1468")])
+output_color = &"9"
+output_alpha = &"4"
+next_id = 10

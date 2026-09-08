@@ -28,21 +28,34 @@ var _stack: GSTStack
 var _library: GSTLibrary
 ## Called after every do and undo, so the panel can resync its columns.
 var _on_changed: Callable
+## The panel's path-less history anchor Resource (docs/PLAN.md Cross-cutting
+## "EditorUndoRedoManager integration", "History anchor (phase 7)"): every
+## action this file creates uses this as custom_context, never _stack itself.
+## EditorUndoRedoManager.get_object_history_id routes a Resource with a
+## res:// path (a stack loaded from disk) to a different history bucket than
+## a path-less one on 4.6.2 (verified in the phase 7 smoke), so keying off
+## _stack would split a session's undo history across Open/Reopen boundaries
+## instead of sharing the one bucket GSTMainPanel._get_history() watches.
+var _history_context: Resource
 
 
-func _init(undo_redo: EditorUndoRedoManager, stack: GSTStack, library: GSTLibrary, on_changed: Callable) -> void:
+func _init(undo_redo: EditorUndoRedoManager, stack: GSTStack, library: GSTLibrary, on_changed: Callable, history_context: Resource) -> void:
 	_undo_redo = undo_redo
 	_stack = stack
 	_library = library
 	_on_changed = on_changed
+	_history_context = history_context
 
 
-## custom_context = _stack is required: without it, EditorUndoRedoManager
-## binds create_action() to whatever object the editor last inspected, not a
-## stable bucket, desyncing get_object_history_id(stack) from the actions
-## actually created (docs/EDITOR_SMOKE.md phase 4 fail-then-fix note).
+## custom_context = _history_context is required: without a stable, path-less
+## anchor, EditorUndoRedoManager either binds create_action() to whatever
+## object the editor last inspected (not a stable bucket, desyncing
+## get_object_history_id(stack) from the actions actually created, per
+## docs/EDITOR_SMOKE.md phase 4 fail-then-fix note) or, if bound to _stack
+## directly, routes a path-bearing stack (loaded from res://) to a different
+## history than a path-less one (phase 7 finding).
 func _create_action(name: String) -> void:
-	_undo_redo.create_action(name, UndoRedo.MERGE_DISABLE, _stack)
+	_undo_redo.create_action(name, UndoRedo.MERGE_DISABLE, _history_context)
 
 
 ## Creates a new layer with the next monotonic id and appends it to the top

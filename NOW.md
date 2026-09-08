@@ -21,7 +21,7 @@ Last touched: 2026-09-08
 
 Next physical action:
 
-- [ ] phase 6 build in progress: persistence and export
+- [ ] phase 7 build in progress: three-recipe proof and rendered-check harness
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

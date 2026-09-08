@@ -1,0 +1,46 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_1aiju"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="2_douhv"]
+
+[sub_resource type="Resource" id="Resource_gb0o7"]
+script = ExtResource("1_1aiju")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_2sgko"]
+script = ExtResource("1_1aiju")
+id = &"1"
+entry = "filter/outline"
+kind_out = 1
+slots = {
+"source": &"0"
+}
+
+[sub_resource type="Resource" id="Resource_6nhw4"]
+script = ExtResource("1_1aiju")
+id = &"2"
+entry = "color/fill"
+kind_out = 1
+params = {
+"color": Color(0, 0, 0, 1)
+}
+
+[sub_resource type="Resource" id="Resource_o8vei"]
+script = ExtResource("1_1aiju")
+id = &"3"
+entry = "color/mix"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"2",
+"mask": &"1"
+}
+
+[resource]
+script = ExtResource("2_douhv")
+layers = Array[ExtResource("1_1aiju")]([SubResource("Resource_gb0o7"), SubResource("Resource_2sgko"), SubResource("Resource_6nhw4"), SubResource("Resource_o8vei")])
+output_color = &"3"
+output_alpha = &"color_alpha"
+next_id = 4

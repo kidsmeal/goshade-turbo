@@ -56,13 +56,31 @@ signal stack_changed
 @onready var _save_as_button: Button = %SaveAsButton
 @onready var _export_button: Button = %ExportButton
 @onready var _reopen_shader_button: Button = %ReopenShaderButton
+@onready var _recipes_button: MenuButton = %RecipesButton
 
 const COORD_SPACE_NAMES: Array[String] = ["uv", "screen_uv", "local"]
+## docs/PLAN.md Phase 7 Files: the Recipes MenuButton lists every .tres here.
+const RECIPES_DIR: String = "res://addons/goshade_turbo/recipes"
 
 var _stack: GSTStack = null
 var _library: GSTLibrary = null
 var _undo_redo: EditorUndoRedoManager = null
 var _undo: GSTUndo = null
+## A dedicated, never-persisted, never-installed Resource used only as
+## EditorUndoRedoManager's custom_context for "Replace stack" actions and for
+## resolving the watched history (docs/PLAN.md Phase 7 finding): a GSTStack
+## loaded from a real res:// path -- as GSTStackIO.load produces for Open,
+## Reopen Shader, and open_recipe -- routes to a different
+## EditorUndoRedoManager history bucket than a bare, path-less
+## GSTStack.new() does on 4.6.2 (empirically verified: chaining
+## open_recipe -> New -> build -> undo-to-end -> redo-to-end left the panel's
+## material on the prior recipe's codegen, because the New action's
+## custom_context was old_stack, the just-loaded path-bearing recipe stack,
+## which landed outside the bucket _get_history() resolved and drove). This
+## anchor is always a bare, path-less Resource, so replace_stack's own action
+## and _get_history()'s lookup both stay in the one shared bucket regardless
+## of what was opened in between.
+var _history_context: Resource = Resource.new()
 var _material: ShaderMaterial = ShaderMaterial.new()
 var _watched_history: UndoRedo = null
 ## Guards _coord_space_option.select() calls made to reflect stack state from
@@ -138,6 +156,9 @@ func _ready() -> void:
 	_export_button.pressed.connect(_on_export_pressed)
 	_reopen_shader_button.pressed.connect(_on_reopen_shader_pressed)
 
+	_refresh_recipes_menu()
+	_recipes_button.get_popup().index_pressed.connect(_on_recipe_index_pressed)
+
 	_open_dialog = EditorFileDialog.new()
 	_open_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
 	_open_dialog.access = EditorFileDialog.ACCESS_RESOURCES
@@ -178,7 +199,7 @@ func _ready() -> void:
 ## to.
 func set_undo_redo_manager(undo_redo: EditorUndoRedoManager) -> void:
 	_undo_redo = undo_redo
-	_install_stack(_stack, GSTUndo.new(_undo_redo, _stack, _library, _on_stack_changed))
+	_install_stack(_stack, GSTUndo.new(_undo_redo, _stack, _library, _on_stack_changed, _history_context))
 
 
 ## Wires the stack-list/output-block/inspector columns, the watched undo
@@ -226,22 +247,20 @@ func get_stack() -> GSTStack:
 ## Reopen Shader now stays undoable afterward instead of being discarded
 ## along with the replaced GSTStack (docs/PLAN.md Cross-cutting
 ## "EditorUndoRedoManager integration", phase 6 fix pass 2 item 1).
-## custom_context is the old stack: on 4.6.2, get_object_history_id keys every
-## bare, non-scene GSTStack Resource into the one shared "Remote History"
-## bucket regardless of instance (verified: tests/gst_editor_smoke.gd
-## _run_phase6_new), so any stable object works here -- the old stack is used
-## since it is always available by the time this can be called (never before
-## set_undo_redo_manager has run). _on_new_pressed, open_path, and
-## reopen_shader_path call this instead of mutating _stack/_current_path
-## directly.
+## custom_context is _history_context, the panel's path-less anchor Resource:
+## on 4.6.2, get_object_history_id routes a Resource with a res:// path to a
+## different history than a path-less one (verified: tests/gst_editor_smoke.gd
+## phase 7 run 2), so the stack instance is never used as context.
+## _on_new_pressed, open_path, and reopen_shader_path call this instead of
+## mutating _stack/_current_path directly.
 func replace_stack(new_stack: GSTStack, new_path: String) -> void:
 	var old_stack: GSTStack = _stack
 	var old_undo: GSTUndo = _undo
 	var old_path: String = _current_path
-	var new_undo: GSTUndo = GSTUndo.new(_undo_redo, new_stack, _library, _on_stack_changed)
+	var new_undo: GSTUndo = GSTUndo.new(_undo_redo, new_stack, _library, _on_stack_changed, _history_context)
 	_install_stack(new_stack, new_undo)
 	_raw_set_current_path(new_path)
-	_undo_redo.create_action("GST: Replace stack", UndoRedo.MERGE_DISABLE, old_stack)
+	_undo_redo.create_action("GST: Replace stack", UndoRedo.MERGE_DISABLE, _history_context)
 	_undo_redo.add_do_method(self, "_install_stack", new_stack, new_undo)
 	_undo_redo.add_undo_method(self, "_install_stack", old_stack, old_undo)
 	_undo_redo.add_do_method(self, "_raw_set_current_path", new_path)
@@ -301,6 +320,17 @@ func get_message_label() -> Label:
 	return _message_label
 
 
+## The UndoRedo bucket _watched_history currently points at (the same one
+## _get_history()/_history_context resolve to). Lets the phase 7 smoke drive
+## undo()/redo() directly against the exact history this panel watches,
+## instead of recomputing a bucket the smoke's own stack argument might not
+## share with GSTUndo's actions (docs/PLAN.md Cross-cutting
+## "EditorUndoRedoManager integration", "History anchor (phase 7)").
+## Wired-by: none (editor smoke seam)
+func get_watched_history() -> UndoRedo:
+	return _watched_history
+
+
 ## The .tres this stack was last opened from or saved to, or "" for a new or
 ## reopened-from-.gdshader stack (see _current_path).
 ## Wired-by: none (editor smoke seam)
@@ -351,6 +381,61 @@ func open_path(path: String) -> void:
 		_message_label.text = result["reason"]
 		return
 	replace_stack(result["stack"], path)
+	_message_label.text = ""
+
+
+## Rebuilds the Recipes MenuButton's popup from every .tres under
+## RECIPES_DIR, by file name (docs/PLAN.md Phase 7 Files). Called once from
+## _ready(); the recipe roster is fixed at edit time in this phase (no
+## structural add/remove path adds one during a session), so no further
+## refresh trigger exists yet.
+func _refresh_recipes_menu() -> void:
+	var popup: PopupMenu = _recipes_button.get_popup()
+	popup.clear()
+	for recipe_name: String in _recipe_names():
+		popup.add_item(recipe_name)
+
+
+func _recipe_names() -> Array[String]:
+	var names: Array[String] = []
+	var dir: DirAccess = DirAccess.open(RECIPES_DIR)
+	if dir == null:
+		return names
+	dir.list_dir_begin()
+	var entry_name: String = dir.get_next()
+	while entry_name != "":
+		if not dir.current_is_dir() and entry_name.ends_with(".tres"):
+			names.append(entry_name.get_basename())
+		entry_name = dir.get_next()
+	dir.list_dir_end()
+	names.sort()
+	return names
+
+
+## PopupMenu.add_item() auto-assigns each item's id equal to its own index
+## (no explicit id was ever passed above), so index_pressed's index maps
+## directly onto _recipe_names()'s own sorted order without a second lookup.
+func _on_recipe_index_pressed(index: int) -> void:
+	var names: Array[String] = _recipe_names()
+	if index < 0 or index >= names.size():
+		return
+	open_recipe(names[index])
+
+
+## Loads RECIPES_DIR/<name>.tres and installs it via replace_stack (decision
+## 20: an undoable "Replace stack" action, same as New/Open/Reopen Shader),
+## with the new current_path left empty rather than set to the recipe's own
+## path: a recipe is a template, so Save falls back to Save As instead of
+## silently overwriting the shipped recipe file (docs/PLAN.md Phase 7 Files).
+## This is the Recipes menu's own handler; public so
+## tests/gst_editor_smoke.gd can drive the same path directly.
+func open_recipe(name: String) -> void:
+	var path: String = "%s/%s.tres" % [RECIPES_DIR, name]
+	var result: Dictionary = GSTStackIO.load(path, _library)
+	if not result["ok"]:
+		_message_label.text = result["reason"]
+		return
+	replace_stack(result["stack"], "")
 	_message_label.text = ""
 
 
@@ -524,9 +609,9 @@ func _on_coord_space_selected(index: int) -> void:
 ## see it, and this is the only remaining hook for that case (fix pass 2,
 ## item 1).
 func _get_history() -> UndoRedo:
-	if _undo_redo == null or _stack == null:
+	if _undo_redo == null:
 		return null
-	var history_id: int = _undo_redo.get_object_history_id(_stack)
+	var history_id: int = _undo_redo.get_object_history_id(_history_context)
 	return _undo_redo.get_history_undo_redo(history_id)
 
 
