@@ -35,10 +35,10 @@ Eight phases build a `canvas_item` shader-stack editor plugin: data model and he
 
 ## Blockers / Open Questions
 
-B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 2026-09-08. B2 remains open and gates phase 8.
+B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the user 2026-09-08. No blocker remains open.
 
 - **B1 (resolved):** `docs/` un-ignored in `.gitignore`. `docs/DESIGN.md`, this plan, `docs/SPIKE_NOTES.md`, and screenshots are tracked. Owner: user.
-- **B2 (gates phase 8's version matrix only):** Only `Godot_v4.6.2-stable_win64.exe` is installed. The checklist requires "Runs on 4.4, 4.6, 4.7". 4.4 and 4.7 binaries must be obtained before phase 8 can close. Phases 1-7 proceed on 4.6.2.
+- **B2 (resolved 2026-09-08):** Binaries for the version matrix: 4.4 at `C:/Users/atk67/Downloads/Godot_v4.4-stable_win64.exe/Godot_v4.4-stable_win64.exe`, 4.6.2 via `godot` on PATH, 4.7 at `C:/Users/atk67/Documents/godot/Godot_v4.7-stable_win64.exe`. Phase 8 runs both test commands against each by absolute path. 4.7 re-saves `.tres` bools differently (plan decision "Manifests are never re-saved"): after any 4.7 run, `git status` must show no manifest churn. Owner: user.
 - **B3 (resolved):** `group_uniforms L<position>_<function>;` with a two-digit zero-padded stack position, e.g. `group_uniforms L03_fbm;`. One identifier, sorts by stack position in the inspector, no subgroup nesting. Verified to compile on 4.6.2. Owner: user.
 - **B4 (resolved):** Coord-block uniforms keep the short form `l<id>_scale`, `l<id>_offset`, `l<id>_rotation`, `l<id>_scroll`, `l<id>_warp_strength`. The coord block is not a function param, so it carries no function segment. Slider uniforms keep `l<id>_<function>_<param>`. Owner: user.
 - **B5 (resolved):** `local_pos` is normalized. `vertex()` divides `VERTEX` by the node's rect size, passed as a `uniform vec2 gst_rect_size` that the plugin and the preview set from the target node. A coord-block `scale` of `1.0` then matches `uv`. The exported shader defaults `gst_rect_size` to `vec2(1.0)` and the README documents that a user must set it on nodes they attach the shader to. Owner: user.
@@ -226,13 +226,19 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 - `tests/test_header_roundtrip.gd` (create)
 - `tests/test_overwrite_check.gd` (create)
 - `tests/test_stack_io.gd` (create)
+- `addons/goshade_turbo/ui/gst_main_panel.tscn` (modify: save / open / export buttons, file dialogs, overwrite confirmation dialog)
+- `addons/goshade_turbo/codegen/gst_codegen.gd` (modify: the header line is produced by `gst_header.gd`, one call site)
+- `tests/gst_editor_smoke.gd` (modify: `GST_EDITOR_SMOKE=6` section covering the manual item below through the panel's button handlers)
+- `docs/EDITOR_SMOKE.md` (append: phase 6 run)
+- `sandbox/stacks/`, `sandbox/exports/` (create, gitkept, where the smoke writes its files; smoke output under `sandbox/` is deleted at the end of the run)
+- `NOW.md`, `docs/PLAN.md` (orchestrator state), `**/*.gd.uid` sidecars
 
 **Verification:** `godot --headless --path . -s res://tests/run_codegen_tests.gd` exits 0, with tests covering:
 - Save a stack to `.tres`, reload it, and every field including `next_id`, slot references, and coord blocks compares equal.
 - Export, parse the header back into a stack, re-codegen, and the body compares byte-equal to the exported body.
 - Mutate one line of an exported body, run the overwrite check, and it reports a difference; leave it untouched and it reports none.
 - The header is exactly one line and survives a body that contains `//` comments.
-- Manual: export to a path that already holds a differing body and the confirmation dialog appears before any write.
+- Editor smoke (`GST_EDITOR_SMOKE=6`): export to a path that already holds a differing body and the confirmation dialog appears before any write; save, new, open round-trips the panel state; reopen from an exported `.gdshader` rebuilds the stack; reopen of a headerless file is refused with the message (B8).
 
 **Exit criteria:** Round trip is byte-exact, the overwrite check catches a one-character body edit, no export path writes without confirmation when a difference exists.
 **Blockers:** none (B8 resolved).
