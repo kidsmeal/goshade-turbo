@@ -3,16 +3,30 @@ extends RefCounted
 
 ## Runs inside a real editor session (godot --editor --path .) when
 ## GST_EDITOR_SMOKE is set, driven by plugin.gd's _enter_tree. Performs the
-## phase 4 verification steps programmatically, prints one
-## "SMOKE <item> PASS|FAIL <detail>" line per item, then quits the editor.
-## Never fabricates a pass: every assertion below is a real check against
-## the running panel. Design: docs/PLAN.md Phase 4 Verification (amended).
+## phase 4 or phase 5 verification steps programmatically depending on the
+## env var's value ("5" selects phase 5, anything else keeps running phase
+## 4), prints one "SMOKE <item> PASS|FAIL <detail>" line per item, then
+## quits the editor. Never fabricates a pass: every assertion below is a
+## real check against the running panel. Design: docs/PLAN.md Phase 4
+## Verification (amended), Phase 5 Verification.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
 
 
+## Dispatches on the GST_EDITOR_SMOKE value itself (plugin.gd only checks
+## whether it is non-empty before instantiating this script), so a phase 5
+## run (value "5") exercises the preview column below while any other value
+## keeps running the phase 4 checks unchanged.
 func run(plugin: EditorPlugin) -> void:
+	var flag: String = OS.get_environment("GST_EDITOR_SMOKE")
+	if flag == "5":
+		await _run_phase5(plugin)
+	else:
+		await _run_phase4(plugin)
+
+
+func _run_phase4(plugin: EditorPlugin) -> void:
 	# Let the main screen tab registration and panel _ready() settle.
 	for i: int in range(5):
 		await plugin.get_tree().process_frame
@@ -405,6 +419,468 @@ func _run_codegen_check() -> void:
 	stack.output_color = invert.id
 	var result: GSTCodegenResult = GSTCodegen.generate_result(stack, library)
 	_check("13", result.ok() and not result.code.is_empty(), "codegen of two-layer stack: error='%s' code_len=%d" % [result.error, result.code.length()])
+
+
+## Phase 5: preview column (docs/PLAN.md Phase 5 Verification). Items 1-8
+## match the plan's numbered list; setup checks that are not one of the 8
+## use a "setup" prefix so they never collide with an item number.
+func _run_phase5(plugin: EditorPlugin) -> void:
+	for i: int in range(5):
+		await plugin.get_tree().process_frame
+
+	var panel: GSTMainPanel = plugin.get_panel() as GSTMainPanel
+	_check("setup1", panel != null, "panel is null" if panel == null else "panel present")
+	if panel == null:
+		_finish(plugin)
+		return
+
+	EditorInterface.set_main_screen_editor("GoShade Turbo")
+	await plugin.get_tree().process_frame
+	_check("setup2", panel.visible, "panel.visible after set_main_screen_editor=%s" % [panel.visible])
+
+	var stack_list: GSTStackList = panel.get_stack_list()
+	var undo: GSTUndo = panel.get_undo()
+	var library: GSTLibrary = panel.get_library()
+	var stack: GSTStack = panel.get_stack()
+	var preview: GSTPreview = panel.get_preview()
+	var history: UndoRedo = _get_history(stack)
+
+	var checker: GSTLayer = await _run_phase5_checker_render(plugin, panel, stack_list, undo, preview)
+	await _run_phase5_preset_switch(plugin, panel)
+	await _run_phase5_solo_toggle(plugin, panel, stack_list, checker)
+	var tex_layer: GSTLayer = await _run_phase5_texture_source(plugin, panel, stack_list, undo, preview, checker)
+	await _run_phase5_screen_source(plugin, panel, stack_list, undo, preview, tex_layer)
+	await _run_phase5_coord_space(plugin, panel, stack_list, undo, history)
+	await _run_phase5_codegen_error(plugin, panel, library)
+
+	_finish(plugin)
+
+
+## Item 1: a generative/checker layer (its own manifest carries no params;
+## the hard 0.0/1.0 checkerboard is inherently maximal-contrast, no param
+## needed to call it "high contrast") renders non-uniform pixels.
+## Item 2 (fix pass 2, item 1): editing checker's only adjustable numeric
+## field -- coord.scale, since checker.params is empty -- through a real
+## EditorProperty widget's own emit_changed(), the way a real slider drag
+## would, exercising gst_inspector_column.gd's GSTCoordBlock.changed relay
+## end to end. Not driven through gst_inspector_column.gd's own
+## EditorInspector directly: that column shows coord as a collapsed
+## EditorPropertyResource row with no nested EditorProperty children built
+## at all until a user expands it by hand (confirmed by walking that live
+## tree: the row holds only an EditorResourcePicker's own buttons), so a
+## throwaway EditorInspector pointed directly at the coord object is used
+## instead -- coord is then the top-level edited object, the same
+## EditorProperty/property_edited machinery gst_inspector_column.gd's own
+## EditorInspector already uses for GSTLayer's own top-level properties,
+## with no expand step needed. A prior version of this check forced
+## EditorUndoRedoManager.create_action(..., custom_context = stack) directly,
+## which artificially bound the action to the stack's own undo history
+## bucket and never proved a real inspector-driven edit (whose
+## create_action() call does not pass that context) reaches the material at
+## all. Asserts the material's uniform and the rendered image both change
+## within one frame of the real widget's own edit.
+func _run_phase5_checker_render(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview) -> GSTLayer:
+	var checker: GSTLayer = stack_list.add_layer_by_entry_id("generative/checker")
+	undo.set_output_color(checker.id)
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var img1: Image = preview.get_viewport_image()
+	var nonuniform: bool = img1 != null and not _image_is_uniform(img1)
+	_check("1", nonuniform, "checker layer renders non-uniform pixels after 3 frames (img_null=%s)" % [img1 == null])
+
+	var coord: GSTCoordBlock = checker.coord
+	var old_scale: Vector2 = coord.scale
+	var new_scale: Vector2 = old_scale * 6.0
+	var found_prop: bool = await _drive_real_property_edit(plugin, coord, &"scale", new_scale)
+
+	var uniform_name: String = GSTUniformNames.coord_scale(checker.id)
+	var uniform_value: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
+	var uniform_changed: bool = uniform_value is Vector2 and (uniform_value as Vector2).is_equal_approx(new_scale)
+	var img2: Image = preview.get_viewport_image()
+	var image_changed: bool = img2 != null and not _images_equal(img1, img2)
+	_check("2", found_prop and uniform_changed and image_changed, "checker scale via real EditorProperty widget found=%s coord.scale=%s uniform=%s (expect %s) image_changed=%s" % [found_prop, coord.scale, uniform_value, new_scale, image_changed])
+	return checker
+
+
+## Edits target_object.property_name to value through a real EditorProperty
+## widget's own emit_changed(), the same call an EditorProperty subclass
+## (e.g. a Vector2 slider) makes internally on an actual drag, via a
+## throwaway EditorInspector pointed directly at target_object so the widget
+## exists as a top-level property with no fold/expand step needed. Frees the
+## throwaway inspector afterward. Returns whether the widget was found.
+func _drive_real_property_edit(plugin: EditorPlugin, target_object: Object, property_name: StringName, value: Variant) -> bool:
+	var temp_inspector: EditorInspector = EditorInspector.new()
+	plugin.get_tree().root.add_child(temp_inspector)
+	temp_inspector.edit(target_object)
+	await plugin.get_tree().process_frame
+	var ep: EditorProperty = GSTInspectorColumn.find_editor_property_in(temp_inspector, property_name, target_object)
+	var found: bool = ep != null
+	if ep != null:
+		ep.emit_changed(property_name, value)
+		await plugin.get_tree().process_frame
+	temp_inspector.queue_free()
+	return found
+
+
+## Item 3: switching to the text preset keeps the same ShaderMaterial
+## instance on the new target node and, since coord_space is still uv,
+## shows the screen_uv suggestion, and actually renders a different,
+## non-uniform silhouette from the sprite preset it replaced (fix pass 2,
+## item 2: a Label's per-glyph quad reads the checker field differently from
+## a TextureRect's single full-rect quad, so the two presets' pixels must
+## differ, not merely their message label); full_rect and back to sprite
+## both keep rendering non-uniform pixels and the same material instance
+## throughout.
+func _run_phase5_preset_switch(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
+	var preview: GSTPreview = panel.get_preview()
+	var material_before: ShaderMaterial = preview.get_current_target_material()
+	var img_sprite: Image = preview.get_viewport_image()
+
+	panel._on_preset_selected(1) # "text"
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var material_after_text: ShaderMaterial = preview.get_current_target_material()
+	var same_instance: bool = material_after_text != null and material_after_text == material_before
+	var suggests: bool = panel.get_message_label().text.contains("screen_uv")
+	var img_text: Image = preview.get_viewport_image()
+	var text_nonuniform: bool = img_text != null and not _image_is_uniform(img_text)
+	var differs_from_sprite: bool = img_text != null and img_sprite != null and not _images_equal(img_sprite, img_text)
+	_check("3a", same_instance and suggests and text_nonuniform and differs_from_sprite, "preset=text material_same=%s message='%s' text_nonuniform=%s differs_from_sprite=%s" % [same_instance, panel.get_message_label().text, text_nonuniform, differs_from_sprite])
+
+	panel._on_preset_selected(2) # "full_rect"
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var img_full: Image = preview.get_viewport_image()
+	var full_nonuniform: bool = img_full != null and not _image_is_uniform(img_full)
+
+	panel._on_preset_selected(0) # "sprite"
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var img_sprite_again: Image = preview.get_viewport_image()
+	var sprite_nonuniform: bool = img_sprite_again != null and not _image_is_uniform(img_sprite_again)
+	var still_same_instance: bool = preview.get_current_target_material() == material_before
+	_check("3b", full_nonuniform and sprite_nonuniform and still_same_instance, "full_rect_nonuniform=%s sprite_nonuniform=%s material_still_same=%s" % [full_nonuniform, sprite_nonuniform, still_same_instance])
+
+
+## Item 4: soloing the checker layer replaces the output line with its field
+## solo form without touching the stack (layer count, output_color,
+## output_alpha unchanged); toggling solo off restores the exact pre-solo
+## shader text.
+func _run_phase5_solo_toggle(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, checker: GSTLayer) -> void:
+	var stack: GSTStack = panel.get_stack()
+	stack_list.select_layer(checker.id)
+	await plugin.get_tree().process_frame
+
+	var code_before_solo: String = panel.get_shader_material().shader.code
+	var layers_before: int = stack.layers.size()
+	var output_color_before: StringName = stack.output_color
+	var output_alpha_before: StringName = stack.output_alpha
+
+	panel.get_solo_check().button_pressed = true
+	await plugin.get_tree().process_frame
+	var code_solo: String = panel.get_shader_material().shader.code
+	var has_solo_line: bool = code_solo.contains("COLOR = vec4(vec3(l%s), 1.0);" % String(checker.id))
+	var stack_unchanged: bool = stack.layers.size() == layers_before and stack.output_color == output_color_before and stack.output_alpha == output_alpha_before
+	_check("4a", has_solo_line and stack_unchanged, "solo on: has_solo_line=%s stack_unchanged=%s" % [has_solo_line, stack_unchanged])
+
+	panel.get_solo_check().button_pressed = false
+	await plugin.get_tree().process_frame
+	var code_after: String = panel.get_shader_material().shader.code
+	_check("4b", code_after == code_before_solo, "solo off: code equals pre-solo code byte for byte=%s" % [code_after == code_before_solo])
+
+
+## Item 5: a lone source/texture layer renders the preview image itself;
+## sampled at the viewport's own center against the source PNG's own center
+## (both read directly, independent of any import artifact), within a
+## tolerance that allows for the render pipeline's own filtering/color
+## management, not exact byte equality.
+func _run_phase5_texture_source(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview, checker: GSTLayer) -> GSTLayer:
+	undo.remove_layer(checker.id)
+	await plugin.get_tree().process_frame
+
+	var tex_layer: GSTLayer = stack_list.add_layer_by_entry_id("source/texture")
+	undo.set_output_color(tex_layer.id)
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+
+	var viewport_img: Image = preview.get_viewport_image()
+	var close: bool = false
+	var got: Color = Color.BLACK
+	var want: Color = Color.BLACK
+	if viewport_img != null:
+		var source_img: Image = Image.new()
+		source_img.load("res://addons/goshade_turbo/assets/preview_default.png")
+		got = viewport_img.get_pixel(viewport_img.get_width() / 2, viewport_img.get_height() / 2)
+		want = source_img.get_pixel(source_img.get_width() / 2, source_img.get_height() / 2)
+		close = _colors_close(got, want, 0.12)
+	_check("5", close, "texture source center pixel got=%s want=%s" % [got, want])
+	return tex_layer
+
+
+## Item 6: a lone source/screen layer reads the background through
+## hint_screen_texture and renders the same image (decision 10).
+func _run_phase5_screen_source(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview, tex_layer: GSTLayer) -> void:
+	undo.remove_layer(tex_layer.id)
+	await plugin.get_tree().process_frame
+
+	var screen_layer: GSTLayer = stack_list.add_layer_by_entry_id("source/screen")
+	undo.set_output_color(screen_layer.id)
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+
+	var viewport_img: Image = preview.get_viewport_image()
+	var close: bool = false
+	var got: Color = Color.BLACK
+	var want: Color = Color.BLACK
+	if viewport_img != null:
+		var source_img: Image = Image.new()
+		source_img.load("res://addons/goshade_turbo/assets/preview_default.png")
+		got = viewport_img.get_pixel(viewport_img.get_width() / 2, viewport_img.get_height() / 2)
+		want = source_img.get_pixel(source_img.get_width() / 2, source_img.get_height() / 2)
+		close = _colors_close(got, want, 0.12)
+	_check("6", close, "screen source center pixel got=%s want=%s" % [got, want])
+
+
+## Item 7: switching the stack column's coord space to local through the
+## panel (GSTUndo.set_coord_space) declares gst_rect_size equal to the
+## preview node's own rect and the vertex()-set varying; undoing restores
+## uv. Item 7c/7d (docs/PLAN.md Phase 5 fix round): a resize with no
+## structural stack edit in between must still push the new target rect into
+## gst_rect_size (the target_rect_changed cheap path, B5), and a scale-1
+## checker must render identically under local and uv at that resized rect.
+func _run_phase5_coord_space(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, history: UndoRedo) -> void:
+	var stack: GSTStack = panel.get_stack()
+	var preview: GSTPreview = panel.get_preview()
+
+	panel._on_coord_space_selected(2) # "local"
+	await plugin.get_tree().process_frame
+	var rect_uniform: Variant = panel.get_shader_material().get_shader_parameter("gst_rect_size")
+	var target_size: Vector2 = preview.get_target_rect_size()
+	var rect_ok: bool = rect_uniform is Vector2 and (rect_uniform as Vector2).is_equal_approx(target_size)
+	var has_varying: bool = panel.get_shader_material().shader.code.contains("varying vec2 local_pos;")
+	_check("7a", rect_ok and has_varying, "gst_rect_size=%s target=%s has_varying=%s" % [rect_uniform, target_size, has_varying])
+
+	history.undo()
+	await plugin.get_tree().process_frame
+	var restored: bool = stack.coord_space == GSTStack.CoordSpace.UV
+	_check("7b", restored, "undo restores coord_space to uv: %s (actual %d)" % [restored, stack.coord_space])
+
+	await _run_phase5_local_resize(plugin, panel, stack_list, undo, preview)
+
+
+## Item 7c: a scale-1 (default GSTCoordBlock.scale) checker is added under
+## local space first, so the resize below is the only thing that changes
+## afterward -- no GSTUndo structural edit runs between the resize and the
+## readback, so gst_rect_size can only be correct here if
+## GSTPreview.target_rect_changed -> GSTMainPanel._on_target_rect_changed
+## actually caught the resize (every structural edit forces a full resync
+## that would otherwise mask a stale-uniform bug by re-reading the live size
+## anyway).
+func _run_phase5_local_resize(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview) -> void:
+	panel._on_coord_space_selected(2) # "local"
+	await plugin.get_tree().process_frame
+
+	var checker: GSTLayer = stack_list.add_layer_by_entry_id("generative/checker")
+	undo.set_output_color(checker.id)
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+
+	var before_size: Vector2 = preview.get_target_rect_size()
+	preview.custom_minimum_size = before_size + Vector2(96.0, 64.0)
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+
+	var after_size: Vector2 = preview.get_target_rect_size()
+	var resized: bool = not after_size.is_equal_approx(before_size)
+	var rect_uniform: Variant = panel.get_shader_material().get_shader_parameter("gst_rect_size")
+	var rect_ok: bool = rect_uniform is Vector2 and (rect_uniform as Vector2).is_equal_approx(after_size)
+	_check("7c", resized and rect_ok, "resized=%s before=%s after=%s gst_rect_size=%s" % [resized, before_size, after_size, rect_uniform])
+
+	await _run_phase5_checker_grid_evidence(plugin, panel, stack_list, undo, preview)
+
+	preview.custom_minimum_size = Vector2.ZERO
+
+
+## Item 7d: proves B5's literal claim ("a coord-block scale of 1.0 matches
+## uv", docs/PLAN.md:44) with real per-pixel evidence, at the resized rect
+## 7c just produced.
+##
+## generative/checker.tres carries no manifest params (verified: params =
+## Array[Dictionary]([])); cell density is entirely the per-layer
+## coord.scale (gst_codegen.gd::_generator_body_lines feeds gst_transform(p,
+## scale, rotation, offset) into checker(p) = mod(floor(p.x)+floor(p.y),
+## 2.0)). A scale-1 checker with no offset is exactly one cell across the
+## whole [0,1) rect (floor(p) == (0,0) everywhere), so it renders uniformly
+## and can never distinguish local from uv -- the bug this rewrite fixes.
+## Offsetting the single scale-1 cell boundary into view instead produces a
+## real four-quadrant pattern without touching scale at all, honoring the
+## literal "keep the coord block scale at 1.0" B5 test.
+##
+## Samples are the rect's four corners, not the x == y diagonal the fix
+## request suggested: mod(floor(x)+floor(y), 2) is provably constant along
+## that line (floor(x) == floor(y) there, so the sum is always even,
+## regardless of scale or offset), so a diagonal sample set would be
+## vacuous. The (0.5, 0.5) offset below instead makes the four corners land
+## one in each quadrant, giving parities [0, 1, 1, 0] -- genuine, checkable
+## evidence.
+##
+## Preset is switched to full_rect first so every sampled fraction lands
+## inside the target node (previously a quarter-rect sample under the
+## sprite preset read alpha 0, outside the node, per the fix request).
+func _run_phase5_checker_grid_evidence(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview) -> void:
+	var stack: GSTStack = panel.get_stack()
+
+	panel._on_preset_selected(2) # "full_rect"
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+
+	panel._on_coord_space_selected(0) # "uv"
+	await plugin.get_tree().process_frame
+
+	var grid: GSTLayer = stack_list.add_layer_by_entry_id("generative/checker")
+	undo.set_output_color(grid.id)
+	_set_coord_property(grid.coord, stack, &"offset", Vector2(0.5, 0.5))
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+
+	var fracs: Array[Vector2] = [Vector2(0.125, 0.125), Vector2(0.125, 0.875), Vector2(0.875, 0.125), Vector2(0.875, 0.875)]
+
+	var uv_samples: Array[Color] = _sample_points(preview.get_viewport_image(), fracs)
+	var uv_nonuniform: bool = not _colors_all_equal(uv_samples)
+	_check("7d1", uv_nonuniform, "uv checker corner samples=%s (expect not all equal)" % [uv_samples])
+
+	panel._on_coord_space_selected(2) # "local"
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+
+	var local_samples: Array[Color] = _sample_points(preview.get_viewport_image(), fracs)
+	var matches_uv: bool = _colors_all_close(local_samples, uv_samples, 0.05)
+	_check("7d2", uv_nonuniform and matches_uv, "local corner samples=%s match uv corner samples=%s (tolerance 0.05)" % [local_samples, uv_samples])
+
+	# Negative control: bumping scale under local only (the uv reference
+	# above stays captured at scale 1) proves the four-point comparison can
+	# actually fail, not pass regardless of input.
+	_set_coord_property(grid.coord, stack, &"scale", Vector2(2.0, 2.0))
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+
+	var local_scaled_samples: Array[Color] = _sample_points(preview.get_viewport_image(), fracs)
+	var differs_from_uv: bool = not _colors_all_close(local_scaled_samples, uv_samples, 0.05)
+	_check("7d3", differs_from_uv, "local scale=2.0 corner samples=%s vs uv reference=%s (expect at least one differs)" % [local_scaled_samples, uv_samples])
+
+
+## Item 8: mutating the stack directly through GSTStackOps (bypassing
+## GSTUndo entirely, the way a future non-undo-routed caller might) and
+## manually re-emitting stack_changed is the documented way to force a
+## resync outside GSTUndo (docs/PLAN.md Phase 5 Verification). An unwired
+## filter/pixelate "source" slot (its default, B10's Unwired filter rule)
+## fails codegen; the message label shows the error and the material's code
+## stays the last good one; removing the filter recovers.
+func _run_phase5_codegen_error(plugin: EditorPlugin, panel: GSTMainPanel, library: GSTLibrary) -> void:
+	var stack: GSTStack = panel.get_stack()
+	var last_good_code: String = panel.get_shader_material().shader.code
+
+	var filter_layer: GSTLayer = GSTStackOps.add_layer(stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
+	panel.stack_changed.emit()
+	await plugin.get_tree().process_frame
+	var error_shown: bool = not panel.get_message_label().text.is_empty()
+	var code_unchanged: bool = panel.get_shader_material().shader.code == last_good_code
+	_check("8a", error_shown and code_unchanged, "forced codegen error: message='%s' code_unchanged=%s" % [panel.get_message_label().text, code_unchanged])
+
+	GSTStackOps.remove_layer(stack, filter_layer.id, library)
+	panel.stack_changed.emit()
+	await plugin.get_tree().process_frame
+	var recovered: bool = panel.get_message_label().text.is_empty()
+	_check("8b", recovered, "recovery after removing the filter: message='%s'" % [panel.get_message_label().text])
+
+
+## True when a sparse grid sample of img shows no variation at all (used as
+## "the render is blank/uniform" rather than a true per-pixel scan, cheap
+## enough to run every frame this script waits on).
+func _image_is_uniform(img: Image) -> bool:
+	var w: int = img.get_width()
+	var h: int = img.get_height()
+	if w == 0 or h == 0:
+		return true
+	var first: Color = img.get_pixel(0, 0)
+	# Step off the smaller dimension: the preview viewport tracks the panel's
+	# own (frequently non-square, sometimes narrow) column rect, and a step
+	# derived only from width would skip past every pattern boundary on a
+	# short-and-wide rect.
+	var step: int = maxi(1, mini(w, h) / 16)
+	for y: int in range(0, h, step):
+		for x: int in range(0, w, step):
+			if not img.get_pixel(x, y).is_equal_approx(first):
+				return false
+	return true
+
+
+func _images_equal(a: Image, b: Image) -> bool:
+	if a == null or b == null or a.get_size() != b.get_size():
+		return false
+	var w: int = a.get_width()
+	var h: int = a.get_height()
+	var step: int = maxi(1, mini(w, h) / 24)
+	for y: int in range(0, h, step):
+		for x: int in range(0, w, step):
+			if not a.get_pixel(x, y).is_equal_approx(b.get_pixel(x, y)):
+				return false
+	return true
+
+
+func _colors_close(a: Color, b: Color, tolerance: float) -> bool:
+	return absf(a.r - b.r) <= tolerance and absf(a.g - b.g) <= tolerance and absf(a.b - b.b) <= tolerance and absf(a.a - b.a) <= tolerance
+
+
+## Reads img at each fraction in fracs (0..1 of width/height); Color.BLACK
+## per point when img is null, so a null viewport read still returns a
+## same-length array instead of failing the caller outright.
+func _sample_points(img: Image, fracs: Array[Vector2]) -> Array[Color]:
+	var out: Array[Color] = []
+	if img == null:
+		for i: int in range(fracs.size()):
+			out.append(Color.BLACK)
+		return out
+	var w: int = img.get_width()
+	var h: int = img.get_height()
+	for frac: Vector2 in fracs:
+		out.append(img.get_pixel(int(frac.x * w), int(frac.y * h)))
+	return out
+
+
+func _colors_all_equal(colors: Array[Color]) -> bool:
+	if colors.is_empty():
+		return true
+	var first: Color = colors[0]
+	for c: Color in colors:
+		if not c.is_equal_approx(first):
+			return false
+	return true
+
+
+func _colors_all_close(a: Array[Color], b: Array[Color], tolerance: float) -> bool:
+	if a.size() != b.size():
+		return false
+	for i: int in range(a.size()):
+		if not _colors_close(a[i], b[i], tolerance):
+			return false
+	return true
+
+
+## Sets a GSTCoordBlock property through the same EditorUndoRedoManager
+## create_action/add_do_property/commit_action() (default execute = true)
+## path item 2 above uses for coord.scale: a real property-undo action, the
+## same shape an inspector slider drag registers, that actually applies the
+## do value on this initial commit (unlike GSTUndo's own commit_action(false)
+## + manual _notify(), which is a different call shape for a different
+## purpose -- routing structural edits through GSTUndo's one history bucket).
+func _set_coord_property(coord: GSTCoordBlock, stack: GSTStack, property: StringName, value: Variant) -> void:
+	var old_value: Variant = coord.get(property)
+	var editor_undo_redo: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
+	editor_undo_redo.create_action("set coord %s" % property, UndoRedo.MERGE_DISABLE, stack)
+	editor_undo_redo.add_do_property(coord, property, value)
+	editor_undo_redo.add_undo_property(coord, property, old_value)
+	editor_undo_redo.commit_action()
 
 
 func _check(item: String, ok: bool, detail: String) -> void:

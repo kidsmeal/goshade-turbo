@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://addons/goshade_turbo/ui/gst_main_panel.gd" id="1"]
 [ext_resource type="PackedScene" path="res://addons/goshade_turbo/ui/gst_stack_list.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://addons/goshade_turbo/ui/gst_output_block.tscn" id="3"]
 [ext_resource type="Script" path="res://addons/goshade_turbo/ui/gst_inspector_column.gd" id="4"]
+[ext_resource type="PackedScene" path="res://addons/goshade_turbo/ui/gst_preview.tscn" id="5"]
 
 [node name="GSTMainPanel" type="VBoxContainer"]
 script = ExtResource("1")
@@ -15,6 +16,17 @@ size_flags_vertical = 3
 [node name="LeftColumn" type="VBoxContainer" parent="Columns"]
 layout_mode = 2
 custom_minimum_size = Vector2(260, 0)
+
+[node name="StackHeader" type="HBoxContainer" parent="Columns/LeftColumn"]
+layout_mode = 2
+
+[node name="CoordSpaceLabel" type="Label" parent="Columns/LeftColumn/StackHeader"]
+layout_mode = 2
+text = "Coord space"
+
+[node name="CoordSpaceOption" type="OptionButton" parent="Columns/LeftColumn/StackHeader"]
+unique_name_in_owner = true
+layout_mode = 2
 
 [node name="StackList" parent="Columns/LeftColumn" instance=ExtResource("2")]
 unique_name_in_owner = true
@@ -35,10 +47,32 @@ layout_mode = 2
 custom_minimum_size = Vector2(280, 0)
 script = ExtResource("4")
 
-[node name="PreviewSlot" type="Control" parent="Columns/RightColumns"]
+[node name="PreviewSlot" type="VBoxContainer" parent="Columns/RightColumns"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="PreviewControls" type="HBoxContainer" parent="Columns/RightColumns/PreviewSlot"]
+layout_mode = 2
+
+[node name="PresetOption" type="OptionButton" parent="Columns/RightColumns/PreviewSlot/PreviewControls"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ImageButton" type="Button" parent="Columns/RightColumns/PreviewSlot/PreviewControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Image..."
+
+[node name="SoloCheck" type="CheckButton" parent="Columns/RightColumns/PreviewSlot/PreviewControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Solo"
+
+[node name="Preview" parent="Columns/RightColumns/PreviewSlot" instance=ExtResource("5")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="MessageLabel" type="Label" parent="."]
 unique_name_in_owner = true

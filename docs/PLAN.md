@@ -185,11 +185,11 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 **Exit criteria:** All six undo operations round-trip and the history is then empty, the picker filters by slot kind, refusals surface their reason string in the UI, the output block shows decision 12 defaults and codegen resolves the same defaults.
 **Blockers:** none beyond phase 1 spike results.
 **Wires:** `plugin.gd` registers the main screen tab, making the panel reachable from the editor.
-**Wired-by:** phase 5 (`GSTMainPanel.get_preview_slot()` is where the preview column mounts), phase 6 (`GSTMainPanel.set_stack()` is the open and reopen entry point).
+**Wired-by:** phase 5 (the preview column is instanced inside `gst_main_panel.tscn`; the phase 4 `get_preview_slot()` accessor was removed in phase 5 as obsolete), phase 6 (`GSTMainPanel.set_stack()` is the open and reopen entry point).
 
 ## Phase 5: Preview column
 
-**Status:** pending
+**Status:** committed (da09d46)
 **Goal:** Live preview of the current stack, with target presets, an image picker, and the solo toggle.
 **Files:**
 - `addons/goshade_turbo/ui/gst_preview.tscn` / `.gd` (create, `SubViewport` + `TextureRect` running the generated `ShaderMaterial`)
@@ -198,12 +198,18 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 - `addons/goshade_turbo/assets/preview_default.png` (create, bundled default sprite)
 - `addons/goshade_turbo/ui/gst_main_panel.gd` (modify: mount the preview column, wire the solo toggle)
 - `tests/test_material_sync.gd` (create, headless: given a stack, the synced `ShaderMaterial` exposes one uniform per param with the layer's value)
+- `addons/goshade_turbo/ui/gst_main_panel.tscn` (modify: preview column mount, coord space `OptionButton` per decision 11, solo toggle, preset selector, preview image picker)
+- `addons/goshade_turbo/ui/gst_undo.gd` (modify: `set_coord_space` action)
+- `addons/goshade_turbo/ui/gst_inspector_column.gd` (modify: relays `EditorInspector.property_edited` as a `param_edited` signal so the panel resyncs on real slider edits)
+- `tests/gst_editor_smoke.gd` (modify: `GST_EDITOR_SMOKE=5` section covering the manual items below, pixel readback from the preview `SubViewport`)
+- `docs/EDITOR_SMOKE.md` (append: phase 5 run)
+- `NOW.md`, `docs/PLAN.md` (orchestrator state), `**/*.gd.uid`, `**/*.import` sidecars
 
 **Verification:**
 - `godot --headless --path . -s res://tests/run_codegen_tests.gd` exits 0 including `test_material_sync.gd`.
-- Manual: move a slider in the inspector column and the preview changes within one frame; switch the preset from sprite to text and the preview node swaps while the material stays; the text preset suggests `screen_uv` when space is still `uv`; the solo toggle shows the selected layer (a field as grayscale) and returns to the output when untoggled, with the stack unchanged (verified by the stack list and the exported text being identical before and after toggling).
+- Editor smoke (`GST_EDITOR_SMOKE=5`, results in `docs/EDITOR_SMOKE.md`) covering each manual item below with a pixel readback where the item is visual, plus a manual pass by the user before release: move a slider in the inspector column and the preview changes within one frame; switch the preset from sprite to text and the preview node swaps while the material stays; the text preset suggests `screen_uv` when space is still `uv`; the solo toggle shows the selected layer (a field as grayscale) and returns to the output when untoggled, with the stack unchanged (verified by the stack list and the exported text being identical before and after toggling).
 
-**Exit criteria:** Preview updates on every slider and structural change, all three presets render, solo toggle round-trips without mutating the stack.
+**Exit criteria:** Preview updates on every slider and structural change, all three presets render, solo toggle round-trips without mutating the stack, `screen` layers preview against the same image (decision 10), `gst_rect_size` is set from the preview node so `local` space matches `uv` at scale 1 (B5), a codegen error keeps the last good material and shows the message.
 **Blockers:** none.
 **Wires:** the preview column is the first live caller of `GSTCodegen` and `GSTLibrary` outside tests.
 
@@ -337,6 +343,12 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 - Affects: every caller: tests in phases 2-3, material sync in phase 5, export in phase 6.
 - Ordering: set in phase 3 review. Phases 5 and 6 read the error from the returned result and surface it in the UI.
 - Migration/rollback: none.
+
+**Editor smoke seams**
+- Changes: public accessors on `GSTMainPanel` and `GSTPreview` that exist only so `tests/gst_editor_smoke.gd` can observe state carry the doc comment line `Wired-by: none (editor smoke seam)`. Any accessor without that line and without a live caller is dead code.
+- Affects: phases 4-8 UI files.
+- Ordering: from phase 5 on.
+- Migration/rollback: delete the accessor and its smoke item together.
 
 **Rendered checks require a GPU session**
 - Changes: the verification environment, not the code.

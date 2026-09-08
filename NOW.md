@@ -21,7 +21,7 @@ Last touched: 2026-09-08
 
 Next physical action:
 
-- [ ] phase 4 build in progress: editor main screen UI and undo
+- [ ] /claudhd:build docs/PLAN.md 6 (persistence and export). Phases 1-5 committed. B2 (4.4 and 4.7 binaries) still open for phase 8.
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

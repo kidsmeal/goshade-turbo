@@ -318,6 +318,30 @@ func _raw_set_output_alpha(value: StringName) -> void:
 	_stack.output_alpha = value
 
 
+## Sets stack.coord_space (decision 11: uv / screen_uv / local, the stack
+## column header's coord space dropdown). No slot/reference checks apply:
+## coord_space is a stack-level enum, not a layer reference, so this can
+## never be refused. A no-op selection (already this space) registers no
+## action, same as every other GSTUndo method's no-op guard.
+func set_coord_space(space: GSTStack.CoordSpace) -> Dictionary:
+	var old_value: GSTStack.CoordSpace = _stack.coord_space
+	if old_value == space:
+		return {"ok": true, "reason": ""}
+	_raw_set_coord_space(space)
+	_create_action("GST: coord space %d" % space)
+	_undo_redo.add_do_method(self, "_raw_set_coord_space", space)
+	_undo_redo.add_undo_method(self, "_raw_set_coord_space", old_value)
+	_undo_redo.add_do_method(self, "_notify")
+	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.commit_action(false)
+	_notify()
+	return {"ok": true, "reason": ""}
+
+
+func _raw_set_coord_space(space: GSTStack.CoordSpace) -> void:
+	_stack.coord_space = space
+
+
 ## Adds a new entry_id layer directly below anchor_id and wires
 ## anchor_id.slot_name to it, as one compound undoable action (the inspector
 ## column's per-slot picker button). Ids stay monotonic regardless of the new
