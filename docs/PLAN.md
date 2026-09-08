@@ -85,7 +85,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 
 ## Phase 2: Codegen core - generators and field ops
 
-**Status:** review failed
+**Status:** committed (e271ab5)
 **Goal:** A `GSTCodegen` that turns a stack of generators and field ops into compiling `.gdshader` text.
 **Files:**
 - `addons/goshade_turbo/codegen/gst_codegen.gd` (create)

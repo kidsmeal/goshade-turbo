@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/cellular_edges"
+function = "cellular_edges"
+description = "F2 minus F1 distance, bright at cell boundaries, dark at cell centers"
+source_math = "F2 - F1 cellular edge construction over a jittered grid, per Inigo Quilez, \"Voronoi Edges\", https://iquilezles.org/articles/voronoilines/"
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([])
+coord = true
+samples_source = false
+depends = Array[String](["generative/hash"])
+code = "float cellular_edges(vec2 p) {
+	vec2 cell = floor(p);
+	vec2 local_f = fract(p);
+	float f1 = 8.0;
+	float f2 = 8.0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 neighbor = vec2(float(x), float(y));
+			vec2 point = vec2(hash(cell + neighbor), hash(cell + neighbor + vec2(37.0, 17.0)));
+			vec2 diff = neighbor + point - local_f;
+			float dist = length(diff);
+			if (dist < f1) {
+				f2 = f1;
+				f1 = dist;
+			} else if (dist < f2) {
+				f2 = dist;
+			}
+		}
+	}
+	return f2 - f1;
+}
+"

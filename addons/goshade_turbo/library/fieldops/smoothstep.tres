@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/smoothstep"
+function = "gst_smoothstep"
+description = "smooth threshold between edge0 and edge1. When edge1 is at or below edge0, edge1 is clamped to edge0 plus a small epsilon, so the result is a step at edge0."
+source_math = "Hermite smoothstep interpolation, standard GLSL builtin construction. Khronos GLSL ES 3.0 spec, section 8.3."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "x"
+}])
+params = Array[Dictionary]([{
+"default": 0.0,
+"max": 1.0,
+"min": 0.0,
+"name": "edge0",
+"type": "float"
+}, {
+"default": 1.0,
+"max": 1.0,
+"min": 0.0,
+"name": "edge1",
+"type": "float"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float gst_smoothstep(float x, float edge0, float edge1) {
+	// Equal or reversed edges: clamp edge1 above edge0 so GLSL smoothstep
+	// (undefined for edge0 >= edge1) instead resolves to a step at edge0.
+	float e1 = max(edge1, edge0 + 0.00001);
+	return smoothstep(edge0, e1, x);
+}
+"

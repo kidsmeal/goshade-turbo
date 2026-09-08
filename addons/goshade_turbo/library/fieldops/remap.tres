@@ -1,0 +1,54 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/remap"
+function = "remap"
+description = "linearly rescales a field from one input range to another output range. When in_min equals in_max (within a small epsilon), returns out_min instead of dividing by zero."
+source_math = "standard linear range remap, no external source."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "x"
+}])
+params = Array[Dictionary]([{
+"default": 0.0,
+"max": 4.0,
+"min": -4.0,
+"name": "in_min",
+"type": "float"
+}, {
+"default": 1.0,
+"max": 4.0,
+"min": -4.0,
+"name": "in_max",
+"type": "float"
+}, {
+"default": 0.0,
+"max": 4.0,
+"min": -4.0,
+"name": "out_min",
+"type": "float"
+}, {
+"default": 1.0,
+"max": 4.0,
+"min": -4.0,
+"name": "out_max",
+"type": "float"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float remap(float x, float in_min, float in_max, float out_min, float out_max) {
+	// Zero-width input range: return out_min instead of dividing by ~0.
+	float denom = in_max - in_min;
+	if (abs(denom) < 0.00001) {
+		return out_min;
+	}
+	return out_min + (x - in_min) * (out_max - out_min) / denom;
+}
+"

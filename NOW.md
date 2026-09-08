@@ -13,7 +13,7 @@ Position: idle - pick a mode with /claudhd:start or /claudhd:design
 from: (unplanned work)
 Counts: queue 0 · quick fixes 0 · ideas untriaged 0
 
-Last touched: 2026-09-07
+Last touched: 2026-09-08
 
 ## Active thread (only one)
 
@@ -21,7 +21,7 @@ Last touched: 2026-09-07
 
 Next physical action:
 
-- [ ] /claudhd:build phase 1 (scaffold, data model, test runner, api spike)
+- [ ] phase 2 build resumed: implementer finishing codegen core on partial work
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

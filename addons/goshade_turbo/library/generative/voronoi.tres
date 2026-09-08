@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/voronoi"
+function = "voronoi"
+description = "distance to the nearest scattered feature point, cellular field"
+source_math = "cellular (Worley) noise via nearest feature-point distance over a jittered grid. The Book of Shaders, ch. 12 \"Cellular Noise\", https://thebookofshaders.com/12/"
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([])
+coord = true
+samples_source = false
+depends = Array[String](["generative/hash"])
+code = "float voronoi(vec2 p) {
+	vec2 cell = floor(p);
+	vec2 local_f = fract(p);
+	float min_dist = 1.0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 neighbor = vec2(float(x), float(y));
+			vec2 point = vec2(hash(cell + neighbor), hash(cell + neighbor + vec2(37.0, 17.0)));
+			vec2 diff = neighbor + point - local_f;
+			min_dist = min(min_dist, length(diff));
+		}
+	}
+	return min_dist;
+}
+"

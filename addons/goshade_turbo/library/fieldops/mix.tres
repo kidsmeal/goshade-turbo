@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/mix"
+function = "gst_mix"
+description = "linear blend of two fields by a third field (decision 14: a mask is mix(a, b, mask))"
+source_math = "linear interpolation, standard GLSL builtin construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "a"
+}, {
+"kind": 0,
+"name": "b"
+}, {
+"kind": 0,
+"name": "t"
+}])
+params = Array[Dictionary]([])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float gst_mix(float a, float b, float t) {
+	return mix(a, b, t);
+}
+"

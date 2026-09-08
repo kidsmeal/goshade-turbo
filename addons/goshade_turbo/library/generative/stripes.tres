@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/stripes"
+function = "stripes"
+description = "smooth periodic stripes along the coord's x axis, 0..1"
+source_math = "standard periodic sine stripe construction, common technique, no single canonical source. Frequency and angle are driven by the layer's coord scale and rotation rather than a dedicated param."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float stripes(vec2 p) {
+	return 0.5 + 0.5 * sin(p.x * 6.28318530718);
+}
+"

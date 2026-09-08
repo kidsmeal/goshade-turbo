@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/checker"
+function = "checker"
+description = "two-value checkerboard, 1.0 or 0.0 by cell parity"
+source_math = "standard floor-parity checkerboard construction, common technique, no single canonical source."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float checker(vec2 p) {
+	vec2 cell = floor(p);
+	return mod(cell.x + cell.y, 2.0);
+}
+"

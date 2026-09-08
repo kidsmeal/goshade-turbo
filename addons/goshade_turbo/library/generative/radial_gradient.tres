@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/radial_gradient"
+function = "radial_gradient"
+description = "distance from the coord origin, clamped to 0..1 at radius"
+source_math = "standard normalized radial distance field, common technique, no single canonical source."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 1.0,
+"max": 4.0,
+"min": 0.1,
+"name": "radius",
+"type": "float"
+}])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float radial_gradient(vec2 p, float radius) {
+	return clamp(length(p) / radius, 0.0, 1.0);
+}
+"

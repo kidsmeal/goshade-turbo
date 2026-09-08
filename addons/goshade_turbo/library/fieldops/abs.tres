@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/abs"
+function = "gst_abs"
+description = "absolute value of a field"
+source_math = "absolute value, standard GLSL builtin construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "x"
+}])
+params = Array[Dictionary]([])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float gst_abs(float x) {
+	return abs(x);
+}
+"

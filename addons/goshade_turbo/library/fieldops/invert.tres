@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/invert"
+function = "invert"
+description = "flips a 0..1 field: 1.0 minus the input"
+source_math = "trivial unit-range complement, no external source."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "x"
+}])
+params = Array[Dictionary]([])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float invert(float x) {
+	return 1.0 - x;
+}
+"

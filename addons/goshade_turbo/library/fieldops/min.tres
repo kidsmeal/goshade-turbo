@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/min"
+function = "gst_min"
+description = "lesser of two fields"
+source_math = "scalar minimum, standard GLSL builtin construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "a"
+}, {
+"kind": 0,
+"name": "b"
+}])
+params = Array[Dictionary]([])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float gst_min(float a, float b) {
+	return min(a, b);
+}
+"

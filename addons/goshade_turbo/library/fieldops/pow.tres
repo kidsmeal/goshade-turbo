@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/pow"
+function = "gst_pow"
+description = "raises a field to an exponent, contrast curve on a 0..1 field"
+source_math = "power function, standard GLSL builtin construction. Input clamped to non-negative because GLSL pow() is undefined for a negative base."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "x"
+}])
+params = Array[Dictionary]([{
+"default": 2.0,
+"max": 8.0,
+"min": 0.1,
+"name": "exponent",
+"type": "float"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float gst_pow(float x, float exponent) {
+	return pow(max(x, 0.0), exponent);
+}
+"

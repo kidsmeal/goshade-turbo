@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/linear_gradient"
+function = "linear_gradient"
+description = "ramp along the coord's x axis, clamped to 0..1, centered at the origin"
+source_math = "standard axis-aligned linear ramp, common technique, no single canonical source. Angle is driven by the layer's coord rotation rather than a dedicated param."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float linear_gradient(vec2 p) {
+	return clamp(p.x + 0.5, 0.0, 1.0);
+}
+"

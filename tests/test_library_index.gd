@@ -4,10 +4,13 @@ extends GSTTestBase
 ## addons/goshade_turbo/library/. Design: docs/DESIGN.md, Manifest entry.
 
 
-func test_scan_indexes_the_three_seed_manifests() -> void:
+func test_scan_indexes_the_full_generator_and_fieldop_roster() -> void:
 	var lib: GSTLibrary = GSTLibrary.new()
 	lib.scan()
-	assert_eq(lib.size(), 3, "the seed library holds exactly the 3 phase 1 manifests")
+	# Phase 1 shipped 3 seed manifests. Phase 2 fills out the v0.1 generative
+	# (11) and fieldops (11) rosters, docs/PLAN.md Phase 2 Files. This count
+	# grows again in phase 3 (source/filter/color) and phase 8 (sdf).
+	assert_eq(lib.size(), 22, "phase 2's generative (11) plus fieldops (11) roster")
 	assert_not_null(lib.get_entry("generative/hash"), "hash manifest is indexed")
 	assert_not_null(lib.get_entry("generative/snoise"), "snoise manifest is indexed")
 	assert_not_null(lib.get_entry("generative/fbm"), "fbm manifest is indexed")
@@ -37,6 +40,17 @@ func test_scan_loaded_entries_carry_real_shader_code_and_citations() -> void:
 	assert_eq(fbm_entry.depends, expected_fbm_depends, "fbm depends on snoise")
 	assert_eq(fbm_entry.params.size(), 2, "fbm declares octaves and gain params")
 	assert_false(fbm_entry.source_math.is_empty(), "fbm cites its math source")
+
+
+func test_every_manifest_kind_field_is_a_valid_gst_layer_kind() -> void:
+	var lib: GSTLibrary = GSTLibrary.new()
+	lib.scan()
+	var valid_kinds: Array[int] = [GSTLayer.Kind.FIELD, GSTLayer.Kind.COLOR]
+	for id: String in lib.entries.keys():
+		var manifest_entry: GSTManifestEntry = lib.get_entry(id)
+		assert_true(valid_kinds.has(manifest_entry.kind_out), "%s kind_out is a valid GSTLayer.Kind value" % id)
+		for input: Dictionary in manifest_entry.inputs:
+			assert_true(valid_kinds.has(input["kind"]), "%s input %s kind is a valid GSTLayer.Kind value" % [id, input["name"]])
 
 
 func test_add_entry_flags_a_duplicate_function_name() -> void:
