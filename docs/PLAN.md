@@ -44,6 +44,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 - **B5 (resolved):** `local_pos` is normalized. `vertex()` divides `VERTEX` by the node's rect size, passed as a `uniform vec2 gst_rect_size` that the plugin and the preview set from the target node. A coord-block `scale` of `1.0` then matches `uv`. The exported shader defaults `gst_rect_size` to `vec2(1.0)` and the README documents that a user must set it on nodes they attach the shader to. Owner: user.
 - **B6 (resolved):** Filter-of-filter is refused in v0.1. A `samples_source` slot accepts only a `texture` or `screen` layer, matching decision 21 literally. The refusal reason names the slot and the offending layer. Owner: user.
 - **B7 (resolved):** With two or more `texture` layers, output alpha defaults to `texture` alpha, which reads `texture(TEXTURE, UV).a` and is the same value for every texture layer, so no tiebreak is needed for the alpha expression. The output block's default color layer stays the top color layer. Owner: user.
+- **B10 (resolved at phase 3):** Filters cannot be functions. Verified on 4.6.2: `TEXTURE` inside a user function fails with `Unknown identifier`, and `TEXTURE` passed as a `sampler2D` argument compiles but prints `ERROR: Condition "!actions.custom_samplers.has(...)"` on every compile. A plain `uniform sampler2D` would need the user to bind the node texture by hand on every exported shader, which breaks decision 6. Resolution: a filter manifest's `code` is an inline body template, expanded by codegen into a `{ }` block inside `fragment()` per filter layer. Tokens: `GST_SAMPLE(p)` expands to `texture(TEXTURE, p)` for a texture source or `texture(gst_screen_texture, p)` for a screen source; `GST_UV` to `UV` or `SCREEN_UV`; `GST_OUT` to the layer local; `GST_PARAM(name)` to the param's uniform name. No `gst_self_texture` uniform exists. Owner: orchestrator, on the engine evidence above.
 - **B8 (resolved):** Reopen of a `.gdshader` with no `// stack:` header, an unparsable header, or an unknown schema version is refused with a message naming the file and the reason. No new empty stack is offered. Owner: user.
 
 ## Phase 1: Scaffold, data model, layer identity, test runner
@@ -119,24 +120,29 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 
 ## Phase 3: Codegen - sources, filters, color ops, alpha
 
-**Status:** pending
+**Status:** committed (ccbbb72)
 **Goal:** Codegen covers the remaining layer categories, including the filter source-only rule and every alpha path.
 **Files:**
 - `addons/goshade_turbo/codegen/gst_codegen.gd` (modify: color slot conversion, filter emission, output block)
 - `addons/goshade_turbo/model/gst_stack_ops.gd` (modify: refuse a non-source input on a `samples_source` slot, with the reason string)
 - `addons/goshade_turbo/library/source/texture.tres`, `library/source/screen.tres` (create)
-- `addons/goshade_turbo/library/filter/*.tres` (create: pixelate, box blur, outline, chromatic split, dither)
+- `addons/goshade_turbo/library/filter/*.tres` (create: pixelate, box blur, outline, chromatic split, dither; `code` is an inline body template per B10, not a function)
 - `addons/goshade_turbo/library/color/*.tres` (create: fill, gradient map, palette, hue shift, saturation, brightness contrast, posterize, multiply, screen, overlay, add, soft light, mix)
 - `addons/goshade_turbo/library/fieldops/alpha.tres` (create, `alpha(color) -> field`, decision 12)
 - `tests/test_slot_conversion.gd` (create)
 - `tests/test_filter_input_refusal.gd` (create)
 - `tests/test_output_block.gd` (create)
 - `tests/test_codegen_color.gd` (create)
+- `addons/goshade_turbo/model/gst_manifest_entry.gd` (modify: `samples_source` and `code` contract comments per B10)
+- `addons/goshade_turbo/codegen/gst_codegen_result.gd` (create, `GSTCodegenResult`: `code`, `error`, `ok()`, the invocation-local result of `GSTCodegen.generate_result`)
+- `tests/test_library_index.gd` (modify: roster count and per-category presence checks)
+- `docs/DESIGN.md` (modify: Codegen rules filter line per B10)
+- `tests/test_codegen_fieldop.gd`, `tests/test_codegen_generator.gd`, `tests/test_solo_output.gd`, `tests/test_stack_ops.gd` (modify: `assign_slot` callers pass a `GSTLibrary`)
 
 **Verification:** `godot --headless --path . -s res://tests/run_codegen_tests.gd` exits 0, with tests covering:
 - Field into a color slot emits `vec4(vec3(lN), 1.0)`; color into a field slot emits `luma(lN)`; `luma` appears once in the include walk.
 - Assigning a non-source layer to a `samples_source: true` slot is refused and returns a reason; assigning a `texture` or `screen` layer succeeds.
-- A filter emits its neighbor sampling as `texture(TEXTURE, uv + offset)` (or the screen equivalent) inside the filter function.
+- A filter emits its neighbor sampling as `texture(TEXTURE, uv + offset)` (or the screen equivalent) inside an inline block in `fragment()` (B10); no `gst_self_texture` uniform is emitted.
 - All four output alpha modes emit the right expression: `1.0`, `texture(TEXTURE, UV).a`, `l<c>.a`, `l<a>`.
 - Every color entry and every filter entry compiles alone.
 
@@ -305,6 +311,19 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B6, B7, B8 resolved by the user 
 - Affects: `project.godot` line `config/features`. Opening the project in the 4.6.2 editor rewrites it to `"4.6"`. Design decision 17 requires `"4.4"`.
 - Ordering: every phase that opens the editor (spikes, phases 4-8 manual checks) must reset the line to `"4.4"` before commit. Verified by review round 4 of phase 1.
 - Migration/rollback: one-line edit, no data loss.
+
+**Manifest `code` contracts (B10)**
+- Changes: three `code` shapes. A normal entry's `code` is one top-level shader function named `function`, emitted once at file scope by the include walk. A source entry (`source/texture`, `source/screen`) has `code` empty: codegen emits its read expression itself and never emits source `code` at file scope. A filter entry (`samples_source = true`) has `code` as an inline body template, never emitted at file scope, expanded per layer into a `{ }` block in `fragment()` with tokens `GST_SAMPLE(p)`, `GST_UV`, `GST_OUT`, `GST_PARAM(name)`.
+- Affects: `gst_codegen.gd`, `gst_manifest_entry.gd` doc comments, every filter manifest, the compile-alone tests.
+- Ordering: fixed in phase 3. Phase 8 filters follow the template shape.
+- Migration/rollback: a filter written as a function fails compile with `Global non-constant variables are not supported` or `Unknown identifier: TEXTURE`; the compile-alone test catches it.
+- Unwired filter rule (phase 3 review round 5): a `samples_source` slot cannot be cleared through `assign_slot`. When decision 22's delete reset would point a filter at a non-source layer, the slot is left empty and codegen returns an invocation-local error naming the filter layer; phase 4 shows that error in the panel and phase 5 keeps the last good material until it clears.
+
+**Codegen error reporting**
+- Changes: `GSTCodegen.generate_result` returns a `GSTCodegenResult` (`code`, `error`, `ok()`), invocation-local, never class-global mutable state. `GSTCodegen.generate` is the string convenience wrapper that returns `""` on error.
+- Affects: every caller: tests in phases 2-3, material sync in phase 5, export in phase 6.
+- Ordering: set in phase 3 review. Phases 5 and 6 read the error from the returned result and surface it in the UI.
+- Migration/rollback: none.
 
 **Rendered checks require a GPU session**
 - Changes: the verification environment, not the code.

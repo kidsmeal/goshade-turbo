@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "filter/chromatic_split"
+function = "chromatic_split"
+description = "splits RGB channels by opposing offsets, inline filter body template (decision 21, B6, docs/PLAN.md Blocker B10)"
+source_math = "RGB channel split by opposing horizontal offsets, standard chromatic aberration construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "source"
+}])
+params = Array[Dictionary]([{
+"default": 0.004,
+"max": 0.02,
+"min": 0.0,
+"name": "offset",
+"type": "float"
+}])
+coord = false
+samples_source = true
+depends = Array[String]([])
+code = "float r = GST_SAMPLE(GST_UV + vec2(GST_PARAM(offset), 0.0)).r;
+float g = GST_SAMPLE(GST_UV).g;
+float b = GST_SAMPLE(GST_UV - vec2(GST_PARAM(offset), 0.0)).b;
+float a = GST_SAMPLE(GST_UV).a;
+GST_OUT = vec4(r, g, b, a);
+"

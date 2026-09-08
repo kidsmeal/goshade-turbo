@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "filter/box_blur"
+function = "box_blur"
+description = "3x3 box blur, inline filter body template (decision 21, B6, docs/PLAN.md Blocker B10)"
+source_math = "3x3 box filter, unweighted mean, standard convolution kernel."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "source"
+}])
+params = Array[Dictionary]([{
+"default": 0.004,
+"max": 0.02,
+"min": 0.0,
+"name": "radius",
+"type": "float"
+}])
+coord = false
+samples_source = true
+depends = Array[String]([])
+code = "vec4 sum = vec4(0.0);
+for (int x = -1; x <= 1; x++) {
+	for (int y = -1; y <= 1; y++) {
+		sum += GST_SAMPLE(GST_UV + vec2(float(x), float(y)) * GST_PARAM(radius));
+	}
+}
+GST_OUT = sum / 9.0;
+"

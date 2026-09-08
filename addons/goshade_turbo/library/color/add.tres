@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/add"
+function = "color_add"
+description = "clamped additive blend of two colors, opacity via t (function is color_add, distinct from fieldops/add's add, decision 14: opacity is the layer's t slider)"
+source_math = "additive blend, clamped sum, standard construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "a"
+}, {
+"kind": 1,
+"name": "b"
+}])
+params = Array[Dictionary]([{
+"default": 1.0,
+"max": 1.0,
+"min": 0.0,
+"name": "t",
+"type": "float"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 color_add(vec4 a, vec4 b, float t) {
+	vec4 blended = vec4(clamp(a.rgb + b.rgb, 0.0, 1.0), a.a);
+	return mix(a, blended, t);
+}
+"

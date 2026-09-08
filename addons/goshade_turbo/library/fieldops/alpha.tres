@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/alpha"
+function = "alpha"
+description = "reads a color's own alpha channel as a field (decision 12: the color-to-field conversion is luminance, so alpha needs its own reachable entry)"
+source_math = "trivial vec4 alpha-channel read, no external source."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "color"
+}])
+params = Array[Dictionary]([])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float alpha(vec4 color) {
+	return color.a;
+}
+"

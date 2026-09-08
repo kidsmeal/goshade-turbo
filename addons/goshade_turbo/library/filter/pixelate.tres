@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "filter/pixelate"
+function = "pixelate"
+description = "snaps the source to a cell grid, inline filter body template (decision 21, B6, docs/PLAN.md Blocker B10)"
+source_math = "grid snapping / spatial quantization, standard pixelation construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "source"
+}])
+params = Array[Dictionary]([{
+"default": 0.02,
+"max": 0.2,
+"min": 0.001,
+"name": "cell_size",
+"type": "float"
+}])
+coord = false
+samples_source = true
+depends = Array[String]([])
+code = "vec2 cell = max(vec2(GST_PARAM(cell_size)), vec2(0.0001));
+vec2 snapped = floor(GST_UV / cell) * cell + cell * 0.5;
+GST_OUT = GST_SAMPLE(snapped);
+"

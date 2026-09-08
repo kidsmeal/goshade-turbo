@@ -4,16 +4,22 @@ extends GSTTestBase
 ## addons/goshade_turbo/library/. Design: docs/DESIGN.md, Manifest entry.
 
 
-func test_scan_indexes_the_full_generator_and_fieldop_roster() -> void:
+func test_scan_indexes_the_full_library_roster() -> void:
 	var lib: GSTLibrary = GSTLibrary.new()
 	lib.scan()
-	# Phase 1 shipped 3 seed manifests. Phase 2 fills out the v0.1 generative
-	# (11) and fieldops (11) rosters, docs/PLAN.md Phase 2 Files. This count
-	# grows again in phase 3 (source/filter/color) and phase 8 (sdf).
-	assert_eq(lib.size(), 22, "phase 2's generative (11) plus fieldops (11) roster")
+	# Phase 1 shipped 3 seed manifests. Phase 2 filled out the v0.1 generative
+	# (11) and fieldops (11) rosters. Phase 3 adds source (2), filter (5),
+	# color (13), and fieldops/alpha (1): 22 + 21 = 43. This count grows again
+	# in phase 8 (sdf).
+	assert_eq(lib.size(), 43, "phase 2's 22 plus phase 3's source/filter/color/alpha roster (21)")
 	assert_not_null(lib.get_entry("generative/hash"), "hash manifest is indexed")
 	assert_not_null(lib.get_entry("generative/snoise"), "snoise manifest is indexed")
 	assert_not_null(lib.get_entry("generative/fbm"), "fbm manifest is indexed")
+	assert_not_null(lib.get_entry("source/texture"), "source/texture manifest is indexed")
+	assert_not_null(lib.get_entry("source/screen"), "source/screen manifest is indexed")
+	assert_not_null(lib.get_entry("filter/pixelate"), "filter/pixelate manifest is indexed")
+	assert_not_null(lib.get_entry("color/fill"), "color/fill manifest is indexed")
+	assert_not_null(lib.get_entry("fieldops/alpha"), "fieldops/alpha manifest is indexed")
 	assert_true(lib.duplicate_functions.is_empty(), "no duplicate functions in the seed library")
 
 

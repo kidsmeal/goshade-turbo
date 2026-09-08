@@ -4,11 +4,27 @@ extends GSTTestBase
 ## and 22.
 
 
+## These tests never touch a samples_source slot, but assign_slot now refuses
+## any assignment whose assigning layer's entry does not resolve in the
+## given library (an unresolved entry must never bypass the source-only
+## rule). This builds a minimal library with one manifest entry per entry id
+## these tests assign layers with, so resolution succeeds without a full
+## library scan.
+func _test_library() -> GSTLibrary:
+	var lib: GSTLibrary = GSTLibrary.new()
+	for entry_id: String in ["generative/hash", "generative/snoise", "generative/fbm", "fieldops/invert"]:
+		var entry: GSTManifestEntry = GSTManifestEntry.new()
+		entry.id = entry_id
+		entry.function = entry_id.replace("/", "_")
+		lib.add_entry(entry)
+	return lib
+
+
 func _build_stack_with_dependency() -> Dictionary:
 	var stack: GSTStack = GSTStack.new()
 	var base: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
 	var dependent: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/invert", GSTLayer.Kind.FIELD, false)
-	var assign_result: Dictionary = GSTStackOps.assign_slot(stack, dependent.id, "a", base.id)
+	var assign_result: Dictionary = GSTStackOps.assign_slot(stack, dependent.id, "a", base.id, _test_library())
 	return {"stack": stack, "base": base, "dependent": dependent, "assign_result": assign_result}
 
 
@@ -25,7 +41,7 @@ func test_slot_assign_refuses_a_forward_reference() -> void:
 	var stack: GSTStack = GSTStack.new()
 	var dependent: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/invert", GSTLayer.Kind.FIELD, false)
 	var later: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
-	var result: Dictionary = GSTStackOps.assign_slot(stack, dependent.id, "a", later.id)
+	var result: Dictionary = GSTStackOps.assign_slot(stack, dependent.id, "a", later.id, _test_library())
 	assert_false(result["ok"], "assigning a later layer as an input is refused (decision 3, no forward references)")
 	assert_false(String(result["reason"]).is_empty(), "the refusal carries a reason string")
 	assert_false(dependent.slots.has("a"), "a refused assignment does not write the slot")
@@ -72,9 +88,9 @@ func test_delete_referenced_layer_resets_pointing_slots_to_the_below_default() -
 	var a: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)     # index 0
 	var b: GSTLayer = GSTStackOps.add_layer(stack, "generative/snoise", GSTLayer.Kind.FIELD, true)   # index 1
 	var c: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/invert", GSTLayer.Kind.FIELD, false)    # index 2
-	GSTStackOps.assign_slot(stack, c.id, "a", b.id)
+	GSTStackOps.assign_slot(stack, c.id, "a", b.id, _test_library())
 
-	var changed: Array[StringName] = GSTStackOps.remove_layer(stack, b.id)
+	var changed: Array[StringName] = GSTStackOps.remove_layer(stack, b.id, _test_library())
 
 	assert_eq(changed.size(), 1, "exactly one layer's references changed")
 	assert_eq(changed[0], c.id, "the referencer is reported as changed")
@@ -88,7 +104,7 @@ func test_delete_referenced_layer_resets_coord_warp_refs() -> void:
 	var warped: GSTLayer = GSTStackOps.add_layer(stack, "generative/fbm", GSTLayer.Kind.FIELD, true)  # index 1
 	warped.coord.warp_x = mask.id
 
-	var changed: Array[StringName] = GSTStackOps.remove_layer(stack, mask.id)
+	var changed: Array[StringName] = GSTStackOps.remove_layer(stack, mask.id, _test_library())
 
 	assert_eq(changed.size(), 1, "the warp-referencing generator is reported as changed")
 	assert_eq(changed[0], warped.id, "the changed id is the layer holding the warp reference")
@@ -99,6 +115,6 @@ func test_delete_unreferenced_layer_reports_no_changes() -> void:
 	var stack: GSTStack = GSTStack.new()
 	var a: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
 	var b: GSTLayer = GSTStackOps.add_layer(stack, "generative/snoise", GSTLayer.Kind.FIELD, true)
-	var changed: Array[StringName] = GSTStackOps.remove_layer(stack, b.id)
+	var changed: Array[StringName] = GSTStackOps.remove_layer(stack, b.id, _test_library())
 	assert_eq(changed.size(), 0, "removing an unreferenced layer changes nothing")
 	assert_eq(GSTStackOps.find_index(stack, a.id), 0, "the remaining layer keeps its position")

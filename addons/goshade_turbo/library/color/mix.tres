@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/mix"
+function = "color_mix"
+description = "linear blend of two colors by a field mask (function is color_mix, distinct from fieldops/mix's gst_mix; decision 14: a mask is mix(a, b, mask))"
+source_math = "linear interpolation, standard GLSL builtin construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "a"
+}, {
+"kind": 1,
+"name": "b"
+}, {
+"kind": 0,
+"name": "mask"
+}])
+params = Array[Dictionary]([])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 color_mix(vec4 a, vec4 b, float mask) {
+	return mix(a, b, mask);
+}
+"

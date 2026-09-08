@@ -16,7 +16,7 @@ func test_operator_call_args_are_slots_then_params_in_manifest_order() -> void:
 	var stack: GSTStack = GSTStack.new()
 	var base: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
 	var op: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/smoothstep", GSTLayer.Kind.FIELD, false)
-	GSTStackOps.assign_slot(stack, op.id, "x", base.id)
+	GSTStackOps.assign_slot(stack, op.id, "x", base.id, lib)
 	stack.output_color = op.id
 
 	var code: String = GSTCodegen.generate(stack, lib)
@@ -45,7 +45,7 @@ func test_remap_zero_width_input_range_compiles() -> void:
 	var stack: GSTStack = GSTStack.new()
 	var base: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
 	var op: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/remap", GSTLayer.Kind.FIELD, false)
-	GSTStackOps.assign_slot(stack, op.id, "x", base.id)
+	GSTStackOps.assign_slot(stack, op.id, "x", base.id, lib)
 	op.params["in_min"] = 1.0
 	op.params["in_max"] = 1.0
 	stack.output_color = op.id

@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/soft_light"
+function = "blend_soft_light"
+description = "soft light blend of two colors, opacity via t (decision 14: opacity is the layer's t slider)"
+source_math = "soft-light blend mode, W3C Compositing and Blending Level 1, section \"Soft Light\"."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "a"
+}, {
+"kind": 1,
+"name": "b"
+}])
+params = Array[Dictionary]([{
+"default": 1.0,
+"max": 1.0,
+"min": 0.0,
+"name": "t",
+"type": "float"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 blend_soft_light(vec4 a, vec4 b, float t) {
+	vec3 d = mix(sqrt(a.rgb), ((16.0 * a.rgb - 12.0) * a.rgb + 4.0) * a.rgb, step(a.rgb, vec3(0.25)));
+	vec3 lo = a.rgb - (1.0 - 2.0 * b.rgb) * a.rgb * (1.0 - a.rgb);
+	vec3 hi = a.rgb + (2.0 * b.rgb - 1.0) * (d - a.rgb);
+	vec3 rgb = mix(lo, hi, step(0.5, b.rgb));
+	vec4 blended = vec4(rgb, a.a);
+	return mix(a, blended, t);
+}
+"

@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/gradient_map"
+function = "gradient_map"
+description = "maps a field to a two-color ramp"
+source_math = "linear color ramp via GLSL mix, standard gradient-map construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "t"
+}])
+params = Array[Dictionary]([{
+"default": Color(0, 0, 0, 1),
+"name": "color_a",
+"type": "color"
+}, {
+"default": Color(1, 1, 1, 1),
+"name": "color_b",
+"type": "color"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 gradient_map(float t, vec4 color_a, vec4 color_b) {
+	return mix(color_a, color_b, clamp(t, 0.0, 1.0));
+}
+"

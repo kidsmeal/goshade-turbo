@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/brightness_contrast"
+function = "brightness_contrast"
+description = "linear brightness offset and contrast scale around mid-gray"
+source_math = "linear brightness/contrast adjustment, standard image-processing construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "color"
+}])
+params = Array[Dictionary]([{
+"default": 0.0,
+"max": 1.0,
+"min": -1.0,
+"name": "brightness",
+"type": "float"
+}, {
+"default": 1.0,
+"max": 2.0,
+"min": 0.0,
+"name": "contrast",
+"type": "float"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 brightness_contrast(vec4 color, float brightness, float contrast) {
+	vec3 rgb = (color.rgb - 0.5) * contrast + 0.5 + brightness;
+	return vec4(clamp(rgb, 0.0, 1.0), color.a);
+}
+"

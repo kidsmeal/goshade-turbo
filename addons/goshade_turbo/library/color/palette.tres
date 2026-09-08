@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/palette"
+function = "palette"
+description = "cosine-based color palette driven by a field (decision: a, b, c, d as vec3, not scalar approximations, to match the cited formula exactly)"
+source_math = "Inigo Quilez, \"Palettes\" (https://iquilezles.org/articles/palettes/), cosine-based palette generator."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "t"
+}])
+params = Array[Dictionary]([{
+"default": Vector3(0.5, 0.5, 0.5),
+"name": "a",
+"type": "vec3"
+}, {
+"default": Vector3(0.5, 0.5, 0.5),
+"name": "b",
+"type": "vec3"
+}, {
+"default": Vector3(1, 1, 1),
+"name": "c",
+"type": "vec3"
+}, {
+"default": Vector3(0, 0.33, 0.67),
+"name": "d",
+"type": "vec3"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
+	vec3 rgb = a + b * cos(6.28318530718 * (c * t + d));
+	return vec4(rgb, 1.0);
+}
+"

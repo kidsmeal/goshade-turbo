@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/multiply"
+function = "color_multiply"
+description = "multiply blend of two colors, opacity via t (function is color_multiply, distinct from fieldops/multiply's multiply, decision 14: opacity is the layer's t slider)"
+source_math = "multiply blend mode, W3C Compositing and Blending Level 1."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "a"
+}, {
+"kind": 1,
+"name": "b"
+}])
+params = Array[Dictionary]([{
+"default": 1.0,
+"max": 1.0,
+"min": 0.0,
+"name": "t",
+"type": "float"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 color_multiply(vec4 a, vec4 b, float t) {
+	vec4 blended = vec4(a.rgb * b.rgb, a.a);
+	return mix(a, blended, t);
+}
+"

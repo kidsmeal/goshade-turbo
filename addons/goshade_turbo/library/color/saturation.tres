@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/saturation"
+function = "saturation"
+description = "scales saturation from grayscale (0.0) through the original color (1.0) and beyond"
+source_math = "luminance-preserving saturation adjustment via linear interpolation to grayscale, standard technique (Poynton luma coefficients)."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "color"
+}])
+params = Array[Dictionary]([{
+"default": 1.0,
+"max": 2.0,
+"min": 0.0,
+"name": "amount",
+"type": "float"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 saturation(vec4 color, float amount) {
+	float luma_value = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+	vec3 rgb = mix(vec3(luma_value), color.rgb, amount);
+	return vec4(clamp(rgb, 0.0, 1.0), color.a);
+}
+"

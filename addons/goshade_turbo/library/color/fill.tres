@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/fill"
+function = "fill"
+description = "flat fill: a single tunable color, no generator and no inputs (decision 14)"
+source_math = "identity function, no external formula."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": Color(1, 1, 1, 1),
+"name": "color",
+"type": "color"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 fill(vec4 color) {
+	return color;
+}
+"

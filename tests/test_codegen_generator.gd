@@ -34,7 +34,7 @@ func test_generator_plus_field_op_emits_exactly_two_locals_in_stack_order() -> v
 	var stack: GSTStack = GSTStack.new()
 	var base: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
 	var op: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/invert", GSTLayer.Kind.FIELD, false)
-	var assign_result: Dictionary = GSTStackOps.assign_slot(stack, op.id, "x", base.id)
+	var assign_result: Dictionary = GSTStackOps.assign_slot(stack, op.id, "x", base.id, lib)
 	assert_true(assign_result["ok"], "wiring invert's x slot to the generator succeeds")
 	stack.output_color = op.id
 

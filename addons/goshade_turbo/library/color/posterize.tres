@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "color/posterize"
+function = "posterize"
+description = "quantizes each channel into levels output values: floor(c * (levels - 1) + 0.5) / (levels - 1); levels < 2 rounds to the nearest of {0, 1}"
+source_math = "uniform color quantization into N levels, standard posterize construction."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "color"
+}])
+params = Array[Dictionary]([{
+"default": 6,
+"max": 32,
+"min": 2,
+"name": "levels",
+"type": "int"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "vec4 posterize(vec4 color, int levels) {
+	if (levels < 2) {
+		return vec4(round(color.rgb), color.a);
+	}
+	float steps = float(levels - 1);
+	vec3 rgb = floor(color.rgb * steps + 0.5) / steps;
+	return vec4(rgb, color.a);
+}
+"

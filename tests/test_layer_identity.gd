@@ -3,6 +3,14 @@ extends GSTTestBase
 ## Layer id allocation: monotonic, never reused. Design decision 22.
 
 
+func _test_library() -> GSTLibrary:
+	var lib: GSTLibrary = GSTLibrary.new()
+	var entry: GSTManifestEntry = GSTManifestEntry.new()
+	entry.id = "generative/hash"
+	entry.function = "hash"
+	lib.add_entry(entry)
+	return lib
+
 func test_ids_monotonic_and_never_reused_across_add_delete_add() -> void:
 	var stack: GSTStack = GSTStack.new()
 	var a: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
@@ -11,7 +19,7 @@ func test_ids_monotonic_and_never_reused_across_add_delete_add() -> void:
 	assert_eq(b.id, &"1", "second layer gets id 1")
 	assert_eq(stack.next_id, 2, "next_id advances past both allocated ids")
 
-	GSTStackOps.remove_layer(stack, a.id)
+	GSTStackOps.remove_layer(stack, a.id, _test_library())
 	var c: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
 	assert_eq(c.id, &"2", "id 0 is not reused after its layer is deleted")
 	assert_eq(stack.next_id, 3, "next_id keeps advancing after delete")

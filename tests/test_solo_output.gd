@@ -11,7 +11,7 @@ func _build_stack() -> Dictionary:
 	var stack: GSTStack = GSTStack.new()
 	var base: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
 	var op: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/invert", GSTLayer.Kind.FIELD, false)
-	GSTStackOps.assign_slot(stack, op.id, "x", base.id)
+	GSTStackOps.assign_slot(stack, op.id, "x", base.id, lib)
 	stack.output_color = op.id
 	return {"stack": stack, "library": lib, "base": base, "op": op}
 

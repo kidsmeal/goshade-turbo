@@ -41,18 +41,35 @@ static func add_layer(stack: GSTStack, entry: String, kind_out: GSTLayer.Kind, i
 
 ## Removes a layer by id. Every slot and coord warp reference that pointed at
 ## it resets to the below default (decision 3: below is the default
-## selection). Returns the ids of the layers whose references changed.
-static func remove_layer(stack: GSTStack, layer_id: StringName) -> Array[StringName]:
+## selection).
+##
+## `library` resolves a referencing layer's own entry to check
+## `samples_source` (B10, B6). When the reset target for a `samples_source`
+## slot is not a "source/texture" or "source/screen" layer, the slot is left
+## empty instead of pointing a filter at a non-source (the plan's
+## "Unwired filter rule": codegen then refuses that layer with an
+## invocation-local error rather than silently sampling the wrong thing).
+## `library` is required: a null library is a caller bug and the call
+## returns an empty list without deleting anything. An unresolved entry
+## keeps the below-default behavior; coord warp refs are never
+## samples_source slots and are unaffected. Returns the ids of the layers
+## whose references changed.
+static func remove_layer(stack: GSTStack, layer_id: StringName, library: GSTLibrary) -> Array[StringName]:
 	var changed: Array[StringName] = []
 	var idx: int = find_index(stack, layer_id)
-	if idx == -1:
+	if idx == -1 or library == null:
 		return changed
 	stack.layers.remove_at(idx)
 	for layer: GSTLayer in stack.layers:
 		var layer_changed: bool = false
+		var entry: GSTManifestEntry = library.get_entry(layer.entry)
 		for slot_name: Variant in layer.slots.keys():
 			if layer.slots[slot_name] == layer_id:
-				layer.slots[slot_name] = _below_default(stack, layer.id)
+				var reset_id: StringName = _below_default(stack, layer.id)
+				if entry != null and entry.samples_source and not _is_source_layer(stack, reset_id):
+					layer.slots[slot_name] = &""
+				else:
+					layer.slots[slot_name] = reset_id
 				layer_changed = true
 		if layer.coord != null:
 			if layer.coord.warp_x == layer_id:
@@ -73,6 +90,18 @@ static func _below_default(stack: GSTStack, referencer_id: StringName) -> String
 	if idx <= 0:
 		return &""
 	return stack.layers[idx - 1].id
+
+
+## True when `target_id` names a layer in `stack` whose entry is
+## "source/texture" or "source/screen" (decision 21, B6). Empty or unknown
+## ids are not a source.
+static func _is_source_layer(stack: GSTStack, target_id: StringName) -> bool:
+	if target_id == &"":
+		return false
+	var target_layer: GSTLayer = find_layer(stack, target_id)
+	if target_layer == null:
+		return false
+	return target_layer.entry == "source/texture" or target_layer.entry == "source/screen"
 
 
 ## Every layer id `layer` reads from: slot values plus coord warp inputs.
@@ -131,12 +160,43 @@ static func reorder_layer(stack: GSTStack, layer_id: StringName, new_index: int)
 
 ## Assigns `target_id` to `slot_name` on `layer_id`. Refused, with a reason,
 ## when the target is not an earlier layer in the stack (decision 3: no
-## forward references). Passing an empty target clears the slot.
-static func assign_slot(stack: GSTStack, layer_id: StringName, slot_name: String, target_id: StringName) -> Dictionary:
+## forward references).
+##
+## `library` is required: the assigning layer's own manifest entry must
+## resolve through `library` to check `samples_source` (decision 21, B6). If
+## it does not resolve, the assignment is refused: an unresolved entry must
+## never silently bypass the source-only rule. A `samples_source` slot
+## additionally refuses a target that is not a "source/texture" or
+## "source/screen" layer; filter-of-filter is refused because a filter
+## layer's `entry` is neither. A `null` library is a caller bug: the
+## assignment is refused and the slot is left unchanged.
+##
+## Passing an empty target clears the slot, except a `samples_source` slot
+## cannot be cleared this way (plan Cross-cutting concern "Manifest `code`
+## contracts (B10)"): a filter always samples a wired source or none at all
+## by construction, never a slot the caller emptied out from under it. Only
+## `remove_layer`'s decision-22 reset may leave a `samples_source` slot
+## empty, when no source remains below.
+static func assign_slot(stack: GSTStack, layer_id: StringName, slot_name: String, target_id: StringName, library: GSTLibrary) -> Dictionary:
 	var layer: GSTLayer = find_layer(stack, layer_id)
 	if layer == null:
 		return {"ok": false, "reason": "layer %s not found" % String(layer_id)}
+	if library == null:
+		return {"ok": false, "reason": "assign_slot requires a library to check samples_source (caller bug)"}
+
+	var entry: GSTManifestEntry = library.get_entry(layer.entry)
+	if entry == null:
+		return {
+			"ok": false,
+			"reason": "layer %s has unresolved entry %s: cannot verify samples_source against the given library (assign_slot refused)" % [String(layer_id), layer.entry],
+		}
+
 	if target_id == &"":
+		if entry.samples_source:
+			return {
+				"ok": false,
+				"reason": "slot %s on layer %s samples a source and cannot be cleared directly (decision 21, B6)" % [slot_name, String(layer_id)],
+			}
 		layer.slots[slot_name] = &""
 		return {"ok": true, "reason": ""}
 
@@ -149,6 +209,14 @@ static func assign_slot(stack: GSTStack, layer_id: StringName, slot_name: String
 			"ok": false,
 			"reason": "layer %s cannot reference layer %s: not earlier in the stack" % [String(layer_id), String(target_id)],
 		}
+
+	if entry.samples_source:
+		var target_layer: GSTLayer = stack.layers[target_idx]
+		if target_layer.entry != "source/texture" and target_layer.entry != "source/screen":
+			return {
+				"ok": false,
+				"reason": "slot %s on layer %s requires a texture or screen source layer; layer %s (%s) is not a source (decision 21, B6)" % [slot_name, String(layer_id), String(target_id), target_layer.entry],
+			}
 
 	layer.slots[slot_name] = target_id
 	return {"ok": true, "reason": ""}

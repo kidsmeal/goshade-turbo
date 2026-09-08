@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "filter/dither"
+function = "dither"
+description = "ordered dither before quantization, inline filter body template (decision 21, B6, docs/PLAN.md Blocker B10)"
+source_math = "ordered dithering via a per-pixel hash threshold before quantization, standard shader dither construction (hash after Sunday, GLSL hash function; matches Capsule Castle's own random())."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([{
+"kind": 1,
+"name": "source"
+}])
+params = Array[Dictionary]([{
+"default": 4,
+"max": 16,
+"min": 2,
+"name": "levels",
+"type": "int"
+}])
+coord = false
+samples_source = true
+depends = Array[String](["generative/hash"])
+code = "vec4 c = GST_SAMPLE(GST_UV);
+float bayer = hash(GST_UV);
+float steps = float(max(GST_PARAM(levels) - 1, 1));
+vec3 stepped = floor(c.rgb * steps + bayer) / steps;
+GST_OUT = vec4(stepped, c.a);
+"
