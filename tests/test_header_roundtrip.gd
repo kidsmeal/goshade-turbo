@@ -159,3 +159,34 @@ func test_every_param_type_round_trips() -> void:
 
 	assert_eq(reparsed_palette.params.get("a"), Vector3(0.2, 0.3, 0.4), "vec3 param round-trips by value")
 	assert_true(typeof(reparsed_palette.params.get("a")) == TYPE_VECTOR3, "vec3 param round-trips as Vector3")
+
+
+func test_labels_leave_every_shipped_function_export_byte_identical() -> void:
+	var labeled: GSTLibrary = _scanned_library()
+	var unlabeled: GSTLibrary = GSTLibrary.new()
+	for id: String in labeled.entries:
+		var copy: GSTManifestEntry = labeled.get_entry(id).duplicate(true) as GSTManifestEntry
+		for schema: Array[Dictionary] in [copy.inputs, copy.params]:
+			for item: Dictionary in schema:
+				item.erase("label")
+				item.erase("description")
+		unlabeled.add_entry(copy)
+	for id: String in labeled.entries:
+		var entry: GSTManifestEntry = labeled.get_entry(id)
+		var stack: GSTStack = GSTStack.new()
+		var source: GSTLayer = GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR)
+		var layer: GSTLayer = GSTStackOps.add_layer(stack, id, entry.kind_out, entry.coord)
+		layer.manifest = entry
+		for input: Dictionary in entry.inputs:
+			layer.slots[String(input["name"])] = source.id
+		for param: Dictionary in entry.params:
+			layer.params[String(param["name"])] = param["default"]
+		stack.output_color = layer.id
+		var with_labels: GSTCodegenResult = GSTCodegen.generate_result(stack, labeled)
+		assert_true(with_labels.ok(), "%s generates with labels: %s" % [id, with_labels.error])
+		var header: String = GSTHeader.header_line(stack)
+		layer.manifest = unlabeled.get_entry(id)
+		var without_labels: GSTCodegenResult = GSTCodegen.generate_result(stack, unlabeled)
+		assert_true(without_labels.ok(), "%s generates without labels: %s" % [id, without_labels.error])
+		assert_eq(with_labels.code, without_labels.code, "%s export is byte-identical with or without presentation metadata" % id)
+		assert_eq(GSTHeader.header_line(stack), header, "%s header retains original keys and values" % id)

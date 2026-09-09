@@ -2,12 +2,8 @@
 class_name GSTInspectorColumn
 extends VBoxContainer
 
-## Middle column (decision 13): an EditorInspector created in code, pointed
-## at the selected GSTLayer, so the layer's dynamic params (gst_layer.gd
-## _get_property_list) show as sliders. Below it, one OptionButton row per
-## manifest input (a plain row, not a dynamic property) listing the earlier
-## layers whose kind fits or converts, plus two warp rows for a generator's
-## coord block. Every slot change routes through GSTUndo.
+## Selected-layer controls. Manifest params and coordinates use separate
+## native inspectors; input and distortion references route through GSTUndo.
 
 signal edit_refused(reason: String)
 ## Real EditorInspector-driven param edit (a slider or a GSTCoordBlock
@@ -19,7 +15,10 @@ signal section_state_changed(states: Dictionary)
 
 const PICKER_SCENE: PackedScene = preload("res://addons/goshade_turbo/ui/gst_picker.tscn")
 
-var _inspector: EditorInspector = null
+var _scroll: ScrollContainer = null
+var _sections: VBoxContainer = null
+var _parameter_inspector: EditorInspector = null
+var _coord_inspector: EditorInspector = null
 var _inputs_box: VBoxContainer = null
 var _warp_box: VBoxContainer = null
 var _slot_picker: GSTPicker = null
@@ -37,18 +36,37 @@ var _pending_slot_name: String = ""
 
 
 func _ready() -> void:
+	_scroll = ScrollContainer.new()
+	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(_scroll)
+	_sections = VBoxContainer.new()
+	_sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sections.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_scroll.add_child(_sections)
+
 	var inputs: Dictionary = _build_section("inputs", "Inputs")
 	_inputs_box = inputs["content"] as VBoxContainer
 
 	var parameters: Dictionary = _build_section("parameters", "Parameters")
-	_inspector = EditorInspector.new()
-	_inspector.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_inspector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_inspector.property_edited.connect(_on_property_edited)
-	(parameters["content"] as VBoxContainer).add_child(_inspector)
+	_parameter_inspector = EditorInspector.new()
+	_parameter_inspector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_parameter_inspector.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_parameter_inspector.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_parameter_inspector.property_edited.connect(_on_property_edited)
+	(parameters["content"] as VBoxContainer).add_child(_parameter_inspector)
 
 	var position: Dictionary = _build_section("position", "Position and movement")
-	_warp_box = position["content"] as VBoxContainer
+	var position_content: VBoxContainer = position["content"] as VBoxContainer
+	_coord_inspector = EditorInspector.new()
+	_coord_inspector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_coord_inspector.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_coord_inspector.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	position_content.add_child(_coord_inspector)
+	_warp_box = VBoxContainer.new()
+	_warp_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	position_content.add_child(_warp_box)
 	_slot_picker = PICKER_SCENE.instantiate()
 	add_child(_slot_picker)
 	_slot_picker.entry_picked.connect(_on_slot_entry_picked)
@@ -56,8 +74,8 @@ func _ready() -> void:
 
 func _build_section(key: String, title: String) -> Dictionary:
 	var section: VBoxContainer = VBoxContainer.new()
-	section.size_flags_vertical = Control.SIZE_EXPAND_FILL if key == "parameters" else Control.SIZE_SHRINK_BEGIN
-	add_child(section)
+	section.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_sections.add_child(section)
 	var heading: Button = Button.new()
 	heading.text = title
 	heading.flat = true
@@ -67,7 +85,7 @@ func _build_section(key: String, title: String) -> Dictionary:
 	var separator: HSeparator = HSeparator.new()
 	section.add_child(separator)
 	var content: VBoxContainer = VBoxContainer.new()
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL if key == "parameters" else Control.SIZE_SHRINK_BEGIN
+	content.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	section.add_child(content)
 	heading.toggled.connect(_on_section_toggled.bind(key, content, heading))
 	_section_buttons[key] = heading
@@ -110,27 +128,46 @@ func edit(layer_id: StringName) -> void:
 	_layer = GSTStackOps.find_layer(_stack, layer_id)
 	if _layer != null:
 		_layer.manifest = _library.get_entry(_layer.entry)
-	_inspector.edit(_layer)
+	_parameter_inspector.edit(_layer)
+	_coord_inspector.edit(_layer.coord if _layer != null else null)
+	_schedule_inspector_layout_update(_parameter_inspector)
+	_schedule_inspector_layout_update(_coord_inspector)
 	if _layer != null and _layer.coord != null:
 		_layer.coord.changed.connect(_on_coord_changed)
 	_rebuild_slots()
 
 
-## GSTCoordBlock carries no dynamic property list (unlike GSTLayer's manifest
-## params via _get_property_list), so its fields show inside the
-## EditorInspector as an inline sub-resource panel; editing one there sets
-## the value on the GSTCoordBlock object itself, not on the GSTLayer this
-## column's _inspector.edit() points at. The engine's own inspector code
-## calls Resource.emit_changed() on the object it just wrote a property onto
-## for exactly this case, so GSTCoordBlock.changed is the real relay for a
-## coord-block edit, parallel to _on_property_edited below for a top-level
-## GSTLayer param.
+## The engine emits Resource.changed on the GSTCoordBlock object its native
+## editor wrote, so coordinate edits use this relay independently of the
+## parameter inspector's property_edited signal.
 func _on_coord_changed() -> void:
 	param_edited.emit("coord")
 
 
 func _on_property_edited(property: String) -> void:
 	param_edited.emit(property)
+
+
+func _schedule_inspector_layout_update(inspector: EditorInspector) -> void:
+	var callback: Callable = _update_inspector_layout.bind(inspector)
+	if not get_tree().process_frame.is_connected(callback):
+		get_tree().process_frame.connect(callback, CONNECT_ONE_SHOT)
+
+
+func _update_inspector_layout(inspector: EditorInspector) -> void:
+	var scale: float = EditorInterface.get_editor_scale()
+	var inspector_minimum: float = 0.0
+	for node: Node in inspector.find_children("*", "EditorProperty", true, false):
+		var property: EditorProperty = node as EditorProperty
+		var font: Font = property.get_theme_font(&"font", &"Tree")
+		var font_size: int = property.get_theme_font_size(&"font_size", &"Tree")
+		var label_width: float = font.get_string_size(property.get_label(), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+		var split_ratio: float = maxf(0.05, property.get_name_split_ratio())
+		var padding: float = float(property.get_theme_constant(&"h_separation", &"Tree")) + 8.0 * scale
+		var child_minimum: float = property.get_combined_minimum_size().x
+		inspector_minimum = maxf(inspector_minimum, maxf(label_width / split_ratio, label_width + child_minimum + padding))
+	inspector.set_meta(&"gst_measured_minimum_width", ceilf(inspector_minimum))
+	custom_minimum_size.x = maxf(float(_parameter_inspector.get_meta(&"gst_measured_minimum_width", 0.0)), float(_coord_inspector.get_meta(&"gst_measured_minimum_width", 0.0)))
 
 
 func _rebuild_slots() -> void:
@@ -144,18 +181,30 @@ func _rebuild_slots() -> void:
 		return
 	var layer_idx: int = GSTStackOps.find_index(_stack, _layer.id)
 	for input: Dictionary in entry.inputs:
-		_add_slot_row(String(input["name"]), input["kind"] as GSTLayer.Kind, entry.samples_source, layer_idx)
+		_add_slot_row(input, entry.samples_source, layer_idx)
 	if _layer.coord != null:
 		_add_warp_row("x", _layer.coord.warp_x, layer_idx)
 		_add_warp_row("y", _layer.coord.warp_y, layer_idx)
 
 
-func _add_slot_row(slot_name: String, slot_kind: GSTLayer.Kind, samples_source: bool, layer_idx: int) -> void:
-	var row: HBoxContainer = HBoxContainer.new()
+func _add_slot_row(input: Dictionary, samples_source: bool, layer_idx: int) -> void:
+	var slot_name: String = String(input["name"])
+	var slot_kind: GSTLayer.Kind = input["kind"] as GSTLayer.Kind
+	var display_label: String = String(input.get("label", slot_name.capitalize()))
+	var description: String = String(input.get("description", ""))
+	var row: VBoxContainer = VBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var label: Label = Label.new()
-	label.text = slot_name
+	label.text = display_label
+	label.tooltip_text = description
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
+	var choice_row: HBoxContainer = HBoxContainer.new()
+	choice_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(choice_row)
 	var option: OptionButton = OptionButton.new()
+	option.tooltip_text = description
 	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	option.fit_to_longest_item = false
 	option.clip_text = true
@@ -178,21 +227,28 @@ func _add_slot_row(slot_name: String, slot_kind: GSTLayer.Kind, samples_source: 
 	option.select(select_idx)
 	_syncing = false
 	option.item_selected.connect(_on_slot_selected.bind(slot_name, option))
-	row.add_child(option)
+	choice_row.add_child(option)
 	var add_button: Button = Button.new()
 	add_button.text = "+"
 	add_button.tooltip_text = "Add a new layer for slot %s" % slot_name
 	add_button.pressed.connect(_on_add_for_slot_pressed.bind(slot_name, slot_kind))
-	row.add_child(add_button)
+	choice_row.add_child(add_button)
 	_inputs_box.add_child(row)
 
 
 func _add_warp_row(axis: String, current: StringName, layer_idx: int) -> void:
-	var row: HBoxContainer = HBoxContainer.new()
+	var property_name: StringName = &"warp_x" if axis == "x" else &"warp_y"
+	var metadata: Dictionary = GSTCoordBlock.get_editor_metadata(property_name)
+	var row: VBoxContainer = VBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var label: Label = Label.new()
-	label.text = "warp_%s" % axis
+	label.text = String(metadata["label"])
+	label.tooltip_text = String(metadata["description"])
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
 	var option: OptionButton = OptionButton.new()
+	option.tooltip_text = String(metadata["description"])
 	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	option.fit_to_longest_item = false
 	option.clip_text = true
@@ -257,24 +313,19 @@ func get_slot_picker() -> GSTPicker:
 	return _slot_picker
 
 
-## Forces the underlying EditorInspector to re-read every displayed value
-## for the currently edited layer (docs/PLAN.md Phase 8 fix pass 2, item 1):
-## an external write to a layer's params -- GSTRandomize.apply, not a real
-## slider drag through this column's own _inspector -- does not by itself
-## reach the already-built EditorProperty widgets. EditorInspector exposes
-## no refresh() method on 4.6.2 (verified against the class doc dump: only
-## edit(), get_edited_object(), get_selected_path(), and
-## instantiate_property_editor() are bound), so this clears the edited
-## object first (edit(null)) rather than re-calling edit() on the object it
-## already has open, in case that path is a no-op. A no-op when nothing is
-## selected.
+## External writes such as Randomize do not refresh built EditorProperty
+## widgets. Re-edit both objects because EditorInspector has no refresh API.
 ## Wired-by: gst_main_panel.gd's _refresh_inspector (registered as a do/undo
 ## method on the randomize action, bracketing GSTRandomize.apply).
 func refresh() -> void:
 	if _layer == null:
 		return
-	_inspector.edit(null)
-	_inspector.edit(_layer)
+	_parameter_inspector.edit(null)
+	_parameter_inspector.edit(_layer)
+	_coord_inspector.edit(null)
+	_coord_inspector.edit(_layer.coord)
+	_schedule_inspector_layout_update(_parameter_inspector)
+	_schedule_inspector_layout_update(_coord_inspector)
 
 
 ## The object the underlying EditorInspector currently edits, so callers can
@@ -282,31 +333,39 @@ func refresh() -> void:
 ## restores that layer (phase 4 fix pass 3, item 2).
 ## Wired-by: none (editor smoke seam)
 func get_edited_object() -> Object:
-	return _inspector.get_edited_object()
+	return _parameter_inspector.get_edited_object()
 
 
-## The real EditorProperty widget currently showing property_name for
-## edited_object, found by walking this column's own EditorInspector control
-## tree. Lets a test drive the exact widget a real slider drag would, via
-## the widget's own emit_changed(), rather than faking the param_edited
-## relay by setting the value directly and emitting the signal by hand.
-## Only finds a top-level GSTLayer param: a Resource-typed property like
-## coord shows as a collapsed EditorPropertyResource row with no nested
-## EditorProperty children built at all until a user expands it by hand
-## (confirmed by walking this exact tree: coord's row holds only an
-## EditorResourcePicker's own buttons, no sub-inspector) -- a test driving a
-## GSTCoordBlock field for real uses find_editor_property_in() against its
-## own throwaway EditorInspector pointed directly at the coord object
-## instead (gst_editor_smoke.gd), which needs no expand step since the
-## property is then top-level on that inspector.
+## Wired-by: gst_editor_ui_labels_smoke.gd and ui_layout smoke.
+func get_parameter_inspector() -> EditorInspector:
+	return _parameter_inspector
+
+
+## Wired-by: gst_editor_ui_labels_smoke.gd and ui_layout smoke.
+func get_coord_inspector() -> EditorInspector:
+	return _coord_inspector
+
+
+## Wired-by: gst_editor_ui_layout_smoke.gd.
+func get_settings_scroll() -> ScrollContainer:
+	return _scroll
+
+
+## Returns the native parameter widget so editor smoke can drive its own
+## emit_changed() path and inspect the displayed value.
 ## Wired-by: none (editor smoke seam)
 func find_editor_property(property_name: StringName, edited_object: Object) -> EditorProperty:
-	return find_editor_property_in(_inspector, property_name, edited_object)
+	return find_editor_property_in(_parameter_inspector, property_name, edited_object)
 
 
-## Static so a caller with its own EditorInspector instance can reuse this
-## widget-finding logic (gst_editor_smoke.gd, for a GSTCoordBlock field --
-## see find_editor_property's own comment above).
+## Wired-by: gst_editor_ui_labels_smoke.gd.
+func find_coord_editor_property(property_name: StringName) -> EditorProperty:
+	if _layer == null or _layer.coord == null:
+		return null
+	return find_editor_property_in(_coord_inspector, property_name, _layer.coord)
+
+
+## Static so editor smoke can inspect any native EditorInspector tree.
 ## Wired-by: none (editor smoke seam)
 static func find_editor_property_in(root: Node, property_name: StringName, edited_object: Object) -> EditorProperty:
 	if root is EditorProperty:

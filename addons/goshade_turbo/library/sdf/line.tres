@@ -17,13 +17,17 @@ params = Array[Dictionary]([{
 "max": 1.0,
 "min": 0.05,
 "name": "half_length",
-"type": "float"
+"type": "float",
+"label": "Half length",
+"description": "The distance from the line center to the center of either rounded end."
 }, {
 "default": 0.03,
 "max": 0.3,
 "min": 0.005,
 "name": "thickness",
-"type": "float"
+"type": "float",
+"label": "Line thickness",
+"description": "The radius around the line segment that forms its visible width."
 }])
 coord = true
 samples_source = false

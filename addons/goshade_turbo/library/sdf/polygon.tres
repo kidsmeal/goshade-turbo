@@ -17,13 +17,17 @@ params = Array[Dictionary]([{
 "max": 1.0,
 "min": 0.05,
 "name": "radius",
-"type": "float"
+"type": "float",
+"label": "Polygon radius",
+"description": "The distance from the polygon center to each corner."
 }, {
 "default": 6,
 "max": 12,
 "min": 3,
 "name": "sides",
-"type": "int"
+"type": "int",
+"label": "Side count",
+"description": "The number of equal sides and corners in the polygon."
 }])
 coord = true
 samples_source = false

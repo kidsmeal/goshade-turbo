@@ -13,17 +13,23 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "a"
+"name": "a",
+"label": "Base color",
+"description": "The starting color whose channels will be multiplied."
 }, {
 "kind": 1,
-"name": "b"
+"name": "b",
+"label": "Multiply color",
+"description": "The color multiplied into the base; darker channels darken the result."
 }])
 params = Array[Dictionary]([{
 "default": 1.0,
 "max": 1.0,
 "min": 0.0,
 "name": "t",
-"type": "float"
+"type": "float",
+"label": "Multiply strength",
+"description": "Blends from the unchanged base at zero to the full multiply result at one."
 }])
 coord = false
 samples_source = false

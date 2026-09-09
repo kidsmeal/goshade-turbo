@@ -17,9 +17,13 @@ extends Resource
 @export var source_code_url: String = ""
 @export var source_code_license: String = ""
 @export var kind_out: GSTLayer.Kind = GSTLayer.Kind.FIELD
-## Operator slots: [{name: String, kind: GSTLayer.Kind}].
+## Operator slots: [{name: String, kind: GSTLayer.Kind, label: String,
+## description: String}]. Label and description are required editor metadata;
+## assignment and codegen continue to use name and kind.
 @export var inputs: Array[Dictionary] = []
-## Slider schema: [{name, type, min, max, default}].
+## Slider schema: [{name, type, min, max, default, label, description}]. Label
+## and description are required editor metadata; serialization and uniform
+## generation continue to use the original parameter name.
 @export var params: Array[Dictionary] = []
 ## True for generators (decision 4): the layer carries a coord block.
 @export var coord: bool = false

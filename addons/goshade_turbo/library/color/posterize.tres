@@ -13,14 +13,18 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "color"
+"name": "color",
+"label": "Color to posterize",
+"description": "The color whose smooth channel values will be reduced to fixed steps."
 }])
 params = Array[Dictionary]([{
 "default": 6,
 "max": 32,
 "min": 2,
 "name": "levels",
-"type": "int"
+"type": "int",
+"label": "Color levels",
+"description": "The number of possible values kept in each red, green, and blue channel."
 }])
 coord = false
 samples_source = false

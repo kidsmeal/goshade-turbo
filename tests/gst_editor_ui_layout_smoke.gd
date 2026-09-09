@@ -177,10 +177,18 @@ func _drag_splitter(plugin: EditorPlugin, split: HSplitContainer, delta: float) 
 		await plugin.get_tree().process_frame
 
 
-func _check_responsive_tabs(plugin: EditorPlugin, panel: GSTMainPanel, measured: Dictionary) -> void:
-	var tab_threshold: float = measured["tab_breakpoint"]
+func _check_responsive_tabs(plugin: EditorPlugin, panel: GSTMainPanel, _measured: Dictionary) -> void:
 	var original_window_size: Vector2i = DisplayServer.window_get_size()
 	var metadata_before: Dictionary = panel.get_layout_metadata_snapshot()
+	panel._on_new_pressed()
+	var selected_layer: GSTLayer = panel.get_stack_list().add_layer_by_entry_id("generative/fbm")
+	panel.get_stack_list().select_layer(selected_layer.id)
+	for i: int in range(5):
+		await plugin.get_tree().process_frame
+	var inspector_column: GSTInspectorColumn = panel.get_inspector_column()
+	var parameter_inspector: EditorInspector = inspector_column.call("get_parameter_inspector") as EditorInspector
+	var coord_inspector: EditorInspector = inspector_column.call("get_coord_inspector") as EditorInspector
+	var tab_threshold: float = panel.get_layout_measurements()["tab_breakpoint"]
 	DisplayServer.window_set_size(Vector2i(720, 600))
 	for i: int in range(6):
 		await plugin.get_tree().process_frame
@@ -190,7 +198,13 @@ func _check_responsive_tabs(plugin: EditorPlugin, panel: GSTMainPanel, measured:
 	var narrow: Dictionary = panel.get_layout_measurements()
 	var same_layer_pane: bool = panel.get_node("%LayerPane").get_parent() == panel.get_node("%EditingTabs")
 	var same_settings_pane: bool = panel.get_node("%SettingsPane").get_parent() == panel.get_node("%EditingTabs")
-	var one_inspector: bool = panel.find_children("*", "EditorInspector", true, false).size() == 1
+	var inspector_nodes: Array[Node] = panel.find_children("*", "EditorInspector", true, false)
+	var two_inspectors: bool = inspector_nodes.size() == 2
+	var inspector_targets_ok: bool = parameter_inspector != null and coord_inspector != null and parameter_inspector.get_edited_object() == selected_layer and coord_inspector.get_edited_object() == selected_layer.coord
+	var settings_scroll_bounded: bool = false
+	if inspector_column.has_method("get_settings_scroll"):
+		var settings_scroll: ScrollContainer = inspector_column.call("get_settings_scroll") as ScrollContainer
+		settings_scroll_bounded = settings_scroll != null and (panel.get_node("%SettingsPane") as Control).get_global_rect().encloses(settings_scroll.get_global_rect())
 	var narrow_enclosed: bool = narrow["host_rect"].encloses(narrow["root_rect"]) and narrow["host_rect"].encloses(narrow["editing_rect"]) and narrow["host_rect"].encloses(narrow["preview_area_rect"])
 	var tabs: TabContainer = panel.get_node("%EditingTabs") as TabContainer
 	var layer_pane: Control = panel.get_node("%LayerPane") as Control
@@ -205,19 +219,20 @@ func _check_responsive_tabs(plugin: EditorPlugin, panel: GSTMainPanel, measured:
 	for i: int in range(3):
 		await plugin.get_tree().process_frame
 	var tab_persisted: bool = panel.get_narrow_tab() == 1 and tabs.current_tab == 1 and not layer_pane.visible and settings_pane.visible
-	DisplayServer.window_set_size(Vector2i(1366, 768))
+	DisplayServer.window_set_size(Vector2i(1920, 1080))
 	panel.restore_layout_metadata_snapshot(metadata_before)
 	for i: int in range(6):
 		await plugin.get_tree().process_frame
 	var wide: Dictionary = panel.get_layout_measurements()
 	var returned_to_split: bool = panel.get_node("%LayerPane").get_parent() == panel.get_node("%EditingSplit") and panel.get_node("%SettingsPane").get_parent() == panel.get_node("%EditingSplit")
+	var wide_inspector_nodes: Array[Node] = panel.find_children("*", "EditorInspector", true, false)
+	var same_inspectors_and_targets: bool = wide_inspector_nodes.size() == 2 and parameter_inspector in wide_inspector_nodes and coord_inspector in wide_inspector_nodes and parameter_inspector.get_edited_object() == selected_layer and coord_inspector.get_edited_object() == selected_layer.coord
 	var wide_enclosed: bool = wide["host_rect"].encloses(wide["root_rect"]) and wide["host_rect"].encloses(wide["editing_rect"]) and wide["host_rect"].encloses(wide["preview_area_rect"])
 	var actual_crossing: bool = narrow["editing_rect"].size.x <= tab_threshold + 0.5 and wide["editing_rect"].size.x > tab_threshold + 0.5
-	_check("responsive_tabs", actual_crossing and narrow["narrow"] and not wide["narrow"] and same_layer_pane and same_settings_pane and returned_to_split and one_inspector and narrow_enclosed and wide_enclosed and started_on_different_tab and tab_persisted, "breakpoint=%.1f widths=%.1f/%.1f narrow=%s wide=%s enclosed=%s/%s one_inspector=%s different_start=%s tab_persisted=%s" % [tab_threshold, narrow["editing_rect"].size.x, wide["editing_rect"].size.x, narrow["narrow"], wide["narrow"], narrow_enclosed, wide_enclosed, one_inspector, started_on_different_tab, tab_persisted])
-	if original_window_size != Vector2i(1366, 768):
-		DisplayServer.window_set_size(original_window_size)
-		for i: int in range(3):
-			await plugin.get_tree().process_frame
+	_check("responsive_tabs", actual_crossing and narrow["narrow"] and not wide["narrow"] and same_layer_pane and same_settings_pane and returned_to_split and two_inspectors and inspector_targets_ok and same_inspectors_and_targets and settings_scroll_bounded and narrow_enclosed and wide_enclosed and started_on_different_tab and tab_persisted, "breakpoint=%.1f widths=%.1f/%.1f narrow=%s wide=%s enclosed=%s/%s inspectors=%d/%d targets_ok=%s/%s scroll_bounded=%s different_start=%s tab_persisted=%s" % [tab_threshold, narrow["editing_rect"].size.x, wide["editing_rect"].size.x, narrow["narrow"], wide["narrow"], narrow_enclosed, wide_enclosed, inspector_nodes.size(), wide_inspector_nodes.size(), inspector_targets_ok, same_inspectors_and_targets, settings_scroll_bounded, started_on_different_tab, tab_persisted])
+	DisplayServer.window_set_size(original_window_size)
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
 
 
 func _check_long_stack(plugin: EditorPlugin, panel: GSTMainPanel) -> void:

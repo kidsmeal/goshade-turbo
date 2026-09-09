@@ -13,14 +13,18 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "source"
+"name": "source",
+"label": "Image to dither",
+"description": "The texture or screen source reduced with a per-pixel dither pattern."
 }])
 params = Array[Dictionary]([{
 "default": 4,
 "max": 16,
 "min": 2,
 "name": "levels",
-"type": "int"
+"type": "int",
+"label": "Color levels",
+"description": "The number of brightness steps kept in each red, green, and blue channel."
 }])
 coord = false
 samples_source = true

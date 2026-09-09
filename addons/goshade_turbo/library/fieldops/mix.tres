@@ -13,13 +13,19 @@ source_code_license = ""
 kind_out = 0
 inputs = Array[Dictionary]([{
 "kind": 0,
-"name": "a"
+"name": "a",
+"label": "Start value",
+"description": "The field selected where the blend amount is zero."
 }, {
 "kind": 0,
-"name": "b"
+"name": "b",
+"label": "End value",
+"description": "The field selected where the blend amount is one."
 }, {
 "kind": 0,
-"name": "t"
+"name": "t",
+"label": "Blend amount",
+"description": "Zero selects the start, one selects the end, and values outside that range continue past either one."
 }])
 params = Array[Dictionary]([])
 coord = false

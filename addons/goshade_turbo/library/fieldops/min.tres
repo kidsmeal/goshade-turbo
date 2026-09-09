@@ -13,10 +13,14 @@ source_code_license = ""
 kind_out = 0
 inputs = Array[Dictionary]([{
 "kind": 0,
-"name": "a"
+"name": "a",
+"label": "First comparison value",
+"description": "The first field considered by the minimum operation."
 }, {
 "kind": 0,
-"name": "b"
+"name": "b",
+"label": "Second comparison value",
+"description": "The second field; the lower of the two values is kept at each pixel."
 }])
 params = Array[Dictionary]([])
 coord = false

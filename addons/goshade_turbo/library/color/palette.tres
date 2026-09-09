@@ -13,24 +13,34 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 0,
-"name": "t"
+"name": "t",
+"label": "Palette position",
+"description": "A field that moves through the repeating cosine color palette."
 }])
 params = Array[Dictionary]([{
 "default": Vector3(0.5, 0.5, 0.5),
 "name": "a",
-"type": "vec3"
+"type": "vec3",
+"label": "Color center",
+"description": "The central red, green, and blue values around which the palette varies. X is red, Y is green, Z is blue."
 }, {
 "default": Vector3(0.5, 0.5, 0.5),
 "name": "b",
-"type": "vec3"
+"type": "vec3",
+"label": "Color range",
+"description": "How far each color channel moves away from the color center. X is red, Y is green, Z is blue."
 }, {
 "default": Vector3(1, 1, 1),
 "name": "c",
-"type": "vec3"
+"type": "vec3",
+"label": "Cycle rate",
+"description": "How quickly each color channel repeats across the palette. X is red, Y is green, Z is blue."
 }, {
 "default": Vector3(0, 0.33, 0.67),
 "name": "d",
-"type": "vec3"
+"type": "vec3",
+"label": "Color cycle offset",
+"description": "Offsets the red, green, and blue cycles to create different color sequences. X is red, Y is green, Z is blue."
 }])
 coord = false
 samples_source = false

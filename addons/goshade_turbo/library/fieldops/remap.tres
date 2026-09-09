@@ -13,32 +13,42 @@ source_code_license = ""
 kind_out = 0
 inputs = Array[Dictionary]([{
 "kind": 0,
-"name": "x"
+"name": "x",
+"label": "Value to remap",
+"description": "The field converted from the input range into the output range."
 }])
 params = Array[Dictionary]([{
 "default": 0.0,
 "max": 4.0,
 "min": -4.0,
 "name": "in_min",
-"type": "float"
+"type": "float",
+"label": "Input minimum",
+"description": "The input value that maps to the output minimum."
 }, {
 "default": 1.0,
 "max": 4.0,
 "min": -4.0,
 "name": "in_max",
-"type": "float"
+"type": "float",
+"label": "Input maximum",
+"description": "The input value that maps to the output maximum."
 }, {
 "default": 0.0,
 "max": 4.0,
 "min": -4.0,
 "name": "out_min",
-"type": "float"
+"type": "float",
+"label": "Output minimum",
+"description": "The result produced at the input minimum."
 }, {
 "default": 1.0,
 "max": 4.0,
 "min": -4.0,
 "name": "out_max",
-"type": "float"
+"type": "float",
+"label": "Output maximum",
+"description": "The result produced at the input maximum."
 }])
 coord = false
 samples_source = false

@@ -1972,3 +1972,68 @@ Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 2. Phase 1 was committed
 - `ui_layout`: `14/0`; selectors `4` through `8`: `50/0`, `18/0`, `16/0`, `25/0`, `16/0`; every process exited `0`.
 - Reviewer confirmed compound undo, refusal atomicity, source restrictions, stable instances/IDs, retained fallback behavior, warp conversion, and field transparency.
 - Orchestrator restored the minimum feature version to `4.4` after review. Phase 2 is ready for commit approval; phases 3 through 5 remain pending.
+
+## Editor UI redesign, phase 3 (2026-09-08)
+
+Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 3. Phase 2 was committed as `161a27b` before phase 3 began.
+
+### Test-first evidence
+
+- Added metadata completeness coverage before changing shipped manifest dictionaries.
+- Added compatibility checks for every shipped function's export/header bytes, stack resource bytes, native property keys, and uniform names.
+- Pre-metadata named unit command on `4.6.2`: `GST tests: 21 file(s), 138 test method(s), 200 failure(s)`.
+- The failures reported missing input/parameter labels and descriptions. Wrapper: `run_codegen_tests: FAIL, child process exit code 1`.
+- Runtime native-editor verification and independent review are pending.
+
+### Metadata audit
+
+- Added labels and descriptions to `100` dictionaries across `45` manifests. The other `9` shipped manifests contain no input or parameter dictionaries.
+- Orchestrator stripped only the appended metadata lines and compared all `45` changed manifests with `161a27b`; every original line matched after line-ending normalization.
+- The audit checked descriptions against shader formulas and corrected chromatic-split direction, blur grid spacing, and line endpoint wording.
+- Palette Vector3 tooltips identify `X/Y/Z` as red/green/blue; parameter identifiers remain `a/b/c/d`.
+
+### Initial runtime findings
+
+- Pre-implementation `ui_labels` reported `1/1` because separate parameter/coordinate inspectors were absent.
+- Import and the named unit suite passed after implementation: `21` files, `138` methods, `0` failures.
+- The first implemented `ui_labels` run exposed recursive inspector-plugin dispatch inside `instantiate_property_editor`; stderr reported a stack overflow in `_parse_property`.
+- That run is a failure. Native-editor construction requires a re-entry guard before the version matrix can pass.
+- The re-entry guard removed the stack overflow. Native parameter/coordinate edits and undo passed on the next run; tooltip assertions failed because the engine reset tooltip text during setup.
+- Deferred tooltip assignment passed the tooltip assertions. Screenshot review then found clipped labels and empty model-category headings despite passing assertions.
+- Added visible-control and label-width checks. These initially failed after the calculated minimum width activated the narrow tab layout; visible-pane verification remains required.
+
+### Resolved presentation checks
+
+- The orchestrator inspected `ui_labels-4.6.2-final2.png`: complete native parameter/coordinate labels, separate titled sections, and no empty `Resource` heading.
+- The same run reported `17/0` and exit `0`; the native parameter and coordinate edit/undo checks passed.
+- Input labels occupy their own full-width line above the selector. A long comparison label fits without splitting words into a narrow side column.
+- Settings use one outer scroll container. Both native inspectors size to their contents inside it.
+- Native label minimum width is calculated from the active font, label text, and native name split ratio; the existing narrow-tab behavior supplies the editing width.
+- Hidden model properties retain storage usage. Inherited `resource_path` was the remaining cause of the empty resource section.
+- The cross-version matrix and independent review are pending.
+
+### Final implementation verification
+
+- Import on `4.6.2`: exit `0`. Named unit suite: `GST tests: 21 file(s), 138 test method(s), 0 failure(s)`; wrapper exit `0`.
+- `ui_labels`: `4.4` = `14/0`, `4.6.2` = `17/0`, `4.7` = `14/0`; every process exited `0`.
+- Final editor logs identify OpenGL `3.3.0` Compatibility rendering on the NVIDIA GeForce RTX `5070 Ti` Laptop GPU.
+- The `4.6.2` run includes three additional screenshot-save assertions; the other versions run the same fourteen behavioral assertions.
+- After the `4.4` and screenshot `4.6.2` runs, a test-only adjustment records native widget presence before an edit can rebuild that widget. The final `4.7` run uses this test; production code is unchanged between these version runs. Independent review must run the final smoke on the earlier versions.
+- `ui_layout` on `4.6.2`: `14/0`, exit `0`. The responsive test now selects a generator before checking inspector targets and restores the original window after testing a wider layout.
+- Responsive evidence: editing widths `364/806`, inspector counts `2/2`, targets correct in both layouts, visible-tab persistence passed.
+- Default allocation at `1366x768`: host/root `792x641`, editing width `473`, preview area width `316`, rendered preview `316x358`, Final output `316x70`.
+- Existing native-editor selector `4`: `50/0`; recipe-randomize selector `8`: `16/0`; both exited `0`.
+- `project.godot` restored to minimum `4.4`; `git diff --check` passed. All owned Godot processes exited.
+- Independent review is pending.
+
+### Independent phase 3 review
+
+- Verdict: `PASS`; no required code fixes, deferred defects, blockers, or additional documentation impact.
+- Reviewer read all `59` modified files and `4` untracked files.
+- Named unit suite: `21` files, `138` methods, `0` failures; exit `0`.
+- Final `ui_labels` on `4.4` and `4.6.2`: `14/0` each, exit `0`, stderr empty. These reruns include the final widget-lifetime assertion.
+- `ui_layout` on `4.6.2`: `14/0`, exit `0`, stderr empty.
+- Reviewer verified visible native widgets, metadata labels/tooltips/hints, resource and uniform updates, undo, bounded input labels, and retained inspector instances through responsive reparenting.
+- The `4.7` final assertion run remains the implementer's `14/0` evidence; independent review did not repeat it.
+- Orchestrator restored only `project.godot` feature metadata to `4.4` after review. No production code changed after the passing review.
+- Phase 3 is ready for commit approval. Phases 4 and 5 remain pending.

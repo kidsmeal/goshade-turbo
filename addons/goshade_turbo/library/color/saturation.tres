@@ -13,14 +13,18 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "color"
+"name": "color",
+"label": "Color to adjust",
+"description": "The color whose intensity will be moved toward or away from grayscale."
 }])
 params = Array[Dictionary]([{
 "default": 1.0,
 "max": 2.0,
 "min": 0.0,
 "name": "amount",
-"type": "float"
+"type": "float",
+"label": "Saturation",
+"description": "Zero gives grayscale, one keeps the original color, and higher values intensify it."
 }])
 coord = false
 samples_source = false

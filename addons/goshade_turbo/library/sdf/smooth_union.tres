@@ -13,17 +13,23 @@ source_code_license = ""
 kind_out = 0
 inputs = Array[Dictionary]([{
 "kind": 0,
-"name": "a"
+"name": "a",
+"label": "First shape",
+"description": "The first signed-distance shape joined by the smooth union."
 }, {
 "kind": 0,
-"name": "b"
+"name": "b",
+"label": "Second shape",
+"description": "The second signed-distance shape joined to the first."
 }])
 params = Array[Dictionary]([{
 "default": 0.1,
 "max": 0.5,
 "min": 0.01,
 "name": "k",
-"type": "float"
+"type": "float",
+"label": "Blend width",
+"description": "The signed-distance range over which the seam between both shapes is smoothed."
 }])
 coord = false
 samples_source = false

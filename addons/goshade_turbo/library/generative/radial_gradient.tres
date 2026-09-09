@@ -17,7 +17,9 @@ params = Array[Dictionary]([{
 "max": 4.0,
 "min": 0.1,
 "name": "radius",
-"type": "float"
+"type": "float",
+"label": "Gradient radius",
+"description": "The distance from the center where the radial gradient reaches one."
 }])
 coord = true
 samples_source = false

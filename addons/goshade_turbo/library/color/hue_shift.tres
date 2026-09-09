@@ -13,14 +13,18 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "color"
+"name": "color",
+"label": "Color to shift",
+"description": "The color whose hue will be rotated while brightness stays similar."
 }])
 params = Array[Dictionary]([{
 "default": 0.0,
 "max": 1.0,
 "min": -1.0,
 "name": "shift",
-"type": "float"
+"type": "float",
+"label": "Hue rotation",
+"description": "Rotates the hue around the color wheel; one unit is one full turn."
 }])
 coord = false
 samples_source = false

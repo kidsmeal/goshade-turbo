@@ -26,3 +26,19 @@ func test_group_line_matches_b3_resolution() -> void:
 	assert_eq(GSTUniformNames.group_line(3, "fbm"), "group_uniforms L03_fbm;", "position is two-digit zero-padded, one identifier (B3)")
 	assert_eq(GSTUniformNames.group_line(0, "hash"), "group_uniforms L00_hash;", "position 0 (bottom of stack) still zero-pads to two digits")
 	assert_eq(GSTUniformNames.group_line(12, "voronoi"), "group_uniforms L12_voronoi;", "position beyond one digit stays two digits, not truncated")
+
+
+func test_readable_labels_preserve_native_paths_and_uniform_names() -> void:
+	var lib: GSTLibrary = GSTLibrary.new()
+	lib.scan()
+	var entry: GSTManifestEntry = lib.get_entry("generative/fbm")
+	var stack: GSTStack = GSTStack.new()
+	var layer: GSTLayer = GSTStackOps.add_layer(stack, entry.id, entry.kind_out, entry.coord)
+	layer.manifest = entry
+	layer.set("octaves", 6)
+	layer.set("gain", 0.65)
+	assert_eq(layer.params, {"octaves": 6, "gain": 0.65}, "native property paths write original manifest keys")
+	var generated: GSTCodegenResult = GSTCodegen.generate_result(stack, lib)
+	assert_true(generated.ok(), "labeled fbm generates")
+	assert_true(generated.code.contains("uniform int l0_fbm_octaves"), "octaves uniform keeps its original identifier")
+	assert_true(generated.code.contains("uniform float l0_fbm_gain"), "gain uniform keeps its original identifier")

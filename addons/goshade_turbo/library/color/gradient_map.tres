@@ -13,16 +13,22 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 0,
-"name": "t"
+"name": "t",
+"label": "Gradient position",
+"description": "A field that chooses a point between the start and end colors; values outside zero to one use the nearest endpoint."
 }])
 params = Array[Dictionary]([{
 "default": Color(0, 0, 0, 1),
 "name": "color_a",
-"type": "color"
+"type": "color",
+"label": "Start color",
+"description": "The color used where the input field is zero."
 }, {
 "default": Color(1, 1, 1, 1),
 "name": "color_b",
-"type": "color"
+"type": "color",
+"label": "End color",
+"description": "The color used where the input field is one."
 }])
 coord = false
 samples_source = false

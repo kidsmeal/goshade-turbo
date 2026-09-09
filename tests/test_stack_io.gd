@@ -107,3 +107,24 @@ func test_load_refuses_unresolved_entry() -> void:
 	assert_true(load_result["reason"].contains("generative/hash") or load_result["reason"].contains("unresolved"), "refusal reason names the unresolved entry: %s" % load_result["reason"])
 
 	DirAccess.remove_absolute(path)
+
+
+func test_editor_metadata_does_not_enter_saved_resources() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = _build_stack(lib)["stack"] as GSTStack
+	var path: String = "user://gst_test_labels_storage.tres"
+	for layer: GSTLayer in stack.layers:
+		layer.manifest = lib.get_entry(layer.entry)
+	var saved: Dictionary = GSTStackIO.save(stack, path)
+	assert_true(saved["ok"], "save stack with labeled manifests: %s" % saved["reason"])
+	var labeled_text: String = FileAccess.get_file_as_string(path)
+	for layer: GSTLayer in stack.layers:
+		layer.manifest = null
+	saved = GSTStackIO.save(stack, path)
+	assert_true(saved["ok"], "save stack without runtime manifests: %s" % saved["reason"])
+	assert_eq(FileAccess.get_file_as_string(path), labeled_text, "runtime manifest metadata does not alter serialized resource bytes")
+	var loaded: Dictionary = GSTStackIO.load(path, lib)
+	assert_true(loaded["ok"], "load retains stored property keys after bookkeeping is hidden")
+	if loaded["ok"]:
+		assert_true(_compare_stacks(stack, loaded["stack"]).is_empty(), "hidden storage fields and original parameter keys survive save/load")
+	DirAccess.remove_absolute(path)

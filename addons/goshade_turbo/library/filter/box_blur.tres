@@ -13,14 +13,18 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "source"
+"name": "source",
+"label": "Image to blur",
+"description": "The texture or screen source sampled in a three-by-three grid."
 }])
 params = Array[Dictionary]([{
 "default": 0.004,
 "max": 0.02,
 "min": 0.0,
 "name": "radius",
-"type": "float"
+"type": "float",
+"label": "Blur radius",
+"description": "The horizontal and vertical texture-space spacing of the three-by-three sample grid."
 }])
 coord = false
 samples_source = true

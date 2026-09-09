@@ -13,17 +13,23 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "a"
+"name": "a",
+"label": "Base color",
+"description": "The starting color that receives the additive blend."
 }, {
 "kind": 1,
-"name": "b"
+"name": "b",
+"label": "Color to add",
+"description": "The color added to the base before the result is clamped."
 }])
 params = Array[Dictionary]([{
 "default": 1.0,
 "max": 1.0,
 "min": 0.0,
 "name": "t",
-"type": "float"
+"type": "float",
+"label": "Add strength",
+"description": "How strongly the added color affects the result."
 }])
 coord = false
 samples_source = false

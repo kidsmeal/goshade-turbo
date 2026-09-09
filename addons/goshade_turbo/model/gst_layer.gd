@@ -31,6 +31,28 @@ enum Kind {
 ## stack (phase 6).
 var manifest: GSTManifestEntry = null
 
+const EDITOR_HIDDEN_PROPERTIES: Array[StringName] = [
+	&"id",
+	&"entry",
+	&"kind_out",
+	&"slots",
+	&"params",
+	&"coord",
+	&"resource_local_to_scene",
+	&"resource_name",
+	&"resource_path",
+	&"script",
+]
+
+
+## Keep serialized model fields in storage while removing bookkeeping and
+## inherited categories. Dynamic manifest params remain editor-visible.
+func _validate_property(property: Dictionary) -> void:
+	var usage: int = int(property.get("usage", 0))
+	var property_name: StringName = StringName(property.get("name", &""))
+	if property_name in EDITOR_HIDDEN_PROPERTIES or usage & PROPERTY_USAGE_CATEGORY != 0:
+		property["usage"] = usage & ~PROPERTY_USAGE_EDITOR
+
 
 ## One dynamic property per manifest param (decision 13: the inspector
 ## column is the layer resource's own property editor). float and int
@@ -79,6 +101,14 @@ func _find_param(property: StringName) -> Variant:
 		if String(param["name"]) == String(property):
 			return param
 	return null
+
+
+## Read-only manifest schema used by GSTInspectorPlugin to replace the
+## editor-facing label and tooltip while keeping this property's original
+## path, type, hint, and stored params key.
+func get_param_schema(property: StringName) -> Dictionary:
+	var param: Variant = _find_param(property)
+	return param as Dictionary if param is Dictionary else {}
 
 
 ## Unknown param types are a manifest data bug, not a script error: they fall

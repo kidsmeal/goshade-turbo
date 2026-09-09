@@ -13,14 +13,18 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "source"
+"name": "source",
+"label": "Image to pixelate",
+"description": "The texture or screen source sampled once at the center of each block."
 }])
 params = Array[Dictionary]([{
 "default": 0.02,
 "max": 0.2,
 "min": 0.001,
 "name": "cell_size",
-"type": "float"
+"type": "float",
+"label": "Pixel block size",
+"description": "The width and height of each square block in texture space."
 }])
 coord = false
 samples_source = true

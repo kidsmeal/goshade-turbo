@@ -13,14 +13,18 @@ source_code_license = ""
 kind_out = 1
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "source"
+"name": "source",
+"label": "Image to split",
+"description": "The texture or screen source whose red and blue channels will be shifted apart."
 }])
 params = Array[Dictionary]([{
 "default": 0.004,
 "max": 0.02,
 "min": 0.0,
 "name": "offset",
-"type": "float"
+"type": "float",
+"label": "Channel offset",
+"description": "Shifts visible red features left and blue features right by this texture-space distance; green stays centered."
 }])
 coord = false
 samples_source = true

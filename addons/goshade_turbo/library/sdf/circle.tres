@@ -17,7 +17,9 @@ params = Array[Dictionary]([{
 "max": 1.0,
 "min": 0.05,
 "name": "radius",
-"type": "float"
+"type": "float",
+"label": "Circle radius",
+"description": "The distance from the circle center to its edge."
 }])
 coord = true
 samples_source = false

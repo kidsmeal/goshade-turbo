@@ -142,7 +142,7 @@ Shared scope is permission to maintain integration and verification, not a requi
 
 ## Phase 3: Function-specific labels through native property editors
 
-**Status:** pending
+**Status:** committed (2026-09-08)
 
 **Goal:** Present readable labels and descriptions without replacing native editors or changing resource/uniform keys.
 

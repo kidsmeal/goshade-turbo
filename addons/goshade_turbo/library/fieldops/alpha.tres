@@ -13,7 +13,9 @@ source_code_license = ""
 kind_out = 0
 inputs = Array[Dictionary]([{
 "kind": 1,
-"name": "color"
+"name": "color",
+"label": "Color transparency",
+"description": "The color whose own transparency channel will become a field."
 }])
 params = Array[Dictionary]([])
 coord = false

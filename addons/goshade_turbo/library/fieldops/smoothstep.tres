@@ -13,20 +13,26 @@ source_code_license = ""
 kind_out = 0
 inputs = Array[Dictionary]([{
 "kind": 0,
-"name": "x"
+"name": "x",
+"label": "Value to threshold",
+"description": "The field changed into a smooth transition between the lower and upper edges."
 }])
 params = Array[Dictionary]([{
 "default": 0.0,
 "max": 2.0,
 "min": -1.0,
 "name": "edge0",
-"type": "float"
+"type": "float",
+"label": "Lower edge",
+"description": "Input values at or below this edge become zero."
 }, {
 "default": 1.0,
 "max": 2.0,
 "min": -1.0,
 "name": "edge1",
-"type": "float"
+"type": "float",
+"label": "Upper edge",
+"description": "Input values at or above this edge become one; reversed edges are kept just above the lower edge."
 }])
 coord = false
 samples_source = false

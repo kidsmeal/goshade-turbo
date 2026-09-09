@@ -21,7 +21,7 @@ Last touched: 2026-09-08
 
 Next physical action:
 
-- [ ] Phase 1 committed 1c7ae37; phase 2 passed independent review and awaits commit approval before phase 3
+- [ ] Phase 3 reviewed PASS; awaiting commit approval before phase 4 embedded choosers
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

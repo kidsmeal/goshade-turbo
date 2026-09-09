@@ -7,9 +7,12 @@ extends EditorPlugin
 ## PreviewSlot; this file does not reach into it.
 
 var _panel: Control = null
+var _inspector_plugin: GSTInspectorPlugin = null
 
 
 func _enter_tree() -> void:
+	_inspector_plugin = GSTInspectorPlugin.new()
+	add_inspector_plugin(_inspector_plugin)
 	_panel = load("res://addons/goshade_turbo/ui/gst_main_panel.tscn").instantiate()
 	get_editor_interface().get_editor_main_screen().add_child(_panel)
 	_panel.set_editor_plugin(self)
@@ -25,6 +28,9 @@ func _exit_tree() -> void:
 	if _panel != null:
 		_panel.queue_free()
 		_panel = null
+	if _inspector_plugin != null:
+		remove_inspector_plugin(_inspector_plugin)
+		_inspector_plugin = null
 
 
 func _has_main_screen() -> bool:

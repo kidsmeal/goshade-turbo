@@ -75,6 +75,21 @@ func test_every_manifest_param_type_is_known() -> void:
 			assert_true(known_types.has(param_type), "%s param %s has known type '%s'" % [id, param["name"], param_type])
 
 
+func test_every_manifest_input_and_param_has_editor_metadata() -> void:
+	var lib: GSTLibrary = GSTLibrary.new()
+	lib.scan()
+	for id: String in lib.entries.keys():
+		var manifest_entry: GSTManifestEntry = lib.get_entry(id)
+		for input: Dictionary in manifest_entry.inputs:
+			var input_name: String = String(input.get("name", ""))
+			assert_false(String(input.get("label", "")).strip_edges().is_empty(), "%s input %s has a nonempty editor label" % [id, input_name])
+			assert_false(String(input.get("description", "")).strip_edges().is_empty(), "%s input %s has a nonempty editor description" % [id, input_name])
+		for param: Dictionary in manifest_entry.params:
+			var param_name: String = String(param.get("name", ""))
+			assert_false(String(param.get("label", "")).strip_edges().is_empty(), "%s param %s has a nonempty editor label" % [id, param_name])
+			assert_false(String(param.get("description", "")).strip_edges().is_empty(), "%s param %s has a nonempty editor description" % [id, param_name])
+
+
 func test_add_entry_flags_a_duplicate_function_name() -> void:
 	var lib: GSTLibrary = GSTLibrary.new()
 	var first: GSTManifestEntry = GSTManifestEntry.new()

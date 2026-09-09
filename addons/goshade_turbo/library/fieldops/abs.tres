@@ -13,7 +13,9 @@ source_code_license = ""
 kind_out = 0
 inputs = Array[Dictionary]([{
 "kind": 0,
-"name": "x"
+"name": "x",
+"label": "Value to make positive",
+"description": "The field whose negative values will be flipped above zero."
 }])
 params = Array[Dictionary]([])
 coord = false
