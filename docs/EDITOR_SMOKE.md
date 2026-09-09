@@ -2214,3 +2214,25 @@ Verified from redirected logs in the phase 5 evidence directory. Counts are pass
 - Independent normal logs use the `review5` prefix; entry variants use `review5-entry-empty` and `review5-entry-open`. Independent scaled runs refreshed the `scaled150` logs.
 - All reviewer-owned Godot processes exited. Orchestrator restored only the generated `project.godot` feature version to `4.4`.
 - User authorized the phase 5 commit on `2026-09-09`. The original release-tuning work remains separate.
+
+## Fire noise seams, renderer regression (2026-09-09)
+
+User evidence: Fire preview contains sharp diagonal, parallelogram-shaped discontinuities.
+
+- Reproduced on Godot `4.6.2`, Forward+/Vulkan, NVIDIA RTX 5070 Ti Laptop GPU; the same isolated noise is continuous in Compatibility/OpenGL.
+- Evidence directory: `C:/Users/atk67/.codex/visualizations/2026/09/09/01a083c7-014d-7361-ae67-8eddff9c46f1/noise-audit`.
+- Fixed-time Fire and isolated simplex renders separate this defect from animation movement and background composition.
+- At `512x512` over an eight-unit coordinate span, the original Forward+ field's maximum adjacent grayscale difference is `0.615686`; `780` sampled pixels exceed `0.1`.
+- Changing only the simplex gradient helper and corner arguments to integer lattice addresses removes these seams. The public hash formula and simplex weighting remain unchanged.
+- An alternative private integer hash also removed the seams, but changed the noise pattern. That experiment was not applied.
+- The precise compiler transformation causing the floating-address discrepancy is unverified; the renderer-dependent failure and the effect of integer addresses are reproduced on the GPU.
+- New regression coverage in `tests/run_render_checks.gd` requires adjacent grayscale differences below `0.1` and total grayscale range above `0.5`.
+- Red run: the original code passes all `78` stack checks, then fails `NOISE_CONTINUITY`, exiting `1` with empty stderr (`red.stdout.log`).
+- Prior version-matrix runs used Compatibility and checked nonuniform images without continuity checks. They did not establish Forward+ noise continuity.
+- This repair does not resolve the separately diagnosed inactive controls, transparency preview composition, or Foil/Opal animation saturation.
+- Green matrix: Godot `4.4`, `4.6.2`, and `4.7`, each with Forward+, Mobile, and Compatibility, passed all `78` rendered stacks plus `NOISE_CONTINUITY`. Every command exited `0` with empty stderr.
+- All nine fixed runs measured maximum adjacent grayscale difference `0.039216` and range `0.701961` (`green-<version>-<renderer>` logs).
+- Named unit suite on `4.6.2`: `142/0`, wrapper PASS, exit `0`, empty stderr (`phase5-evidence/noise-fix-4.6.2-unit` logs).
+- Independent quick-fix review: `PASS`, no required fixes, fix-now notes, deferred notes, or documentation impact.
+- Reviewer independently passed `142` unit methods and both Forward+/Compatibility render runs on `4.6.2`: `78` stacks plus continuity at `0.039216`, range `0.701961`; exits `0`, empty stderr.
+- Reviewer-owned engine processes exited. The user's existing editor was left running. User authorized commit and push on `2026-09-09`.

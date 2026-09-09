@@ -14,6 +14,8 @@ extends SceneTree
 ## GSTRenderAssert.check on it. Prints one "RENDER <path> PASS|FAIL <reasons>"
 ## line per stack, plus whether its generated shader contains TIME. Exits 1
 ## if any stack fails to load, fails codegen, or fails the render assert.
+## Also checks the shipped simplex field for discontinuities on the active
+## renderer; run Forward+, Mobile, and Compatibility to cover shader backends.
 ##
 ## --write-screenshots (docs/PLAN.md Phase 8 Files): when passed as a user
 ## arg (`-- --write-screenshots`, read via OS.get_cmdline_user_args() so it
@@ -58,9 +60,51 @@ func _initialize() -> void:
 		var passed: bool = await _check_one(path, library, write_screenshots and screenshot_dir_ok)
 		if not passed:
 			all_passed = false
+	if not await _check_noise_continuity(library):
+		all_passed = false
 
 	print("run_render_checks: %s, %d stack(s) checked" % ["PASS" if all_passed else "FAIL", paths.size()])
 	quit(0 if all_passed else 1)
+
+
+## Nonuniform recipe images can still contain discontinuities at lattice
+## boundaries. Exercise the shipped noise on the active GPU renderer.
+func _check_noise_continuity(library: GSTLibrary) -> bool:
+	var viewport: SubViewport = SubViewport.new()
+	viewport.size = Vector2i(512, 512)
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(viewport)
+	var material: ShaderMaterial = ShaderMaterial.new()
+	material.shader = Shader.new()
+	material.shader.code = "shader_type canvas_item;\n" + library.get_entry("generative/hash").code + library.get_entry("generative/snoise").code + "\nvoid fragment() { float n = snoise((UV - vec2(0.5)) * 8.0); COLOR = vec4(vec3(n * 0.5 + 0.5), 1.0); }"
+	var target: ColorRect = ColorRect.new()
+	target.set_anchors_preset(Control.PRESET_FULL_RECT)
+	target.material = material
+	viewport.add_child(target)
+	for frame: int in range(5):
+		await process_frame
+	var image: Image = viewport.get_texture().get_image()
+	if image == null or image.is_empty():
+		print("NOISE_CONTINUITY FAIL: missing GPU readback")
+		viewport.queue_free()
+		return false
+	var maximum_delta: float = 0.0
+	var minimum_value: float = 1.0
+	var maximum_value: float = 0.0
+	for y: int in range(image.get_height() - 1):
+		for x: int in range(image.get_width() - 1):
+			var value: float = image.get_pixel(x, y).r
+			minimum_value = minf(minimum_value, value)
+			maximum_value = maxf(maximum_value, value)
+			maximum_delta = maxf(maximum_delta, absf(value - image.get_pixel(x + 1, y).r))
+			maximum_delta = maxf(maximum_delta, absf(value - image.get_pixel(x, y + 1).r))
+	# At 1/64 coordinate units per pixel the smooth field stays below 0.04
+	# on the reference GPU. The broken Forward+ path jumps above 0.61.
+	# The range check prevents blank output from passing as continuous.
+	var passed: bool = maximum_delta < 0.1 and maximum_value - minimum_value > 0.5
+	print("NOISE_CONTINUITY %s renderer=%s max_adjacent=%f range=%f" % ["PASS" if passed else "FAIL", RenderingServer.get_current_rendering_method(), maximum_delta, maximum_value - minimum_value])
+	viewport.queue_free()
+	return passed
 
 
 func _collect_stack_paths() -> Array[String]:

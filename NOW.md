@@ -17,11 +17,11 @@ Last touched: 2026-09-09
 
 ## Active thread (only one)
 
-**GoShade Turbo v0.1 release tuning**
+**GoShade Turbo rendering fixes**
 
 Next physical action:
 
-- [ ] User tuning pass: open each bundled recipe and move every slider through its range; record failures before signing off docs/DESIGN.md
+- [ ] Remaining work: preview transparency, inactive controls, and Foil/Opal saturation; user release tuning remains open
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

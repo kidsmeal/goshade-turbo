@@ -1,0 +1,109 @@
+[gd_resource type="Resource" script_class="GSTStack" load_steps=13 format=3 uid="uid://c7lw2omc4jnlk"]
+
+[ext_resource type="Script" uid="uid://nqe51f4vxj3h" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_sglu7"]
+[ext_resource type="Script" uid="uid://oeqv6ongpfcd" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_0scni"]
+[ext_resource type="Script" uid="uid://b8jioobudt2x3" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_84t4i"]
+
+[sub_resource type="Resource" id="Resource_10lub"]
+script = ExtResource("2_0scni")
+scale = Vector2(3, 3)
+offset = Vector2(0, 0)
+rotation = 0.0
+scroll = Vector2(0, -0.4)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_1mgbd"]
+script = ExtResource("1_sglu7")
+id = &"0"
+entry = "generative/fbm"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_10lub")
+
+[sub_resource type="Resource" id="Resource_5aa1d"]
+script = ExtResource("1_sglu7")
+id = &"1"
+entry = "color/palette"
+kind_out = 1
+slots = {
+"t": &"0"
+}
+params = {
+"a": Vector3(0.55, 0.25, 0.15),
+"b": Vector3(0.45, 0.35, 0.25),
+"c": Vector3(1, 0.9, 0.6),
+"d": Vector3(0, 0.1, 0.25)
+}
+
+[sub_resource type="Resource" id="Resource_j2fny"]
+script = ExtResource("1_sglu7")
+id = &"2"
+entry = "fieldops/smoothstep"
+kind_out = 0
+slots = {
+"x": &"0"
+}
+params = {
+"edge0": -0.384,
+"edge1": 0.501
+}
+
+[sub_resource type="Resource" id="Resource_tm72h"]
+script = ExtResource("2_0scni")
+scale = Vector2(2, 2)
+offset = Vector2(0, 0)
+rotation = -1.5708
+scroll = Vector2(0, 0)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_hfh1u"]
+script = ExtResource("1_sglu7")
+id = &"3"
+entry = "generative/linear_gradient"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_tm72h")
+
+[sub_resource type="Resource" id="Resource_j2b8s"]
+script = ExtResource("1_sglu7")
+id = &"4"
+entry = "fieldops/multiply"
+kind_out = 0
+slots = {
+"a": &"2",
+"b": &"3"
+}
+params = {}
+
+[sub_resource type="Resource" id="Resource_hr73w"]
+script = ExtResource("2_0scni")
+scale = Vector2(1, 1)
+offset = Vector2(0, 0)
+rotation = 0.0
+scroll = Vector2(0, 0)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_xq5hi"]
+script = ExtResource("1_sglu7")
+id = &"6"
+entry = "generative/voronoi"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_hr73w")
+
+[resource]
+script = ExtResource("3_84t4i")
+coord_space = 0
+layers = Array[ExtResource("1_sglu7")]([SubResource("Resource_1mgbd"), SubResource("Resource_5aa1d"), SubResource("Resource_j2fny"), SubResource("Resource_hfh1u"), SubResource("Resource_j2b8s"), SubResource("Resource_xq5hi")])
+output_color = &"6"
+output_alpha = &"4"
+next_id = 7

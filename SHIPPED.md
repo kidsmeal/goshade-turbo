@@ -5,4 +5,5 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: -->
 
 ### 2026-09-09
+- Fix simplex noise seams across renderers and save clouds stack
 - Editor UI phase 5: entry flow, preview recovery, and complete verification
