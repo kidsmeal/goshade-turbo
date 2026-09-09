@@ -45,10 +45,9 @@ New idea mid-task: `/claudhd:idea <text>` records it in IDEAS.md so you can keep
 
 ## Loose ends
 
-- Two commits unpushed on `main`: `f488370`, `9f765a9`. Push pending user say-so.
 - Release checklist: one item open, `docs/DESIGN.md` line 155 (user tuning pass). All other items ticked with evidence.
 - Picker text slicing (`docs/EDITOR_SMOKE.md` "Intermittent picker text slicing"): unresolved, not reproduced in three fresh-editor runs. Next repro step recorded there.
-- `clouds.tres` sits at the repo root (committed in `42a052f`). Decide: move to `sandbox/stacks/` or delete.
+- `sandbox/stacks/clouds.tres` (moved from repo root in `017b936`) is now picked up by `tests/run_render_checks.gd`; next GPU render run reports 79 stacks, not 78, and needs `--write-screenshots` for its reference PNG.
 - `docs/CURRENTNESS_AUDIT.md` and `docs/RUNTIME_VERIFICATION_QUEUE.md` still carry `<DATE>` template placeholders; the audit's deferred-notes list is real, the rest is scaffold.
 - `docs/CURRENTNESS_AUDIT.md` deferred note: `tests/run_render_checks.gd` cannot run in the GPU-less reviewer sandbox. Clears when a GPU reviewer exists.
 - Running `godot --import` on a newer Godot than 4.4 rewrites `sandbox/screenshots/glow.png.import`. Restore it before committing.
