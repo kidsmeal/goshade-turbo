@@ -23,6 +23,108 @@ func _build_stack(lib: GSTLibrary) -> Dictionary:
 	return {"stack": stack, "fbm": fbm, "invert": invert}
 
 
+func _build_broken_stack() -> GSTStack:
+	var stack: GSTStack = GSTStack.new()
+	GSTStackOps.add_layer(stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
+	return stack
+
+
+func _is_safe_transparent_material(material: ShaderMaterial) -> bool:
+	return (
+		material != null
+		and material.shader != null
+		and material.shader.code.contains("shader_type canvas_item")
+		and material.shader.code.contains("COLOR = vec4(0.0)")
+	)
+
+
+func test_installation_reset_creates_a_fresh_safe_material_and_clears_success() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var cache: GSTMaterialSync = GSTMaterialSync.new()
+	cache.reset_installation()
+	var first_material: ShaderMaterial = cache.get_material()
+
+	assert_true(_is_safe_transparent_material(first_material), "reset initializes a transparent canvas_item material")
+	assert_false(cache.has_successful_preview(), "a reset installation has no successful preview")
+
+	var ctx: Dictionary = _build_stack(lib)
+	var success: GSTCodegenResult = cache.sync_preview(ctx["stack"], lib, &"", Vector2(256.0, 256.0))
+	assert_true(success.ok(), "a valid non-empty stack succeeds after reset: %s" % success.error)
+	assert_false(success.code.is_empty(), "a valid non-empty stack returns generated shader code")
+	assert_true(cache.has_successful_preview(), "a valid non-empty result marks the installation successful")
+
+	cache.reset_installation()
+	var second_material: ShaderMaterial = cache.get_material()
+	assert_false(is_same(second_material, first_material), "reset replaces the previous installation's material instance")
+	assert_true(_is_safe_transparent_material(second_material), "the replacement material is initialized to transparent canvas_item output")
+	assert_false(cache.has_successful_preview(), "reset clears the previous installation's success state")
+
+
+func test_failed_preview_retains_the_current_installations_last_success() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var ctx: Dictionary = _build_stack(lib)
+	var stack: GSTStack = ctx["stack"]
+	var fbm: GSTLayer = ctx["fbm"]
+	var cache: GSTMaterialSync = GSTMaterialSync.new()
+	cache.reset_installation()
+	var success: GSTCodegenResult = cache.sync_preview(stack, lib, &"", Vector2(256.0, 256.0))
+	assert_true(success.ok(), "baseline instance sync succeeds before the failure case: %s" % success.error)
+	var material_before: ShaderMaterial = cache.get_material()
+	var code_before: String = material_before.shader.code
+	var octaves_before: Variant = material_before.get_shader_parameter(GSTUniformNames.param_uniform(fbm.id, "fbm", "octaves"))
+
+	GSTStackOps.add_layer(stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
+	var failure: GSTCodegenResult = cache.sync_preview(stack, lib, &"", Vector2(128.0, 128.0))
+
+	assert_false(failure.ok(), "an unwired filter fails instance preview sync")
+	assert_false(failure.error.is_empty(), "the failed instance result carries its codegen error")
+	assert_true(is_same(cache.get_material(), material_before), "failure retains the current installation's material instance")
+	assert_eq(cache.get_material().shader.code, code_before, "failure retains the last successful shader code")
+	assert_eq(cache.get_material().get_shader_parameter(GSTUniformNames.param_uniform(fbm.id, "fbm", "octaves")), octaves_before, "failure retains the last successful uniform value")
+	assert_true(cache.has_successful_preview(), "failure after success keeps the recovery state true")
+
+
+func test_failure_before_success_keeps_the_safe_blank_material() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var cache: GSTMaterialSync = GSTMaterialSync.new()
+	cache.reset_installation()
+	var material_before: ShaderMaterial = cache.get_material()
+	var code_before: String = material_before.shader.code
+
+	var failure: GSTCodegenResult = cache.sync_preview(_build_broken_stack(), lib, &"", Vector2(256.0, 256.0))
+
+	assert_false(failure.ok(), "an unwired filter fails before the installation has a successful preview")
+	assert_true(is_same(cache.get_material(), material_before), "failure before success retains the safe material instance")
+	assert_eq(cache.get_material().shader.code, code_before, "failure before success retains safe transparent shader code")
+	assert_true(_is_safe_transparent_material(cache.get_material()), "failure before success leaves transparent output available")
+	assert_false(cache.has_successful_preview(), "failure before success cannot claim a previous preview")
+
+
+func test_empty_stack_clears_success_and_blocks_stale_recovery() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var ctx: Dictionary = _build_stack(lib)
+	var cache: GSTMaterialSync = GSTMaterialSync.new()
+	cache.reset_installation()
+	var success: GSTCodegenResult = cache.sync_preview(ctx["stack"], lib, &"", Vector2(256.0, 256.0))
+	assert_true(success.ok(), "baseline instance sync succeeds before clearing the stack: %s" % success.error)
+	var successful_code: String = cache.get_material().shader.code
+
+	var empty_result: GSTCodegenResult = cache.sync_preview(GSTStack.new(), lib, &"", Vector2(256.0, 256.0))
+	var blank_material: ShaderMaterial = cache.get_material()
+	assert_true(empty_result.ok(), "an empty stack is a successful non-error state")
+	assert_true(empty_result.code.is_empty(), "an empty stack returns no generated effect code")
+	assert_false(blank_material.shader.code == successful_code, "an empty stack removes the previous successful effect")
+	assert_true(_is_safe_transparent_material(blank_material), "an empty stack leaves safe transparent output")
+	assert_false(cache.has_successful_preview(), "an empty stack clears the installation's success state")
+
+	var blank_code: String = blank_material.shader.code
+	var failure: GSTCodegenResult = cache.sync_preview(_build_broken_stack(), lib, &"", Vector2(256.0, 256.0))
+	assert_false(failure.ok(), "a later broken edit still reports its codegen error")
+	assert_true(is_same(cache.get_material(), blank_material), "the later broken edit retains the safe blank material instance")
+	assert_eq(cache.get_material().shader.code, blank_code, "the later broken edit cannot restore the removed effect")
+	assert_false(cache.has_successful_preview(), "the later broken edit cannot claim stale recovery")
+
+
 func test_sync_writes_one_uniform_per_param_and_coord_field() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var ctx: Dictionary = _build_stack(lib)

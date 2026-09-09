@@ -2112,3 +2112,105 @@ Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 3. Phase 2 was committed
 - `git diff --check` passed. All owned Godot processes exited.
 - Orchestrator restored only `project.godot` feature metadata to `4.4` after review.
 - Phase 4 is ready for commit approval. Phase 5 remains pending.
+
+## Editor UI redesign, phase 5: entry flow and preview recovery (2026-09-09)
+
+Status: independent phase review passed; user authorized the phase 5 commit on 2026-09-09.
+
+### Implementation and test baseline
+
+- Initial editing area offers every bundled recipe, Open stack, and Create Empty Stack.
+- Create Empty Stack and File > New install an empty stack and open the first-layer library immediately.
+- Start-screen dismissal remains navigation state; replacement undo returns to ordinary editing.
+- Preview this layer is a secondary Layer menu action with a captured stable ID and Return to finished effect.
+- Each stack installation receives a fresh initialized preview material, including replacement undo/redo.
+- A later codegen failure retains only that installation's previous success; an empty stack clears success.
+- Codegen messages use a bounded scroll area above the preview. Control refusals retain their separate lifecycle.
+- Native pane minimum-size changes now schedule responsive layout updates, including while tabs are active.
+- Evidence directory: `C:/Users/atk67/.codex/visualizations/2026/09/09/01a083c7-014d-7361-ae67-8eddff9c46f1/phase5-evidence`.
+- Red editor baseline: `UI_COMPLETE SUMMARY pass=1 fail=1`; required entry/preview APIs were absent and the obsolete Solo API remained.
+- Red named unit baseline: all four new cache tests reported missing `reset_installation`; the wrapper correctly failed on script errors.
+- First green named unit run on `4.6.2`: `GST tests: 21 file(s), 142 test method(s), 0 failure(s)` and wrapper PASS.
+
+### Integration findings
+
+- The old layout fixture left the new automatic chooser open after File > New. It now cancels before measuring active editing controls.
+- Legacy undo-to-empty checks needed to undo the initial Create Empty replacement after dismissing the start screen. Their original empty-history assertions remain intact.
+- On `4.4`, native labels changed the measured editing minimum without resizing the outer allocation. The responsive breakpoint now observes pane minimum-size changes.
+- One `4.7` legacy run imported an incomplete smoke edit and reported a parse error. That run was rejected; the corrected script passed the final rerun without error markers.
+
+### Godot 4.4.0 import diagnostic
+
+- Exact `4.4.0 --headless --import` exits `0` and emits one `add_task`, six `task_step`, and one `end_task` progress-dialog error.
+- This matches the prior repository record and upstream [Godot issue 103398](https://github.com/godotengine/godot/issues/103398).
+- The engine's first headless scan enters progress-dialog code while the message queue is flushing. Upstream [fix 103403](https://github.com/godotengine/godot/pull/103403) routes headless progress to console; it was included in `4.4.1`.
+- The diagnostic is recorded as an engine import limitation, not a clean import pass. Named unit, GPU render, and editor checks must still complete without script or engine error markers.
+- Initial `4.4` unit and render runs passed `142` test methods and `78` rendered stacks with empty stderr.
+- Isolated reproduction: an empty project with no scripts or plugins emitted the identical eight diagnostics and exited `0` (`import-repro.stderr.log`). This separates the engine defect from the plugin changes.
+
+### Runtime fixes and verification scope
+
+- Actual numeric input reproduced a coordinate preview failure: the model changed to `offset.x = 0.17`, while the material uniform remained `0.0`. The coordinate inspector now relays `property_edited`; edit and undo both passed afterward.
+- Responsive reparenting emitted `tab_changed` before both panes existed and overwrote the preferred tab. The transition now preserves the requested tab while moving controls.
+- Screenshot review found clipped native labels. Inspector minimums now reserve glyph width, native label padding/reload controls, and the outer scrollbar width.
+- At `1366x768`, the selected native controls use the Layer settings tab when the measured two-column minimum exceeds the editing allocation. The inspected screenshot shows complete Fine detail strength, Movement speed, and Distortion strength labels.
+- Randomize undo restored effective values but added an originally absent `octaves` key to the serialized header. Undo now restores originally unset keys after applying prior values; the test requires raw params, complete shader text, effective values, and parameter uniforms to match.
+- The synthetic long-error fixture now uses a known unwired filter with a long stable ID. An unknown manifest entry bypassed loader validation and produced invalid shader text, so that fixture was rejected.
+- File-dialog smoke selection hides the visible dialog before emitting `file_selected`, matching its selection lifecycle and preventing exclusive-window errors.
+- The complete test clicks native numeric editors and types through viewport key input. File operations exercise visible buttons/menu entries and dialog selection signals; it does not automate OS file-browser navigation.
+- The error label uses smart word wrapping inside a bounded vertical scroll area; screenshot review identified the earlier long-token clipping.
+- The automated beginner flow verifies controls and rendering. First-time human usability remains unverified; no user study is claimed.
+
+### Final cross-version runtime matrix
+
+Verified from redirected logs in the phase 5 evidence directory. Counts are passes/failures; every runtime command exited `0`.
+
+| Check | Godot `4.4` | Godot `4.6.2` | Godot `4.7` |
+|---|---|---|---|
+| Named unit methods | `142/0` | `142/0` | `142/0` |
+| GPU rendered stacks | `78/0` | `78/0` | `78/0` |
+| Editor selector `4` | `50/0` | `50/0` | `50/0` |
+| Editor selector `5` | `18/0` | `18/0` | `18/0` |
+| Editor selector `6` | `16/0` | `16/0` | `16/0` |
+| Editor selector `7` | `25/0` | `25/0` | `25/0` |
+| Editor selector `8` | `16/0` | `16/0` | `16/0` |
+| `ui_layout` | `16/0` | `16/0` | `16/0` |
+| `ui_actions` | `20/0` | `20/0` | `20/0` |
+| `ui_labels` | `14/0` | `14/0` | `14/0` |
+| `ui_picker` | `45/0` | `45/0` | `45/0` |
+| `ui_complete` | `34/0` | `34/0` | `34/0` |
+
+- Unit, render, and selectors `4` through `7` use `final-<version>-<check>` logs.
+- Selector `8`, `ui_layout`, `ui_picker`, and `ui_complete` use `final4-<version>-<check>` logs after final fixture and conversion wrapping changes.
+- `ui_actions` and `ui_labels` use `final` logs on `4.4`/`4.6.2` and `final3` logs on `4.7`.
+- Runtime stderr is empty except the existing selector `5` direct-PNG fixture warnings. No runtime log contains script or engine error markers.
+- Imports on `4.6.2` and `4.7` exited `0` with empty stderr. Exact `4.4.0` import retains the separately reproduced engine diagnostic above.
+- Additional `ui_complete` initial-entry variants on `4.6.2`: `empty` and `open` each passed `34/0` with empty stderr (`entry-empty` and `entry-open` logs).
+- `ui_complete` captures five screenshots per run; those capture checks are included in its `34` assertions.
+- Final layout fixtures activate the measured pane, scroll native widgets into view, and use a scaled wide-window fixture before testing both editing columns. Active-control and actual-breakpoint assertions remain enabled.
+- A `150%` picker run on `4.7` exposed clipped conversion text. Kind-column wrapping now uses the live font, drawable column width, and measured multiline height. The final normal-scale chooser runs above include this fix.
+
+### Final scaled checks and screenshot inspection
+
+- `scaled150-<version>` logs verify active editor scale `1.50` on `4.4`, `4.6.2`, and `4.7`.
+- Every version passed `ui_layout` at `16/0`, `ui_picker` at `45/0`, and `ui_complete` at `34/0`; all exited `0` with empty stderr.
+- Tests requested `1366x768`; at `150%`, Godot clamped the actual editor window to `1536x900`. The recorded active scale and actual rectangles govern these assertions.
+- On scaled `4.7`, host/root measured `769x706`, editing `459x632`, preview allocation `306x632`, preview image `306x278`, and Final output `306x106`.
+- On normal `4.6.2`, host/root measured `792x641`, editing `473x592`, preview allocation `316x592`, preview image `316x358`, and Final output `316x70`.
+- Tests retain active geometry checks for the two-column/tab transition, persisted dividers/sections, long content, and independent `20`-layer scrolling.
+- Orchestrator inspected `final4-4.6.2-ui_complete-initial.png`: all twelve recipe controls, Open stack, Create Empty Stack, No effect yet, and Final output are visible.
+- Orchestrator inspected the scaled `4.7` long-error screenshot: the error remains inside its scroll area above the visible preview and Final output.
+- Orchestrator inspected `scaled-final-4.4-picker-conversion.png`: the complete luminance conversion wraps into three lines, and the preview continues rendering beside the chooser.
+- Scaled settings use isolated evidence-directory `APPDATA`/`LOCALAPPDATA` paths. Test fixtures restore project layout metadata; normal editor settings are unchanged.
+
+### Independent phase 5 review
+
+- Verdict: `PASS`; no required fixes, fix-now notes, deferred notes, or documentation impact.
+- Reviewer independently ran the full normal matrix on `4.4`, `4.6.2`, and `4.7`; counts matched the final runtime table with zero failures.
+- Reviewer independently ran `ui_layout`, `ui_picker`, and `ui_complete` at `150%` on all three versions: `16/0`, `45/0`, and `34/0` respectively.
+- Reviewer independently ran the `4.6.2` initial `empty` and `open` variants: each passed `34/0`.
+- Reviewer inspected initial entry, native edits, error enclosure, and scaled conversion screenshots.
+- The reproduced `4.4.0` import diagnostic remains an external engine limitation; the review does not classify it as a clean import pass.
+- Independent normal logs use the `review5` prefix; entry variants use `review5-entry-empty` and `review5-entry-open`. Independent scaled runs refreshed the `scaled150` logs.
+- All reviewer-owned Godot processes exited. Orchestrator restored only the generated `project.godot` feature version to `4.4`.
+- User authorized the phase 5 commit on `2026-09-09`. The original release-tuning work remains separate.

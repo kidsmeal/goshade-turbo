@@ -18,6 +18,10 @@ func run(plugin: EditorPlugin) -> void:
 	panel.restore_layout_metadata_snapshot({"main_ratio": 0.6, "inner_ratio": 0.42, "narrow_tab": 0, "sections": {}})
 	await _frames(5)
 	var picker: GSTPicker = panel.get_picker()
+	panel.get_create_empty_button().pressed.emit()
+	await _frames(2)
+	picker.cancelled.emit()
+	await _frames(2)
 	var list: GSTStackList = panel.get_stack_list()
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
 	var output: GSTOutputBlock = panel.get_output_block()
@@ -85,7 +89,8 @@ func run(plugin: EditorPlugin) -> void:
 	inspector.get_warp_button("x").pressed.emit()
 	await _frames(2)
 	var warp_context: Dictionary = panel.get_picker_context()
-	DisplayServer.window_set_size(Vector2i(1920, 1080))
+	var editor_scale: float = EditorInterface.get_editor_scale()
+	DisplayServer.window_set_size(Vector2i(roundi(1920.0 * editor_scale), roundi(1080.0 * editor_scale)))
 	await _frames(7)
 	var wide_ok: bool = _inside(picker.get_global_rect(), panel.get_node("%EditingArea").get_global_rect()) and not panel.get_layout_measurements()["narrow"]
 	var tab_threshold: float = panel.get_layout_measurements()["tab_breakpoint"]

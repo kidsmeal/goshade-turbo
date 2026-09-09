@@ -30,8 +30,8 @@ extends VBoxContainer
 ## custom_context = the stack is guaranteed to land there); (3) that same
 ## version_changed signal, kept for undo/redo replay of a property edit,
 ## which sets the value straight through Object.set() and fires neither
-## property_edited nor Resource.changed; (4) layer selection while the solo
-## toggle is on; (5) a preset or preview-image change. A sixth path,
+## property_edited nor Resource.changed; (4) diagnostic preview changes;
+## (5) a preset or preview-image change. A sixth path,
 ## GSTPreview.target_rect_changed (an editor-window or splitter resize), does
 ## not run this full resync: it writes only gst_rect_size via
 ## GSTMaterialSync.write_rect_size, since it can fire once per frame during a
@@ -46,7 +46,15 @@ signal stack_changed
 @onready var _preview: GSTPreview = %Preview
 @onready var _preset_option: OptionButton = %PresetOption
 @onready var _image_button: Button = %ImageButton
-@onready var _solo_check: CheckButton = %SoloCheck
+@onready var _layer_menu: MenuButton = %LayerMenu
+@onready var _return_to_effect: Button = %ReturnToEffect
+@onready var _preview_heading: Label = %PreviewHeading
+@onready var _preview_status: Label = %PreviewStatus
+@onready var _error_scroll: ScrollContainer = %ErrorScroll
+@onready var _start_screen: VBoxContainer = %StartScreen
+@onready var _recipe_grid: GridContainer = %RecipeGrid
+@onready var _create_empty: Button = %CreateEmpty
+@onready var _start_open: Button = %StartOpen
 @onready var _coord_space_option: OptionButton = %CoordSpaceOption
 @onready var _save_button: Button = %SaveButton
 @onready var _export_button: Button = %ExportButton
@@ -95,7 +103,10 @@ var _undo: GSTUndo = null
 ## and _get_history()'s lookup both stay in the one shared bucket regardless
 ## of what was opened in between.
 var _history_context: Resource = Resource.new()
-var _material: ShaderMaterial = ShaderMaterial.new()
+var _preview_sync: GSTMaterialSync = GSTMaterialSync.new()
+var _material: ShaderMaterial = _preview_sync.get_material()
+var _preview_layer_id: StringName = &""
+var _start_recipe_buttons: Dictionary = {}
 var _watched_history: UndoRedo = null
 ## Guards _coord_space_option.select() calls made to reflect stack state from
 ## re-triggering _on_coord_space_selected (mirrors gst_output_block.gd's own
@@ -151,6 +162,8 @@ func _ready() -> void:
 	_main_split.resized.connect(_on_editing_area_resized)
 	_editing_split.dragged.connect(_on_inner_split_dragged)
 	_editing_area.resized.connect(_on_editing_area_resized)
+	_layer_pane.minimum_size_changed.connect(_on_editing_area_resized)
+	_settings_pane.minimum_size_changed.connect(_on_editing_area_resized)
 	resized.connect(_on_editing_area_resized)
 	_editing_tabs.tab_changed.connect(_on_editing_tab_changed)
 	_inspector_column.section_state_changed.connect(_on_section_state_changed)
@@ -190,7 +203,9 @@ func _ready() -> void:
 		_preset_option.add_item(preset_name)
 	_preset_option.item_selected.connect(_on_preset_selected)
 	_image_button.pressed.connect(_on_image_button_pressed)
-	_solo_check.toggled.connect(_on_solo_toggled)
+	_layer_menu.get_popup().add_item("Preview this layer", 0)
+	_layer_menu.get_popup().id_pressed.connect(_on_layer_menu_pressed)
+	_return_to_effect.pressed.connect(_on_return_to_effect_pressed)
 
 	for space_name: String in COORD_SPACE_NAMES:
 		_coord_space_option.add_item(space_name)
@@ -248,7 +263,52 @@ func _ready() -> void:
 	_overwrite_dialog = ConfirmationDialog.new()
 	_overwrite_dialog.confirmed.connect(_on_overwrite_confirmed)
 	add_child(_overwrite_dialog)
+	_build_start_screen()
 	_apply_default_layout.call_deferred()
+
+
+func _build_start_screen() -> void:
+	for recipe_name: String in _recipe_names():
+		var button: Button = Button.new()
+		button.text = recipe_name.replace("_", " ").capitalize()
+		button.tooltip_text = "Open %s as an editable stack." % button.text
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.custom_minimum_size.y = 48.0
+		button.clip_text = true
+		button.pressed.connect(open_recipe.bind(recipe_name))
+		_recipe_grid.add_child(button)
+		_start_recipe_buttons[recipe_name] = button
+	_create_empty.pressed.connect(_on_new_pressed)
+	_start_open.pressed.connect(_on_open_pressed)
+	_editing_content.hide()
+	_set_picker_modality(false)
+
+
+func _dismiss_start_screen() -> void:
+	_start_screen.hide()
+	_editing_content.show()
+	_set_picker_modality(is_picker_open())
+	update_responsive_layout.call_deferred()
+
+
+## Wired-by: none (editor smoke seam).
+func is_start_screen_visible() -> bool:
+	return _start_screen.visible
+
+
+## Wired-by: none (editor smoke seam).
+func get_start_recipe_button(recipe_name: String) -> Button:
+	return _start_recipe_buttons.get(recipe_name) as Button
+
+
+## Wired-by: none (editor smoke seam).
+func get_create_empty_button() -> Button:
+	return _create_empty
+
+
+## Wired-by: none (editor smoke seam).
+func get_start_open_button() -> Button:
+	return _start_open
 
 
 func set_editor_plugin(plugin: EditorPlugin) -> void:
@@ -275,13 +335,14 @@ func _on_editing_area_resized() -> void:
 func update_responsive_layout() -> void:
 	if _layer_pane == null or _settings_pane == null:
 		return
-	if not _narrow_layout:
-		_tab_breakpoint = _measure_tab_breakpoint()
+	_tab_breakpoint = _measure_tab_breakpoint()
 	var main_available: float = maxf(0.0, _main_split.size.x - float(_main_split.get_theme_constant("separation")))
 	var width: float = minf(_editing_area.size.x, main_available * _current_main_ratio())
 	var should_narrow: bool = width <= _tab_breakpoint + 0.5
 	if should_narrow == _narrow_layout:
 		return
+	# Reparenting emits tab_changed before both panes have been installed.
+	var preferred_tab: int = _preferred_narrow_tab
 	_narrow_layout = should_narrow
 	if _narrow_layout:
 		_layer_pane.reparent(_editing_tabs)
@@ -290,7 +351,7 @@ func update_responsive_layout() -> void:
 		_editing_tabs.show()
 		_editing_tabs.set_tab_title(0, "Layers")
 		_editing_tabs.set_tab_title(1, "Layer settings")
-		_editing_tabs.current_tab = _preferred_narrow_tab
+		_editing_tabs.current_tab = preferred_tab
 	else:
 		_layer_pane.reparent(_editing_split)
 		_settings_pane.reparent(_editing_split)
@@ -299,6 +360,7 @@ func update_responsive_layout() -> void:
 		_editing_tabs.hide()
 		_editing_split.show()
 		_apply_inner_ratio.call_deferred(_metadata_float("inner_ratio", DEFAULT_INNER_RATIO))
+	_preferred_narrow_tab = preferred_tab
 	_persist_metadata("narrow_tab", _preferred_narrow_tab)
 
 
@@ -517,9 +579,13 @@ func set_undo_redo_manager(undo_redo: EditorUndoRedoManager) -> void:
 ## with no action registered, by set_undo_redo_manager for the very first
 ## stack.
 func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
+	_preview_sync.reset_installation()
+	_material = _preview_sync.get_material()
+	_preview_layer_id = &""
 	_picker.set_refusal("")
 	_control_refusals.clear()
 	_message_label.text = ""
+	_message_label.hide()
 	_stack_list.clear_refusals()
 	_inspector_column.clear_refusals()
 	_output_block.clear_refusals()
@@ -569,6 +635,7 @@ func get_stack() -> GSTStack:
 func replace_stack(new_stack: GSTStack, new_path: String, new_recipe_open: bool) -> void:
 	if is_picker_open() and not _applying_choice:
 		return
+	_dismiss_start_screen()
 	var old_stack: GSTStack = _stack
 	var old_undo: GSTUndo = _undo
 	var old_path: String = _current_path
@@ -630,8 +697,28 @@ func get_shader_material() -> ShaderMaterial:
 
 
 ## Wired-by: none (editor smoke seam)
-func get_solo_check() -> CheckButton:
-	return _solo_check
+func get_layer_menu() -> MenuButton:
+	return _layer_menu
+
+
+## Wired-by: none (editor smoke seam).
+func get_return_to_effect_button() -> Button:
+	return _return_to_effect
+
+
+## Wired-by: none (editor smoke seam).
+func get_preview_layer_id() -> StringName:
+	return _preview_layer_id
+
+
+## Wired-by: none (editor smoke seam).
+func get_preview_status_label() -> Label:
+	return _preview_status
+
+
+## Wired-by: none (editor smoke seam).
+func get_codegen_message_label() -> Label:
+	return _codegen_message
 
 
 ## Wired-by: none (editor smoke seam)
@@ -683,6 +770,7 @@ func _on_new_pressed() -> void:
 		return
 	replace_stack(GSTStack.new(), "", false)
 	_message_label.text = ""
+	_on_chooser_requested("add", &"", "", _stack_list.get_node("%AddButton") as Control)
 
 
 func _on_file_menu_pressed(id: int) -> void:
@@ -864,8 +952,7 @@ func reopen_shader_path(path: String) -> void:
 
 func _on_layer_selected(layer_id: StringName) -> void:
 	_inspector_column.edit(layer_id)
-	if _solo_check.button_pressed:
-		_resync_material()
+	_update_layer_menu()
 
 
 func _on_refused(reason: String) -> void:
@@ -912,7 +999,18 @@ func _on_preview_image_selected(path: String) -> void:
 	_resync_material()
 
 
-func _on_solo_toggled(_pressed: bool) -> void:
+func _on_layer_menu_pressed(id: int) -> void:
+	if id != 0 or is_picker_open():
+		return
+	var selected: StringName = _stack_list.get_selected_layer_id()
+	if GSTStackOps.find_layer(_stack, selected) == null:
+		return
+	_preview_layer_id = selected
+	_resync_material()
+
+
+func _on_return_to_effect_pressed() -> void:
+	_preview_layer_id = &""
 	_resync_material()
 
 
@@ -994,21 +1092,36 @@ func _on_randomize_pressed() -> void:
 	if changes.is_empty():
 		return
 	var old_changes: Dictionary = {}
+	var unset_params: Dictionary = {}
 	for layer_id: Variant in changes.keys():
 		var layer: GSTLayer = GSTStackOps.find_layer(_stack, StringName(layer_id))
 		if layer == null:
 			continue
 		var layer_changes: Dictionary = changes[layer_id]
 		var old_layer_changes: Dictionary = {}
+		var unset_names: Array[String] = []
 		for param_name: Variant in layer_changes.keys():
 			old_layer_changes[param_name] = layer.get(StringName(param_name))
+			if not layer.params.has(String(param_name)):
+				unset_names.append(String(param_name))
 		old_changes[layer_id] = old_layer_changes
+		unset_params[layer_id] = unset_names
 	_undo_redo.create_action("GST: randomize sliders", UndoRedo.MERGE_DISABLE, _history_context)
 	_undo_redo.add_do_method(GSTRandomize, "apply", _stack, changes)
 	_undo_redo.add_do_method(self, "_refresh_inspector")
 	_undo_redo.add_undo_method(GSTRandomize, "apply", _stack, old_changes)
+	_undo_redo.add_undo_method(self, "_restore_unset_params", _stack, unset_params)
 	_undo_redo.add_undo_method(self, "_refresh_inspector")
 	_undo_redo.commit_action()
+
+
+## Explicit defaults change the serialized header even when values match.
+func _restore_unset_params(stack: GSTStack, unset_params: Dictionary) -> void:
+	for layer_id: Variant in unset_params:
+		var layer: GSTLayer = GSTStackOps.find_layer(stack, StringName(layer_id))
+		if layer != null:
+			for param_name: String in unset_params[layer_id]:
+				layer.params.erase(param_name)
 
 
 ## The shared EditorUndoRedoManager history for _stack (same one GSTUndo's
@@ -1047,18 +1160,34 @@ func _on_param_edited(_property: String) -> void:
 	_resync_material()
 
 
-## Solo (decision 13) previews the selected layer instead of the stack's own
-## output, without mutating the stack; the codegen error, if any, keeps the
-## last good material and shows in the message label (GSTMaterialSync never
-## touches the material on a failed sync).
+## Diagnostic preview captures a stable layer ID without changing output.
+## Recovery materials belong only to the current stack installation.
 func _resync_material() -> void:
 	if _stack == null or _library == null or _preview == null or _material == null:
 		return
-	var solo_id: StringName = _stack_list.get_selected_layer_id() if _solo_check.button_pressed else &""
+	var diagnostic_layer: GSTLayer = GSTStackOps.find_layer(_stack, _preview_layer_id)
+	if diagnostic_layer == null:
+		_preview_layer_id = &""
 	var rect_size: Vector2 = _preview.get_target_rect_size()
-	var result: GSTCodegenResult = GSTMaterialSync.sync(_stack, _library, _material, solo_id, rect_size)
+	var result: GSTCodegenResult = _preview_sync.sync_preview(_stack, _library, _preview_layer_id, rect_size)
+	_preview.set_shader_material(_material)
 	_codegen_message.text = result.error
 	_codegen_message.visible = not result.error.is_empty()
+	_error_scroll.visible = not result.error.is_empty()
+	_preview_status.text = "No effect yet" if _stack.layers.is_empty() else ""
+	if not result.ok() and _preview_sync.has_successful_preview():
+		_preview_status.text = "Showing last successful preview"
+	_preview_status.visible = not _preview_status.text.is_empty()
+	_preview_heading.text = "Preview"
+	if diagnostic_layer != null:
+		var entry: GSTManifestEntry = _library.get_entry(diagnostic_layer.entry)
+		_preview_heading.text = "Preview: %s (l%s)" % [entry.function if entry != null else diagnostic_layer.entry, String(_preview_layer_id)]
+	_return_to_effect.visible = diagnostic_layer != null
+	_update_layer_menu()
+
+
+func _update_layer_menu() -> void:
+	_layer_menu.disabled = is_picker_open() or _stack == null or GSTStackOps.find_layer(_stack, _stack_list.get_selected_layer_id()) == null
 
 
 func get_picker() -> GSTPicker:
@@ -1105,10 +1234,15 @@ func _on_chooser_requested(purpose: String, layer_id: StringName, slot_name: Str
 func _set_picker_modality(blocked: bool) -> void:
 	_stack_list.set_mutations_blocked(blocked)
 	_inspector_column.set_mutations_blocked(blocked)
-	_output_block.set_mutations_blocked(blocked)
+	_output_block.set_mutations_blocked(blocked or _start_screen.visible)
 	_coord_space_option.disabled = blocked
 	_recipes_button.disabled = blocked
 	_randomize_button.disabled = blocked or not _recipe_open
+	_create_empty.disabled = blocked
+	_start_open.disabled = blocked
+	for button: Button in _start_recipe_buttons.values():
+		button.disabled = blocked
+	_update_layer_menu()
 	var popup: PopupMenu = _file_menu.get_popup()
 	for id: int in [FILE_NEW, FILE_OPEN, FILE_REOPEN_SHADER]:
 		popup.set_item_disabled(popup.get_item_index(id), blocked)

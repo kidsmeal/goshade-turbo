@@ -22,7 +22,10 @@ var _fail_count: int = 0
 ## keeps running the phase 4 checks unchanged.
 func run(plugin: EditorPlugin) -> void:
 	var flag: String = OS.get_environment("GST_EDITOR_SMOKE")
-	if flag == "ui_picker":
+	if flag == "ui_complete":
+		var complete_smoke: RefCounted = load("res://tests/gst_editor_ui_complete_smoke.gd").new()
+		await complete_smoke.run(plugin)
+	elif flag == "ui_picker":
 		var picker_smoke: RefCounted = load("res://tests/gst_editor_ui_picker_smoke.gd").new()
 		await picker_smoke.run(plugin)
 	elif flag == "ui_layout":
@@ -60,6 +63,7 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	await plugin.get_tree().process_frame
 	_check("1", panel.visible, "panel.visible after set_main_screen_editor=%s" % [panel.visible])
+	await _dismiss_initial_start(plugin, panel)
 
 	var stack_list: GSTStackList = panel.get_stack_list()
 	var undo: GSTUndo = panel.get_undo()
@@ -156,6 +160,24 @@ func _get_history(stack: GSTStack) -> UndoRedo:
 	var undo_redo: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
 	var history_id: int = undo_redo.get_object_history_id(stack)
 	return undo_redo.get_history_undo_redo(history_id)
+
+
+func _dismiss_initial_start(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
+	var dismissed: bool = false
+	if panel.is_start_screen_visible():
+		panel.get_create_empty_button().pressed.emit()
+		dismissed = true
+		await plugin.get_tree().process_frame
+	await _cancel_picker(plugin, panel)
+	if dismissed and panel.get_watched_history().has_undo():
+		panel.get_watched_history().undo()
+		await plugin.get_tree().process_frame
+
+
+func _cancel_picker(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
+	if panel.is_picker_open():
+		panel.get_picker().cancelled.emit()
+	await plugin.get_tree().process_frame
 
 
 func _layer_ids(stack: GSTStack) -> Array[StringName]:
@@ -482,6 +504,7 @@ func _run_phase5(plugin: EditorPlugin) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	await plugin.get_tree().process_frame
 	_check("setup2", panel.visible, "panel.visible after set_main_screen_editor=%s" % [panel.visible])
+	await _dismiss_initial_start(plugin, panel)
 
 	var stack_list: GSTStackList = panel.get_stack_list()
 	var undo: GSTUndo = panel.get_undo()
@@ -492,7 +515,7 @@ func _run_phase5(plugin: EditorPlugin) -> void:
 
 	var checker: GSTLayer = await _run_phase5_checker_render(plugin, panel, stack_list, undo, preview)
 	await _run_phase5_preset_switch(plugin, panel)
-	await _run_phase5_solo_toggle(plugin, panel, stack_list, checker)
+	await _run_phase5_layer_preview(plugin, panel, stack_list, checker)
 	var tex_layer: GSTLayer = await _run_phase5_texture_source(plugin, panel, stack_list, undo, preview, checker)
 	await _run_phase5_screen_source(plugin, panel, stack_list, undo, preview, tex_layer)
 	await _run_phase5_coord_space(plugin, panel, stack_list, undo, history)
@@ -607,31 +630,31 @@ func _run_phase5_preset_switch(plugin: EditorPlugin, panel: GSTMainPanel) -> voi
 	_check("3b", full_nonuniform and sprite_nonuniform and still_same_instance, "full_rect_nonuniform=%s sprite_nonuniform=%s material_still_same=%s" % [full_nonuniform, sprite_nonuniform, still_same_instance])
 
 
-## Item 4: soloing the checker layer replaces the output line with its field
-## solo form without touching the stack (layer count, output_color,
-## output_alpha unchanged); toggling solo off restores the exact pre-solo
-## shader text.
-func _run_phase5_solo_toggle(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, checker: GSTLayer) -> void:
+## Item 4: the selected layer's secondary menu enters diagnostic preview
+## without changing stack output or undo history. Return restores the finished
+## effect and the exact pre-preview shader text.
+func _run_phase5_layer_preview(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, checker: GSTLayer) -> void:
 	var stack: GSTStack = panel.get_stack()
 	stack_list.select_layer(checker.id)
 	await plugin.get_tree().process_frame
 
-	var code_before_solo: String = panel.get_shader_material().shader.code
+	var code_before_preview: String = panel.get_shader_material().shader.code
 	var layers_before: int = stack.layers.size()
 	var output_color_before: StringName = stack.output_color
 	var output_alpha_before: StringName = stack.output_alpha
+	var history_count: int = panel.get_watched_history().get_history_count()
 
-	panel.get_solo_check().button_pressed = true
+	panel.get_layer_menu().get_popup().id_pressed.emit(0)
 	await plugin.get_tree().process_frame
-	var code_solo: String = panel.get_shader_material().shader.code
-	var has_solo_line: bool = code_solo.contains("COLOR = vec4(vec3(l%s), 1.0);" % String(checker.id))
+	var diagnostic_code: String = panel.get_shader_material().shader.code
 	var stack_unchanged: bool = stack.layers.size() == layers_before and stack.output_color == output_color_before and stack.output_alpha == output_alpha_before
-	_check("4a", has_solo_line and stack_unchanged, "solo on: has_solo_line=%s stack_unchanged=%s" % [has_solo_line, stack_unchanged])
+	var viewing_ok: bool = panel.get_preview_layer_id() == checker.id and panel.get_return_to_effect_button().visible
+	_check("4a", viewing_ok and stack_unchanged and panel.get_watched_history().get_history_count() == history_count and diagnostic_code.contains("COLOR = vec4(vec3(l%s), 1.0);" % String(checker.id)), "preview_id='%s' return_visible=%s stack_unchanged=%s" % [String(panel.get_preview_layer_id()), panel.get_return_to_effect_button().visible, stack_unchanged])
 
-	panel.get_solo_check().button_pressed = false
+	panel.get_return_to_effect_button().pressed.emit()
 	await plugin.get_tree().process_frame
 	var code_after: String = panel.get_shader_material().shader.code
-	_check("4b", code_after == code_before_solo, "solo off: code equals pre-solo code byte for byte=%s" % [code_after == code_before_solo])
+	_check("4b", panel.get_preview_layer_id() == &"" and not panel.get_return_to_effect_button().visible and code_after == code_before_preview, "returned_to_effect=%s code_restored=%s" % [panel.get_preview_layer_id() == &"", code_after == code_before_preview])
 
 
 ## Item 5: a lone source/texture layer renders the preview image itself;
@@ -877,6 +900,7 @@ func _run_phase6(plugin: EditorPlugin) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	await plugin.get_tree().process_frame
 	_check("setup2", panel.visible, "panel.visible after set_main_screen_editor=%s" % [panel.visible])
+	await _dismiss_initial_start(plugin, panel)
 
 	var stack_path: String = "res://sandbox/stacks/gst_editor_smoke_phase6.tres"
 	var export_path: String = "res://sandbox/exports/gst_editor_smoke_phase6.gdshader"
@@ -951,6 +975,7 @@ func _run_phase6_new(plugin: EditorPlugin, panel: GSTMainPanel, ids: Dictionary)
 
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
+	await _cancel_picker(plugin, panel)
 	var new_stack: GSTStack = panel.get_stack()
 	var history: UndoRedo = _get_history(new_stack)
 	var new_ok: bool = new_stack.layers.is_empty() and panel.get_current_path().is_empty() and not is_same(new_stack, old_stack)
@@ -1102,6 +1127,7 @@ func _run_phase7(plugin: EditorPlugin) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	await plugin.get_tree().process_frame
 	_check("setup2", panel.visible, "panel.visible after set_main_screen_editor=%s" % [panel.visible])
+	await _dismiss_initial_start(plugin, panel)
 
 	var library: GSTLibrary = panel.get_library()
 	# The shared "Remote History" bucket (docs/PLAN.md Cross-cutting
@@ -1167,6 +1193,7 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	await plugin.get_tree().process_frame
 	_check("setup2", panel.visible, "panel.visible after set_main_screen_editor=%s" % [panel.visible])
+	await _dismiss_initial_start(plugin, panel)
 
 	var library: GSTLibrary = panel.get_library()
 
@@ -1190,12 +1217,19 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
 	var gain_layer: GSTLayer = GSTStackOps.find_layer(panel.get_stack(), &"0")
 	stack_list.select_layer(&"0")
-	for i: int in range(2):
+	panel.set_narrow_tab(1)
+	for i: int in range(4):
 		await plugin.get_tree().process_frame
 	var pre_ep: EditorProperty = inspector.find_editor_property(&"gain", gain_layer)
+	var settings_scroll: ScrollContainer = inspector.get_settings_scroll()
+	if pre_ep != null:
+		settings_scroll.ensure_control_visible(pre_ep)
+		for i: int in range(2):
+			await plugin.get_tree().process_frame
 	var pre_displayed: float = _range_control_value(pre_ep)
 	var pre_layer_value: float = float(gain_layer.get("gain"))
-	_check("1b", pre_ep != null and absf(pre_displayed - pre_layer_value) < 0.01, "pre-randomize gain EditorProperty found=%s displayed=%s layer=%s" % [pre_ep != null, pre_displayed, pre_layer_value])
+	var pre_visible: bool = pre_ep != null and pre_ep.is_visible_in_tree() and pre_ep.get_global_rect().intersects(settings_scroll.get_global_rect())
+	_check("1b", pre_visible and absf(pre_displayed - pre_layer_value) < 0.01, "pre-randomize gain EditorProperty found=%s visible=%s displayed=%s layer=%s" % [pre_ep != null, pre_visible, pre_displayed, pre_layer_value])
 
 	# Fix pass 4, item 2: seed the handler's RNG so "3b" below asserts gain
 	# equals an exact expected value instead of only "differs from pre",
@@ -1237,9 +1271,10 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 	var post_ep: EditorProperty = inspector.find_editor_property(&"gain", gain_layer)
 	var post_displayed: float = _range_control_value(post_ep)
 	var post_layer_value: float = float(gain_layer.get("gain"))
-	var post_matches: bool = post_ep != null and absf(post_displayed - post_layer_value) < 0.01
+	var post_visible: bool = post_ep != null and post_ep.is_visible_in_tree() and post_ep.get_global_rect().intersects(settings_scroll.get_global_rect())
+	var post_matches: bool = post_visible and absf(post_displayed - post_layer_value) < 0.01
 	var post_matches_expected: bool = absf(post_displayed - expected_gain) < 0.01
-	_check("3b", post_matches and post_matches_expected, "post-randomize gain EditorProperty found=%s displayed=%s layer=%s expected(seed=%s)=%s matches_expected=%s" % [post_ep != null, post_displayed, post_layer_value, randomize_seed, expected_gain, post_matches_expected])
+	_check("3b", post_matches and post_matches_expected, "post-randomize gain EditorProperty found=%s visible=%s displayed=%s layer=%s expected(seed=%s)=%s matches_expected=%s" % [post_ep != null, post_visible, post_displayed, post_layer_value, randomize_seed, expected_gain, post_matches_expected])
 
 	var randomized_body: String = _codegen_body(panel.get_shader_material().shader.code)
 
@@ -1251,7 +1286,8 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 
 	var undo_ep: EditorProperty = inspector.find_editor_property(&"gain", gain_layer)
 	var undo_displayed: float = _range_control_value(undo_ep)
-	_check("4b", undo_ep != null and absf(undo_displayed - pre_layer_value) < 0.01, "undo gain EditorProperty found=%s displayed=%s expected=%s" % [undo_ep != null, undo_displayed, pre_layer_value])
+	var undo_visible: bool = undo_ep != null and undo_ep.is_visible_in_tree() and undo_ep.get_global_rect().intersects(settings_scroll.get_global_rect())
+	_check("4b", undo_visible and absf(undo_displayed - pre_layer_value) < 0.01, "undo gain EditorProperty found=%s visible=%s displayed=%s expected=%s" % [undo_ep != null, undo_visible, undo_displayed, pre_layer_value])
 
 	history.redo()
 	for i: int in range(2):
@@ -1261,11 +1297,13 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 
 	var redo_ep: EditorProperty = inspector.find_editor_property(&"gain", gain_layer)
 	var redo_displayed: float = _range_control_value(redo_ep)
-	_check("5b", redo_ep != null and absf(redo_displayed - post_layer_value) < 0.01, "redo gain EditorProperty found=%s displayed=%s expected=%s" % [redo_ep != null, redo_displayed, post_layer_value])
+	var redo_visible: bool = redo_ep != null and redo_ep.is_visible_in_tree() and redo_ep.get_global_rect().intersects(settings_scroll.get_global_rect())
+	_check("5b", redo_visible and absf(redo_displayed - post_layer_value) < 0.01, "redo gain EditorProperty found=%s visible=%s displayed=%s expected=%s" % [redo_ep != null, redo_visible, redo_displayed, post_layer_value])
 
 	panel._on_new_pressed()
 	for i: int in range(2):
 		await plugin.get_tree().process_frame
+	await _cancel_picker(plugin, panel)
 	_check("6", panel.get_randomize_button().disabled, "Randomize disabled after New: disabled=%s" % [panel.get_randomize_button().disabled])
 
 	# Recipe-open state is now part of the "Replace stack" action's own
@@ -1401,6 +1439,7 @@ func _value_in_range(param: Dictionary, value: Variant) -> bool:
 func _run_phase7_dissolve(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary) -> void:
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
+	await _cancel_picker(plugin, panel)
 	var undo: GSTUndo = panel.get_undo()
 
 	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
@@ -1458,6 +1497,7 @@ func _run_phase7_dissolve(plugin: EditorPlugin, panel: GSTMainPanel, history: Un
 func _run_phase7_sprite_holographic(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary) -> void:
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
+	await _cancel_picker(plugin, panel)
 	var undo: GSTUndo = panel.get_undo()
 
 	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
@@ -1493,6 +1533,7 @@ func _run_phase7_sprite_holographic(plugin: EditorPlugin, panel: GSTMainPanel, h
 func _run_phase7_outline(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary) -> void:
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
+	await _cancel_picker(plugin, panel)
 	var undo: GSTUndo = panel.get_undo()
 
 	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)

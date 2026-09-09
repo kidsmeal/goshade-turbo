@@ -15,7 +15,9 @@ func run(plugin: EditorPlugin) -> void:
 		return
 
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
-	panel._on_new_pressed()
+	panel.get_create_empty_button().pressed.emit()
+	await plugin.get_tree().process_frame
+	panel.get_picker().cancelled.emit()
 	for i: int in range(3):
 		await plugin.get_tree().process_frame
 	panel.set_narrow_tab(1)

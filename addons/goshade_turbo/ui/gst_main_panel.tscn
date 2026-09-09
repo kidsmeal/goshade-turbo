@@ -111,10 +111,20 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="SettingsHeading" type="Label" parent="MainSplit/EditingArea/EditingContent/EditingSplit/SettingsPane"]
+[node name="SettingsHeader" type="HBoxContainer" parent="MainSplit/EditingArea/EditingContent/EditingSplit/SettingsPane"]
 layout_mode = 2
+
+[node name="SettingsHeading" type="Label" parent="MainSplit/EditingArea/EditingContent/EditingSplit/SettingsPane/SettingsHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
 text = "Layer settings"
 theme_type_variation = &"HeaderSmall"
+
+[node name="LayerMenu" type="MenuButton" parent="MainSplit/EditingArea/EditingContent/EditingSplit/SettingsPane/SettingsHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Layer"
+disabled = true
 
 [node name="SettingsSeparator" type="HSeparator" parent="MainSplit/EditingArea/EditingContent/EditingSplit/SettingsPane"]
 layout_mode = 2
@@ -131,6 +141,55 @@ visible = false
 layout_mode = 2
 size_flags_vertical = 3
 
+[node name="StartScreen" type="VBoxContainer" parent="MainSplit/EditingArea"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StartHeading" type="Label" parent="MainSplit/EditingArea/StartScreen"]
+layout_mode = 2
+text = "Create an effect"
+theme_type_variation = &"HeaderSmall"
+
+[node name="StartInstructions" type="Label" parent="MainSplit/EditingArea/StartScreen"]
+layout_mode = 2
+text = "Choose a recipe, then select a layer to change its settings."
+autowrap_mode = 2
+
+[node name="RecipeSeparator" type="HSeparator" parent="MainSplit/EditingArea/StartScreen"]
+layout_mode = 2
+
+[node name="RecipesScroll" type="ScrollContainer" parent="MainSplit/EditingArea/StartScreen"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="RecipeGrid" type="GridContainer" parent="MainSplit/EditingArea/StartScreen/RecipesScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="StartSeparator" type="HSeparator" parent="MainSplit/EditingArea/StartScreen"]
+layout_mode = 2
+
+[node name="StartActions" type="HBoxContainer" parent="MainSplit/EditingArea/StartScreen"]
+layout_mode = 2
+
+[node name="StartOpen" type="Button" parent="MainSplit/EditingArea/StartScreen/StartActions"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Open stack..."
+
+[node name="CreateEmpty" type="Button" parent="MainSplit/EditingArea/StartScreen/StartActions"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Create Empty Stack"
+
 [node name="EmbeddedPicker" parent="MainSplit/EditingArea" instance=ExtResource("6")]
 unique_name_in_owner = true
 visible = false
@@ -143,8 +202,10 @@ size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.0
 
 [node name="PreviewHeading" type="Label" parent="MainSplit/PreviewArea"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Preview"
+autowrap_mode = 2
 theme_type_variation = &"HeaderSmall"
 
 [node name="PreviewSeparator" type="HSeparator" parent="MainSplit/PreviewArea"]
@@ -165,14 +226,29 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Image..."
 
-[node name="SoloCheck" type="CheckButton" parent="MainSplit/PreviewArea/PreviewControls"]
+[node name="ReturnToEffect" type="Button" parent="MainSplit/PreviewArea"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
-text = "Solo"
+text = "Return to finished effect"
 
-[node name="CodegenMessage" type="Label" parent="MainSplit/PreviewArea"]
+[node name="ErrorScroll" type="ScrollContainer" parent="MainSplit/PreviewArea"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="CodegenMessage" type="Label" parent="MainSplit/PreviewArea/ErrorScroll"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+autowrap_mode = 3
+
+[node name="PreviewStatus" type="Label" parent="MainSplit/PreviewArea"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "No effect yet"
 autowrap_mode = 2
 
 [node name="Preview" parent="MainSplit/PreviewArea" instance=ExtResource("5")]
@@ -194,6 +270,7 @@ layout_mode = 2
 
 [node name="MessageLabel" type="Label" parent="."]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 text = ""
 autowrap_mode = 2

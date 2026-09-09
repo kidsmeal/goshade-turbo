@@ -225,7 +225,7 @@ Shared scope is permission to maintain integration and verification, not a requi
 
 ## Phase 5: Entry flow, preview recovery, and complete editor verification
 
-**Status:** pending
+**Status:** committed (2026-09-09)
 
 **Goal:** Complete the first-session and diagnostic-preview flows and prove the approved editor end to end.
 
@@ -237,6 +237,7 @@ Shared scope is permission to maintain integration and verification, not a requi
 - `addons/goshade_turbo/ui/gst_preview.gd`, `addons/goshade_turbo/ui/gst_preview.tscn`, `addons/goshade_turbo/ui/gst_material_sync.gd`.
 - `tests/test_material_sync.gd`, `tests/test_solo_output.gd`.
 - `tests/gst_editor_ui_complete_smoke.gd` (new, dispatched by `ui_complete`).
+- `addons/goshade_turbo/ui/gst_picker.gd`: final scaled verification exposed conversion clipping; wrap the existing kind text to its measured column width.
 - `tests/gst_editor_ui_layout_smoke.gd`, `tests/gst_editor_ui_actions_smoke.gd`, `tests/gst_editor_ui_labels_smoke.gd`, `tests/gst_editor_ui_picker_smoke.gd` (final integration coverage).
 
 **Implementation:**

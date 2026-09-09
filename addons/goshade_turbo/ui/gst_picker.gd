@@ -167,10 +167,8 @@ func _populate() -> void:
 		var conversion: String = String(row.get("conversion", ""))
 		var kind_or_conversion: String = conversion if not conversion.is_empty() else kind
 		item.set_text(0, title)
-		item.set_text(1, _kind_column_text(kind, conversion, _tree.size.x < 600.0))
+		item.set_text(1, kind_or_conversion)
 		item.set_text(2, description)
-		if item.get_text(1).contains("\n"):
-			item.set_custom_minimum_height(int(36.0 * EditorInterface.get_editor_scale()))
 		item.set_tooltip_text(0, title)
 		item.set_tooltip_text(1, kind_or_conversion)
 		item.set_tooltip_text(2, description)
@@ -364,13 +362,24 @@ func _update_column_widths() -> void:
 	_tree.set_column_expand_ratio(0, 45 if narrow else 35)
 	_tree.set_column_expand_ratio(1, 30 if narrow else 25)
 	_tree.set_column_expand_ratio(2, 25 if narrow else 40)
-	_update_kind_column_rows(narrow)
+	_update_kind_column_rows()
 
 
-func _update_kind_column_rows(narrow: bool) -> void:
+func _update_kind_column_rows() -> void:
 	var root: TreeItem = _tree.get_root()
 	if root == null:
 		return
+	var font: Font = _tree.get_theme_font(&"font", &"Tree")
+	var font_size: int = _tree.get_theme_font_size(&"font_size", &"Tree")
+	var text_width: float = float(_tree.get_column_width(1))
+	text_width -= float(_tree.get_theme_constant(&"h_separation", &"Tree"))
+	text_width -= float(_tree.get_theme_constant(&"inner_item_margin_left", &"Tree"))
+	text_width -= float(_tree.get_theme_constant(&"inner_item_margin_right", &"Tree"))
+	text_width = maxf(1.0, text_width)
+	var row_vertical_padding: float = float(
+		_tree.get_theme_constant(&"inner_item_margin_top", &"Tree")
+		+ _tree.get_theme_constant(&"inner_item_margin_bottom", &"Tree")
+	)
 	for folder_item: TreeItem in root.get_children():
 		for item: TreeItem in folder_item.get_children():
 			var data: Variant = item.get_metadata(0)
@@ -379,17 +388,52 @@ func _update_kind_column_rows(narrow: bool) -> void:
 			var row: Dictionary = data as Dictionary
 			var kind: String = String(row.get("kind", ""))
 			var conversion: String = String(row.get("conversion", ""))
-			var text: String = _kind_column_text(kind, conversion, narrow)
+			var source_text: String = conversion if not conversion.is_empty() else kind
+			var text: String = _wrap_tree_text(source_text, text_width, font, font_size)
 			item.set_text(1, text)
-			item.set_custom_minimum_height(int(36.0 * EditorInterface.get_editor_scale()) if text.contains("\n") else 0)
+			var line_count: int = text.count("\n") + 1
+			var row_height: int = ceili(font.get_height(font_size) * line_count + row_vertical_padding)
+			item.set_custom_minimum_height(row_height if line_count > 1 else 0)
 
 
-func _kind_column_text(kind: String, conversion: String, narrow: bool) -> String:
-	if not conversion.is_empty():
-		return conversion.replace(": ", ":\n")
-	if narrow:
-		return kind.replace(") -> ", ")\n-> ")
-	return kind
+func _wrap_tree_text(source_text: String, maximum_width: float, font: Font, font_size: int) -> String:
+	var words: PackedStringArray = source_text.replace("\n", " ").split(" ", false)
+	var lines: Array[String] = []
+	var current_line: String = ""
+	for word: String in words:
+		var candidate: String = word if current_line.is_empty() else "%s %s" % [current_line, word]
+		if font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= maximum_width:
+			current_line = candidate
+			continue
+		if not current_line.is_empty():
+			lines.append(current_line)
+			current_line = ""
+		if font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= maximum_width:
+			current_line = word
+			continue
+		var pieces: Array[String] = _split_tree_word(word, maximum_width, font, font_size)
+		for index: int in range(pieces.size() - 1):
+			lines.append(pieces[index])
+		current_line = pieces[-1]
+	if not current_line.is_empty():
+		lines.append(current_line)
+	return "\n".join(lines)
+
+
+func _split_tree_word(word: String, maximum_width: float, font: Font, font_size: int) -> Array[String]:
+	var pieces: Array[String] = []
+	var current_piece: String = ""
+	for index: int in range(word.length()):
+		var character: String = word.substr(index, 1)
+		var candidate: String = current_piece + character
+		if not current_piece.is_empty() and font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > maximum_width:
+			pieces.append(current_piece)
+			current_piece = character
+		else:
+			current_piece = candidate
+	if not current_piece.is_empty():
+		pieces.append(current_piece)
+	return pieces
 
 
 func _apply_opaque_panel_style() -> void:

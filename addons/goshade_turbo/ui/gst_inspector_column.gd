@@ -62,6 +62,7 @@ func _ready() -> void:
 	_coord_inspector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_coord_inspector.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_coord_inspector.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_coord_inspector.property_edited.connect(_on_property_edited)
 	position_content.add_child(_coord_inspector)
 	_warp_box = VBoxContainer.new()
 	_warp_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -137,9 +138,8 @@ func edit(layer_id: StringName) -> void:
 	_rebuild_slots()
 
 
-## The engine emits Resource.changed on the GSTCoordBlock object its native
-## editor wrote, so coordinate edits use this relay independently of the
-## parameter inspector's property_edited signal.
+## Resource.changed remains a secondary relay for coordinate changes outside
+## the native EditorInspector.property_edited path.
 func _on_coord_changed() -> void:
 	param_edited.emit("coord")
 
@@ -163,11 +163,23 @@ func _update_inspector_layout(inspector: EditorInspector) -> void:
 		var font_size: int = property.get_theme_font_size(&"font_size", &"Tree")
 		var label_width: float = font.get_string_size(property.get_label(), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 		var split_ratio: float = maxf(0.05, property.get_name_split_ratio())
-		var padding: float = float(property.get_theme_constant(&"h_separation", &"Tree")) + 8.0 * scale
+		var editor_padding: float = 4.0 * scale
+		var font_offset: float = maxf(0.0, float(property.get_theme_constant(&"font_offset")))
+		var reload_icon: Texture2D = property.get_theme_icon(&"ReloadSmall", &"EditorIcons")
+		var base_spacing: float = float(EditorInterface.get_editor_settings().get_setting(&"interface/theme/base_spacing"))
+		var half_padding: float = floorf(floorf(base_spacing * scale) / 2.0)
+		var reload_allowance: float = reload_icon.get_width() + half_padding + float(property.get_theme_constant(&"h_separation", &"Tree"))
+		var padded_label_width: float = label_width + font_offset + reload_allowance
 		var child_minimum: float = property.get_combined_minimum_size().x
-		inspector_minimum = maxf(inspector_minimum, maxf(label_width / split_ratio, label_width + child_minimum + padding))
+		inspector_minimum = maxf(inspector_minimum, maxf(
+			(padded_label_width + editor_padding) / split_ratio,
+			padded_label_width + editor_padding + child_minimum,
+		))
 	inspector.set_meta(&"gst_measured_minimum_width", ceilf(inspector_minimum))
-	custom_minimum_size.x = maxf(float(_parameter_inspector.get_meta(&"gst_measured_minimum_width", 0.0)), float(_coord_inspector.get_meta(&"gst_measured_minimum_width", 0.0)))
+	var inspector_content_width: float = maxf(float(_parameter_inspector.get_meta(&"gst_measured_minimum_width", 0.0)), float(_coord_inspector.get_meta(&"gst_measured_minimum_width", 0.0)))
+	var scrollbar_width: float = _scroll.get_v_scroll_bar().get_combined_minimum_size().x
+	var scroll_panel_width: float = _scroll.get_theme_stylebox(&"panel").get_minimum_size().x
+	custom_minimum_size.x = inspector_content_width + scrollbar_width + scroll_panel_width
 
 
 func _rebuild_slots() -> void:

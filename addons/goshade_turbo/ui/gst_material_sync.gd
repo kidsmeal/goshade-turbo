@@ -19,6 +19,62 @@ extends RefCounted
 ## either no-op against a nonexistent uniform or, worse, silently succeed
 ## against a stale one left over from a previous compile.
 
+const SAFE_TRANSPARENT_SHADER_CODE: String = """shader_type canvas_item;
+
+void fragment() {
+	COLOR = vec4(0.0);
+}
+"""
+
+var _material: ShaderMaterial = null
+var _has_success: bool = false
+
+
+func _init() -> void:
+	reset_installation()
+
+
+## Starts one stack installation with a distinct transparent material. Main
+## calls this for every direct replacement and undo/redo replacement so a
+## later failure cannot expose another installation's successful preview.
+func reset_installation() -> void:
+	_material = ShaderMaterial.new()
+	_set_safe_transparent_shader()
+	_has_success = false
+
+
+func get_material() -> ShaderMaterial:
+	return _material
+
+
+func has_successful_preview() -> bool:
+	return _has_success
+
+
+## Synchronizes the active installation while retaining its last successful
+## material on failure. Empty stacks clear any prior effect and return a
+## non-error result with no generated code.
+func sync_preview(stack: GSTStack, library: GSTLibrary, solo_layer_id: StringName, rect_size: Vector2) -> GSTCodegenResult:
+	if stack == null:
+		var null_result: GSTCodegenResult = GSTCodegenResult.new()
+		null_result.error = "Cannot generate a preview without a stack."
+		return null_result
+	if stack.layers.is_empty():
+		_set_safe_transparent_shader()
+		_has_success = false
+		return GSTCodegenResult.new()
+
+	var result: GSTCodegenResult = sync(stack, library, _material, solo_layer_id, rect_size)
+	if result.ok() and not result.code.is_empty():
+		_has_success = true
+	return result
+
+
+func _set_safe_transparent_shader() -> void:
+	var shader: Shader = Shader.new()
+	shader.code = SAFE_TRANSPARENT_SHADER_CODE
+	_material.shader = shader
+
 
 ## Regenerates `material`'s shader from `stack` (solo variant when
 ## `solo_layer_id` is non-empty) and writes every uniform GSTUniformNames

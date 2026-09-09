@@ -10,7 +10,7 @@ Every item in Next/Later/Shipped/Non-goals carries a stable, generated `r-MMDD-N
 
 The intent the active thread is currently serving (usually one, sometimes none). NOW.md holds the actual step-by-step; this is just the roadmap's pointer at what is live - it echoes whichever item below is active (same id, no id of its own), or says nothing is in flight.
 
-- GoShade Turbo v0.1 (design locked, plan at `docs/PLAN.md`, phase 1 next) `r-0907-1`
+- GoShade Turbo v0.1 (implementation reviewed; user slider-tuning pass remains in `docs/DESIGN.md`) `r-0907-1`
 
 ## Next
 

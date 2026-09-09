@@ -16,6 +16,10 @@ func run(plugin: EditorPlugin) -> void:
 
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	await plugin.get_tree().process_frame
+	panel.get_create_empty_button().pressed.emit()
+	await plugin.get_tree().process_frame
+	panel.get_picker().cancelled.emit()
+	await plugin.get_tree().process_frame
 	var stack: GSTStack = panel.get_stack()
 	var stack_list: GSTStackList = panel.get_stack_list()
 	var undo: GSTUndo = panel.get_undo()
