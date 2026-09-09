@@ -64,7 +64,7 @@ func run(plugin: EditorPlugin) -> void:
 	var coord_expected: Dictionary = {
 		&"scale": ["Scale", "Multiplies coordinates before the function runs. Higher values repeat and shrink features."],
 		&"offset": ["Position", "Offsets coordinates in the selected coordinate space."],
-		&"rotation": ["Rotation", "Rotates coordinates around the center, in radians."],
+		&"rotation": ["Rotation", "Rotates coordinates around the coordinate origin, in radians."],
 		&"scroll": ["Movement speed", "Moves coordinates over time, in coordinate units per second."],
 		&"warp_strength": ["Distortion strength", "Scales the horizontal and vertical distortion inputs."],
 	}
@@ -87,6 +87,7 @@ func run(plugin: EditorPlugin) -> void:
 
 	await _check_native_param_edit(plugin, panel, inspector, layer, entry)
 	await _check_native_coord_edit(plugin, panel, inspector, layer)
+	await _check_inactive_controls(plugin, panel, inspector, layer)
 	var screenshot_path: String = OS.get_environment("GST_UI_SCREENSHOT_PATH")
 	if not screenshot_path.is_empty():
 		await _save_screenshot(plugin, screenshot_path, "screenshot_params")
@@ -132,6 +133,139 @@ func run(plugin: EditorPlugin) -> void:
 
 	inspector.set_section_states(saved_section_states)
 	_finish(plugin)
+
+
+func _check_inactive_controls(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, source: GSTLayer) -> void:
+	var warp: EditorProperty = inspector.find_coord_editor_property(&"warp_strength")
+	var saved_strength: float = source.coord.warp_strength
+	_check("unconnected_warp_inactive", warp != null and warp.is_read_only() and _context_contains(warp, "Connect Horizontal distortion"), "readonly=%s hint='%s'" % [warp.is_read_only() if warp != null else false, _context_text(warp)])
+	var octaves: EditorProperty = inspector.find_editor_property(&"octaves", source)
+	if octaves != null:
+		octaves.emit_changed(&"octaves", 1)
+	await _wait_context(plugin)
+	var gain: EditorProperty = inspector.find_editor_property(&"gain", source)
+	_check("single_octave_gain_inactive", int(source.get(&"octaves")) == 1 and gain != null and gain.is_read_only() and _context_contains(gain, "at least 2 Detail layers"), "octaves=%s readonly=%s hint='%s'" % [source.get(&"octaves"), gain.is_read_only() if gain != null else false, _context_text(gain)])
+	var screenshot_path: String = OS.get_environment("GST_UI_SCREENSHOT_PATH")
+	if not screenshot_path.is_empty() and gain != null:
+		inspector.get_settings_scroll().ensure_control_visible(gain)
+		await _save_screenshot(plugin, screenshot_path.get_basename() + "-inactive-gain.png", "screenshot_inactive_gain")
+	var history: UndoRedo = _history_for(source)
+	history.undo()
+	await _wait_context(plugin)
+	gain = inspector.find_editor_property(&"gain", source)
+	_check("gain_enable_undo", int(source.get(&"octaves")) > 1 and gain != null and not gain.is_read_only() and _context_text(gain).is_empty(), "octaves=%s readonly=%s" % [source.get(&"octaves"), gain.is_read_only() if gain != null else true])
+	history.redo()
+	await _wait_context(plugin)
+	gain = inspector.find_editor_property(&"gain", source)
+	_check("gain_disable_redo", int(source.get(&"octaves")) == 1 and gain != null and gain.is_read_only(), "octaves=%s readonly=%s" % [source.get(&"octaves"), gain.is_read_only() if gain != null else false])
+	history.undo()
+	await _wait_context(plugin)
+
+	var target: GSTLayer = panel.get_stack_list().add_layer_by_entry_id("generative/fbm")
+	panel.get_stack_list().select_layer(target.id)
+	await _wait_context(plugin)
+	var assigned: Dictionary = panel.get_undo().assign_warp(target.id, "x", source.id)
+	await _wait_context(plugin)
+	warp = inspector.find_coord_editor_property(&"warp_strength")
+	_check("connected_warp_enabled", assigned["ok"] and target.coord.warp_x == source.id and warp != null and not warp.is_read_only() and _context_text(warp).is_empty(), "assigned=%s readonly=%s" % [assigned["ok"], warp.is_read_only() if warp != null else true])
+	history = panel.get_watched_history()
+	history.undo()
+	await _wait_context(plugin)
+	warp = inspector.find_coord_editor_property(&"warp_strength")
+	_check("warp_inactive_undo", target.coord.warp_x == &"" and warp != null and warp.is_read_only() and _context_contains(warp, "Connect Horizontal distortion") and source.coord.warp_strength == saved_strength, "reference='%s' readonly=%s source_strength=%s" % [target.coord.warp_x, warp.is_read_only() if warp != null else false, source.coord.warp_strength])
+	history.redo()
+	await _wait_context(plugin)
+	warp = inspector.find_coord_editor_property(&"warp_strength")
+	_check("warp_enabled_redo", target.coord.warp_x == source.id and warp != null and not warp.is_read_only(), "reference='%s' readonly=%s" % [target.coord.warp_x, warp.is_read_only() if warp != null else true])
+
+	var stripes: GSTLayer = panel.get_stack_list().add_layer_by_entry_id("generative/stripes")
+	panel.get_stack_list().select_layer(stripes.id)
+	await _wait_context(plugin)
+	panel.get_undo().assign_warp(stripes.id, "y", source.id)
+	await _wait_context(plugin)
+	var position: EditorProperty = inspector.find_coord_editor_property(&"offset")
+	var movement: EditorProperty = inspector.find_coord_editor_property(&"scroll")
+	warp = inspector.find_coord_editor_property(&"warp_strength")
+	_check("one_axis_help", position != null and not position.is_read_only() and _context_contains(position, "Y Position has no effect") and movement != null and not movement.is_read_only() and _context_contains(movement, "Vertical distortion have no effect") and warp != null and warp.is_read_only(), "position='%s' movement='%s' warp_readonly=%s" % [_context_text(position), _context_text(movement), warp.is_read_only() if warp != null else false])
+	panel.get_undo().assign_warp(stripes.id, "x", source.id)
+	await _wait_context(plugin)
+	warp = inspector.find_coord_editor_property(&"warp_strength")
+	_check("one_axis_horizontal_enabled", warp != null and not warp.is_read_only() and _context_text(warp).is_empty(), "readonly=%s" % [warp.is_read_only() if warp != null else true])
+
+	var circle: GSTLayer = panel.get_stack_list().add_layer_by_entry_id("sdf/circle")
+	panel.get_stack_list().select_layer(circle.id)
+	await _wait_context(plugin)
+	var rotation: EditorProperty = inspector.find_coord_editor_property(&"rotation")
+	_check("circle_rotation_help", rotation != null and not rotation.is_read_only() and _context_contains(rotation, "Rotation has no effect") and rotation.tooltip_text.contains("coordinate origin"), "hint='%s' tooltip='%s'" % [_context_text(rotation), rotation.tooltip_text if rotation != null else ""])
+	position = inspector.find_coord_editor_property(&"offset")
+	if position != null:
+		position.emit_changed(&"offset", Vector2(0.2, 0.0))
+	await _wait_context(plugin)
+	rotation = inspector.find_coord_editor_property(&"rotation")
+	_check("circle_offset_removes_help", circle.coord.offset == Vector2(0.2, 0.0) and rotation != null and not rotation.is_read_only() and _context_text(rotation).is_empty(), "offset=%s hint='%s'" % [circle.coord.offset, _context_text(rotation)])
+	_history_for(circle.coord).undo()
+	await _wait_context(plugin)
+	rotation = inspector.find_coord_editor_property(&"rotation")
+	_check("circle_help_undo", circle.coord.offset == Vector2.ZERO and _context_contains(rotation, "Rotation has no effect"), "offset=%s hint='%s'" % [circle.coord.offset, _context_text(rotation)])
+	for entry_id: String in ["generative/radial_gradient", "sdf/ring"]:
+		var radial: GSTLayer = panel.get_stack_list().add_layer_by_entry_id(entry_id)
+		panel.get_stack_list().select_layer(radial.id)
+		await _wait_context(plugin)
+		rotation = inspector.find_coord_editor_property(&"rotation")
+		_check("%s_rotation_help" % entry_id.get_file(), rotation != null and not rotation.is_read_only() and _context_contains(rotation, "Rotation has no effect on this function"), "entry=%s hint='%s'" % [entry_id, _context_text(rotation)])
+		movement = inspector.find_coord_editor_property(&"scroll")
+		if movement != null:
+			movement.emit_changed(&"scroll", Vector2(0.1, 0.0))
+		await _wait_context(plugin)
+		rotation = inspector.find_coord_editor_property(&"rotation")
+		_check("%s_movement_removes_help" % entry_id.get_file(), radial.coord.scroll == Vector2(0.1, 0.0) and rotation != null and not rotation.is_read_only() and _context_text(rotation).is_empty(), "entry=%s movement=%s hint='%s'" % [entry_id, radial.coord.scroll, _context_text(rotation)])
+		_history_for(radial.coord).undo()
+		await _wait_context(plugin)
+		rotation = inspector.find_coord_editor_property(&"rotation")
+		_check("%s_help_undo" % entry_id.get_file(), radial.coord.scroll == Vector2.ZERO and _context_contains(rotation, "Rotation has no effect on this function"), "entry=%s movement=%s hint='%s'" % [entry_id, radial.coord.scroll, _context_text(rotation)])
+
+	var threshold: GSTLayer = panel.get_stack_list().add_layer_by_entry_id("fieldops/smoothstep")
+	panel.get_stack_list().select_layer(threshold.id)
+	await _wait_context(plugin)
+	var upper: EditorProperty = inspector.find_editor_property(&"edge1", threshold)
+	if upper != null:
+		upper.emit_changed(&"edge1", -0.1)
+	await _wait_context(plugin)
+	upper = inspector.find_editor_property(&"edge1", threshold)
+	_check("clamped_threshold_help", float(threshold.get(&"edge1")) < float(threshold.get(&"edge0")) and upper != null and not upper.is_read_only() and _context_contains(upper, "sharp threshold"), "lower=%s upper=%s hint='%s'" % [threshold.get(&"edge0"), threshold.get(&"edge1"), _context_text(upper)])
+	_history_for(threshold).undo()
+	await _wait_context(plugin)
+	upper = inspector.find_editor_property(&"edge1", threshold)
+	_check("threshold_help_undo", _context_text(upper).is_empty() and float(threshold.get(&"edge1")) > float(threshold.get(&"edge0")), "hint='%s'" % _context_text(upper))
+	panel.get_undo().set_output_alpha(threshold.id)
+	await _wait_context(plugin)
+	var lower: EditorProperty = inspector.find_editor_property(&"edge0", threshold)
+	_check("alpha_threshold_help", _context_contains(lower, "controls transparency"), "alpha='%s' hint='%s'" % [panel.get_stack().output_alpha, _context_text(lower)])
+	panel.get_watched_history().undo()
+	await _wait_context(plugin)
+	lower = inspector.find_editor_property(&"edge0", threshold)
+	_check("alpha_threshold_help_undo", _context_text(lower).is_empty(), "alpha='%s' hint='%s'" % [panel.get_stack().output_alpha, _context_text(lower)])
+	panel.get_stack_list().select_layer(source.id)
+	await _wait_context(plugin)
+
+
+func _wait_context(plugin: EditorPlugin) -> void:
+	for i: int in range(4):
+		await plugin.get_tree().process_frame
+
+
+func _context_text(property: EditorProperty) -> String:
+	if property == null:
+		return ""
+	var label: Label = property.get_meta(&"gst_context_label", null) as Label
+	return label.text if label != null and label.visible else ""
+
+
+func _context_contains(property: EditorProperty, fragment: String) -> bool:
+	if property == null:
+		return false
+	var label: Label = property.get_meta(&"gst_context_label", null) as Label
+	return label != null and label.visible and label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and label.text.contains(fragment)
 
 
 func _check_native_param_edit(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, layer: GSTLayer, entry: GSTManifestEntry) -> void:
@@ -227,20 +361,34 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	var initial_fields: Array[String] = _visible_line_edit_texts(picker)
 	var requested_hex: String = "3366cc"
 	var actual_hex_control: bool = false
+	var close_state: Dictionary = {"committed": false}
+	var commit_observer: Callable = func(path: StringName, _value: Variant, _field: StringName, changing: bool) -> void:
+		if path == &"a" and not changing:
+			close_state["committed"] = true
+	property.property_changed.connect(commit_observer)
 	if hex_edit != null:
 		hex_edit.grab_focus()
 		await plugin.get_tree().process_frame
 		actual_hex_control = hex_edit.has_focus() and hex_edit.is_visible_in_tree()
 		await _replace_line_edit(plugin, hex_edit, requested_hex)
 	popup.hide()
-	for i: int in range(4):
+	# Complete the popup's focus exit before invoking editor-level undo.
+	# Escape cancels this native picker and would discard the requested color.
+	if hex_edit != null:
+		hex_edit.release_focus()
+	color_button.grab_focus()
+	var close_deadline: int = Time.get_ticks_msec() + 2000
+	while Time.get_ticks_msec() < close_deadline and (not close_state["committed"] or popup.visible or not color_button.has_focus()):
 		await plugin.get_tree().process_frame
+	property.property_changed.disconnect(commit_observer)
+	var close_complete: bool = close_state["committed"] and not popup.visible and color_button.has_focus() and (hex_edit == null or not hex_edit.has_focus())
+	_check("palette_color_close", close_complete, "committed=%s popup=%s button_focus=%s hex_focus=%s" % [close_state["committed"], popup.visible, color_button.has_focus(), hex_edit.has_focus() if hex_edit != null else false])
 	var expected_color: Color = Color(0x33 / 255.0, 0x66 / 255.0, 0xcc / 255.0, 1.0)
 	var expected_raw: Vector3 = Vector3(expected_color.r, expected_color.g, expected_color.b)
 	var uniform_name: String = GSTUniformNames.param_uniform(palette.id, "palette", "a")
 	var uniform_value: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
 	var history: UndoRedo = _history_for(palette)
-	var edit_applied: bool = popup_ready and actual_hex_control and palette.params.get("a") is Vector3 and (palette.params.get("a") as Vector3).is_equal_approx(expected_raw) and palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(expected_color) and uniform_value is Vector3 and (uniform_value as Vector3).is_equal_approx(expected_raw) and history.has_undo()
+	var edit_applied: bool = close_complete and popup_ready and actual_hex_control and palette.params.get("a") is Vector3 and (palette.params.get("a") as Vector3).is_equal_approx(expected_raw) and palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(expected_color) and uniform_value is Vector3 and (uniform_value as Vector3).is_equal_approx(expected_raw) and history.has_undo()
 	_check("palette_color_edit", edit_applied, "popup=%s hex=%s initial_fields=%s raw=%s displayed=%s uniform=%s history=%s" % [popup_ready, actual_hex_control, initial_fields, palette.params.get("a"), color_button.color, uniform_value, history.has_undo()])
 	if not edit_applied:
 		return
@@ -249,6 +397,7 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	for i: int in range(3):
 		await plugin.get_tree().process_frame
 	var undo_button: ColorPickerButton = _find_color_button(inspector.find_editor_property(&"a", palette))
+	var undo_displayed: Color = undo_button.color if undo_button != null else Color.TRANSPARENT
 	var undo_raw: Variant = palette.params.get("a")
 	var undo_uniform: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
 	var undo_ok: bool = undo_button != null and undo_raw is Vector3 and undo_uniform is Vector3 and (undo_button.color as Color).is_equal_approx(Color(0.5, 0.5, 0.5, 1.0)) and (undo_raw as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5)) and (undo_uniform as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5))
@@ -259,7 +408,7 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	var redo_raw: Variant = palette.params.get("a")
 	var redo_uniform: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
 	var redo_ok: bool = redo_button != null and redo_raw is Vector3 and redo_uniform is Vector3 and (redo_button.color as Color).is_equal_approx(expected_color) and (redo_raw as Vector3).is_equal_approx(expected_raw) and (redo_uniform as Vector3).is_equal_approx(expected_raw)
-	_check("palette_color_undo_redo", undo_ok and redo_ok, "undo=%s/%s/%s redo=%s/%s/%s" % [undo_button.color if undo_button != null else Color.TRANSPARENT, undo_raw, undo_uniform, redo_button.color if redo_button != null else Color.TRANSPARENT, redo_raw, redo_uniform])
+	_check("palette_color_undo_redo", undo_ok and redo_ok, "undo=%s/%s/%s redo=%s/%s/%s" % [undo_displayed, undo_raw, undo_uniform, redo_button.color if redo_button != null else Color.TRANSPARENT, redo_raw, redo_uniform])
 
 	var raw_before_randomize: Dictionary = palette.params.duplicate(true)
 	var random_history: UndoRedo = panel.get_watched_history()

@@ -16,7 +16,7 @@ const EDITOR_METADATA: Dictionary = {
 	},
 	&"rotation": {
 		"label": "Rotation",
-		"description": "Rotates coordinates around the center, in radians.",
+		"description": "Rotates coordinates around the coordinate origin, in radians.",
 	},
 	&"scroll": {
 		"label": "Movement speed",

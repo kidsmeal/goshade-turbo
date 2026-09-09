@@ -2262,3 +2262,36 @@ User evidence: Fire preview contains sharp diagonal, parallelogram-shaped discon
 - The probe also checked `30` half-pixel scroll offsets at normal, `125%`, and `150%` editor scale without reproducing disappearing glyph pixels. Scaled runs used isolated settings.
 - Probe scripts and captures remain outside the repository in the evidence directory above, under `picker-*-probe.gd` and `row-*`. Temporary test instrumentation was removed.
 - Next reproduction: capture the affected row before closing the picker and record the preceding search, resize, or scroll action. Reopening clears the state needed for diagnosis.
+
+## Preview transparency, recipe motion, and control explanations (2026-09-09)
+
+- User authorized implementation and commits with "go on all". Release tuning remains the user's decision.
+- The original preview drew the selected image behind the effect, hiding transparent output. `GSTPreview` now captures that image for screen sampling, clears the target, and displays the result over an external checkerboard.
+- Review identified a second alpha multiplication by `SubViewportContainer`. The new parent-viewport test reproduced `64/64` incorrect samples with maximum channel error `0.2006` (`composite-red-4.6.2-render`). Premultiplied-alpha container blending fixes the error without changing generated shader text.
+- Composition checks cover output alpha `0`, `0.5`, and `1` on sprite, text, and full-rectangle presets; texture-source alpha `0`, `0.75`, and `1`; and the final checker composite.
+- Screen sampling is compared against a separate native `SubViewport`/`BackBufferCopy` scene. Compatibility retains source alpha; Forward+ returns alpha `1` even for transparent source images. Both preserve the fixture's RGB. The preview follows that measured engine behavior.
+- Foil and Opal previously became motionless at `30` and `120` seconds; gradient position and Opal radius also produced zero measured change (`motion-red2`). The replacement recipes animate bounded noise distortion, retaining existing layer IDs and palette/blend settings.
+- `tests/run_recipe_motion_checks.gd` checks fixed times `1`, `30`, and `120`, deterministic repeats, motion after `0.5` seconds, gradient position changes, and Opal radius changes. All images must also pass the nonblank/finite render checks.
+- At `120` seconds on Compatibility, mean RGB motion delta is `0.004430` for Foil and `0.002826` for Opal. Both exceed the `0.0005` regression threshold. This establishes motion, not user approval of appearance.
+- Native inspectors explain disconnected distortion, FBM gain with one octave, unused Y components, radial rotational symmetry, reversed threshold edges, and thresholds driving transparency. Whole inactive gain/strength controls become read-only without changing stored values.
+- Native checks verify explanations after construction, edits, and undo. Palette checks wait for the native popup commit and focus return before testing exact displayed/stored/material undo and redo values.
+
+| Check | Godot `4.4` | Godot `4.6.2` | Godot `4.7` |
+|---|---:|---:|---:|
+| Named unit methods | `145/0` | `145/0` | `145/0` |
+| Native labels and contextual controls | `42/0` | `42/0` | `42/0` |
+| Editor selector `5` | `18/0` | `18/0` | `18/0` |
+| `ui_complete` | `34/0` | `34/0` | `34/0` |
+| `ui_layout` | `16/0` | `16/0` | `16/0` |
+| Compatibility render checks | `78/0` | `78/0` | `78/0` |
+| Forward+ render checks | `78/0` | `78/0` | `78/0` |
+| Composition and noise checks, both renderers | `PASS` | `PASS` | `PASS` |
+| Fixed-time recipe checks, both renderers | `PASS` | `PASS` | `PASS` |
+
+- All recorded final commands exited `0` with empty stderr. Selector `5` now reads imported textures and tests rotation across the complete image instead of four checker corners.
+- Evidence remains in the `phase5-evidence` directory recorded above. Final logs use `polish-final`, `polish-labels-final`, `polish-render-final`, and `polish-forward-final` prefixes.
+- At verified `150%` scale on `4.7`, layout passed `16/0` and native labels passed `47/0`, including five screenshots (`polish-scaled150`). Inspected `polish-scaled-labels-inactive-gain.png`: the complete two-line explanation fits below Fine detail strength.
+- Regenerated reference images through production `GSTPreview` with `--write-screenshots`; `78` stack checks passed (`polish-captures-4.6.2-render`). Inspected the refreshed Opal and Dissolve images. Transparent pixels are retained in the PNGs; the checker belongs to the editor UI.
+- Existing user-saved stacks are unchanged. Load fresh Foil and Opal recipes to use the revised defaults.
+- Independent `4.6.2` runs passed `145` unit methods, `42` native-label checks, and Compatibility/Mobile rendering and recipe motion. Each renderer passed `78` stacks, composition, and noise continuity; stderr is empty (`review-polish-compat` and `review-polish-mobile` logs). Mobile's native screen copy also returns alpha `1` for transparent source images.
+- Independent review verdict: `PASS`, no remaining required fixes. Reviewer inspected the scaled explanation and refreshed images; owned engine processes exited. Restored generated project-version and Glow import-setting churn before committing.

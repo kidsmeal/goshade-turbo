@@ -10,11 +10,23 @@ id = &"0"
 entry = "source/texture"
 kind_out = 1
 
+[sub_resource type="Resource" id="Coord_motion_x"]
+script = ExtResource("2_1vcxb")
+scale = Vector2(3, 3)
+scroll = Vector2(0.12, 0.06)
+
+[sub_resource type="Resource" id="Layer_motion_x"]
+script = ExtResource("1_13q35")
+id = &"4"
+entry = "generative/snoise"
+coord = SubResource("Coord_motion_x")
+
 [sub_resource type="Resource" id="Resource_qml4x"]
 script = ExtResource("2_1vcxb")
 scale = Vector2(2, 2)
 rotation = 0.7853982
-scroll = Vector2(0.3, 0.15)
+warp_x = &"4"
+warp_strength = 0.35
 
 [sub_resource type="Resource" id="Resource_008q7"]
 script = ExtResource("1_13q35")
@@ -52,7 +64,7 @@ params = {
 
 [resource]
 script = ExtResource("3_yn2b4")
-layers = Array[ExtResource("1_13q35")]([SubResource("Resource_y3f1h"), SubResource("Resource_008q7"), SubResource("Resource_4q3tv"), SubResource("Resource_ec326")])
+layers = Array[ExtResource("1_13q35")]([SubResource("Resource_y3f1h"), SubResource("Layer_motion_x"), SubResource("Resource_008q7"), SubResource("Resource_4q3tv"), SubResource("Resource_ec326")])
 output_color = &"3"
 output_alpha = &"texture"
-next_id = 4
+next_id = 5

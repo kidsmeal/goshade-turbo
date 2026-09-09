@@ -9,17 +9,12 @@ extends Control
 ## expand_mode, BackBufferCopy.copy_mode) is set through its named GDScript
 ## constant instead of a hand-typed .tscn ordinal.
 ##
-## Tree: SubViewportContainer (stretch = true, fills this Control) ->
-## SubViewport (256x256 default, resized by the container to track the
-## column) -> Background (the preview image, no material) -> BackBufferCopy
-## -> the active preset's target node (GSTPreviewPresets), sharing the one
-## ShaderMaterial instance the caller sets via set_shader_material(). `screen`
-## layers read the background through hint_screen_texture (decision 10);
-## the BackBufferCopy (copy_mode = COPY_MODE_VIEWPORT) between Background and
-## the target node is included proactively (the plan anticipates it may be
-## required) and confirmed working in the phase 5 editor smoke's source/screen
-## check (docs/EDITOR_SMOKE.md); not proven strictly required via an A/B
-## removal test of this node specifically.
+## Tree: opaque checkerboard (outside the SubViewport, UI only), then a
+## transparent SubViewportContainer using premultiplied-alpha blending. Inside
+## the SubViewport: preview image, BackBufferCopy, a blend-disabled transparent
+## clear, then the active preset target. Screen-source shaders sample the saved
+## preview image while target transparency reveals the checkerboard without
+## putting it in pixel readback.
 
 ## Fires whenever the active target node's own rect size changes: an editor
 ## window resize, an HSplitContainer drag, or set_preset swapping the target
@@ -30,11 +25,32 @@ signal target_rect_changed(size: Vector2)
 
 const DEFAULT_SIZE: Vector2i = Vector2i(256, 256)
 const DEFAULT_IMAGE_PATH: String = "res://addons/goshade_turbo/assets/preview_default.png"
+const CHECKER_SHADER_CODE: String = """shader_type canvas_item;
+void fragment() {
+	vec2 cell = floor(FRAGCOORD.xy / 16.0);
+	float alternate = mod(cell.x + cell.y, 2.0);
+	COLOR = vec4(vec3(mix(0.30, 0.42, alternate)), 1.0);
+}
+"""
+const BACKGROUND_CAPTURE_SHADER_CODE: String = """shader_type canvas_item;
+render_mode blend_disabled;
+void fragment() {
+	COLOR = texture(TEXTURE, UV);
+}
+"""
+const TRANSPARENT_CLEAR_SHADER_CODE: String = """shader_type canvas_item;
+render_mode blend_disabled;
+void fragment() {
+	COLOR = vec4(0.0);
+}
+"""
 
+var _checkerboard: ColorRect = null
 var _viewport_container: SubViewportContainer = null
 var _viewport: SubViewport = null
 var _background: TextureRect = null
 var _back_buffer_copy: BackBufferCopy = null
+var _transparent_clear: ColorRect = null
 var _target_node: Control = null
 var _material: ShaderMaterial = null
 var _preset_name: String = GSTPreviewPresets.SPRITE
@@ -42,8 +58,21 @@ var _preview_image: Texture2D = null
 
 
 func _ready() -> void:
+	_checkerboard = ColorRect.new()
+	_checkerboard.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_checkerboard.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var checker_material: ShaderMaterial = ShaderMaterial.new()
+	checker_material.shader = Shader.new()
+	checker_material.shader.code = CHECKER_SHADER_CODE
+	_checkerboard.material = checker_material
+	add_child(_checkerboard)
+
 	_viewport_container = SubViewportContainer.new()
 	_viewport_container.stretch = true
+	_viewport_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var viewport_material: CanvasItemMaterial = CanvasItemMaterial.new()
+	viewport_material.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
+	_viewport_container.material = viewport_material
 	_viewport_container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_viewport_container)
 
@@ -57,11 +86,24 @@ func _ready() -> void:
 	_background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var background_material: ShaderMaterial = ShaderMaterial.new()
+	background_material.shader = Shader.new()
+	background_material.shader.code = BACKGROUND_CAPTURE_SHADER_CODE
+	_background.material = background_material
 	_viewport.add_child(_background)
 
 	_back_buffer_copy = BackBufferCopy.new()
 	_back_buffer_copy.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
 	_viewport.add_child(_back_buffer_copy)
+
+	_transparent_clear = ColorRect.new()
+	_transparent_clear.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_transparent_clear.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var clear_material: ShaderMaterial = ShaderMaterial.new()
+	clear_material.shader = Shader.new()
+	clear_material.shader.code = TRANSPARENT_CLEAR_SHADER_CODE
+	_transparent_clear.material = clear_material
+	_viewport.add_child(_transparent_clear)
 
 	_preview_image = load(DEFAULT_IMAGE_PATH) as Texture2D
 	_background.texture = _preview_image

@@ -17,11 +17,11 @@ Last touched: 2026-09-09
 
 ## Active thread (only one)
 
-**Palette Color center picker**
+**Recipe and preview fixes ready for user tuning**
 
 Next physical action:
 
-- [ ] Verified and reviewed PASS; awaiting commit authorization. Remaining rendering and release-tuning work is recorded in docs/EDITOR_SMOKE.md
+- [ ] Load fresh Foil and Opal recipes, verify the visible controls, and report any remaining unclear or inactive effect; release tuning remains pending user sign-off
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

@@ -88,6 +88,12 @@ The following are implementation decisions by Codex within the approved design. 
 
 31. Palette Color center picker (user decision, `2026-09-09`): retain the cosine palette formula and expose only `a`, labeled Color center, through Godot's native RGB color picker without alpha. Manifest metadata `editor: "color_rgb"` selects this presentation for a `vec3` parameter. `GSTLayer` converts between the editor's `Color` and the stored `Vector3` by copying RGB components without gamma conversion or clamping. The `b`, `c`, and `d` controls remain vector editors. Parameter keys, manifest types, shader uniforms, and saved stack values retain their existing forms. Beat: replacing the formula with directly chosen output colors or retaining XYZ fields for Color center.
 
+32. Transparency preview (Codex implementation decision, user authorized `2026-09-09`): draw a checkerboard outside the transparent preview viewport. Capture the selected image for screen-source sampling, then clear the viewport before drawing the shader result. Texture sampling preserves source alpha; screen sampling follows the renderer's native BackBufferCopy RGBA. Composite the resulting preview over the checker with premultiplied-alpha blending. Beat: drawing the original image behind the result, which obscures disappearing pixels.
+
+33. Conditional control explanations (Codex implementation decision, user authorized `2026-09-09`): retain native property editors and stored values. Make Distortion strength read-only when no effective distortion input is connected, and Fine detail strength read-only when Detail layers is `1`; show the reason directly below each control. Keep partially useful vector controls editable and explain inactive components. Explain rotational symmetry and threshold behavior without disabling those controls. Refresh explanations when native editors are constructed, parameters change, or undo/redo runs. Beat: leaving ineffective controls unexplained or hiding them entirely.
+
+34. Foil and Opal motion (Codex implementation decision, user authorized `2026-09-09`): animate bounded noise distortion of the existing gradients instead of scrolling the gradients beyond their useful range. Use independent horizontal and vertical fields for Opal. Preserve existing layer IDs, palette coefficients, and blend settings. Beat: gradient scrolling that produces a constant field after several seconds.
+
 ## Layout
 
 Proportional sketch. Pixel dimensions and the narrow-layout breakpoint require measurement in Godot.

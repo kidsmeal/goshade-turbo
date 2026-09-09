@@ -32,6 +32,7 @@ var _undo: GSTUndo = null
 var _layer: GSTLayer = null
 var _mutations_blocked: bool = false
 var _refusals: Dictionary = {}
+var _context_histories: Array[UndoRedo] = []
 
 
 func _ready() -> void:
@@ -123,6 +124,7 @@ func setup(stack: GSTStack, library: GSTLibrary, undo: GSTUndo) -> void:
 ## Points the inspector at layer_id's GSTLayer. An empty id clears the
 ## column (nothing selected).
 func edit(layer_id: StringName) -> void:
+	_unwatch_context_histories()
 	if _layer != null and _layer.coord != null and _layer.coord.changed.is_connected(_on_coord_changed):
 		_layer.coord.changed.disconnect(_on_coord_changed)
 	_layer = GSTStackOps.find_layer(_stack, layer_id)
@@ -135,17 +137,99 @@ func edit(layer_id: StringName) -> void:
 	_schedule_inspector_layout_update(_coord_inspector)
 	if _layer != null and _layer.coord != null:
 		_layer.coord.changed.connect(_on_coord_changed)
+	if _layer != null:
+		_watch_context_history(_layer)
+		if _layer.coord != null:
+			_watch_context_history(_layer.coord)
 	_rebuild_slots()
+	_schedule_context_update()
 
 
 ## Resource.changed remains a secondary relay for coordinate changes outside
 ## the native EditorInspector.property_edited path.
 func _on_coord_changed() -> void:
+	_schedule_context_update()
 	param_edited.emit("coord")
 
 
 func _on_property_edited(property: String) -> void:
+	_schedule_context_update()
 	param_edited.emit(property)
+
+
+func _exit_tree() -> void:
+	_unwatch_context_histories()
+
+
+func _watch_context_history(object: Object) -> void:
+	var manager: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
+	var history: UndoRedo = manager.get_history_undo_redo(manager.get_object_history_id(object))
+	if history != null and history not in _context_histories:
+		_context_histories.append(history)
+		history.version_changed.connect(_schedule_context_update)
+
+
+func _unwatch_context_histories() -> void:
+	for history: UndoRedo in _context_histories:
+		if history.version_changed.is_connected(_schedule_context_update):
+			history.version_changed.disconnect(_schedule_context_update)
+	_context_histories.clear()
+
+
+func _schedule_context_update() -> void:
+	if is_inside_tree() and not get_tree().process_frame.is_connected(_update_control_context):
+		get_tree().process_frame.connect(_update_control_context, CONNECT_ONE_SHOT)
+
+
+## Wired-by: GSTInspectorPlugin when a contextual row enters the inspector.
+func refresh_control_context() -> void:
+	_schedule_context_update()
+
+
+## These explanations depend on exact function inputs, not sampled pixels.
+## Read-only state belongs to native widgets and never changes the resource.
+func _update_control_context() -> void:
+	if _layer == null:
+		return
+	if _layer.entry == "generative/fbm":
+		var single_octave: bool = int(_layer.get(&"octaves")) == 1
+		_set_control_context(find_editor_property(&"gain", _layer), "Fine detail strength needs at least 2 Detail layers." if single_octave else "", single_octave)
+	if _layer.entry == "fieldops/smoothstep":
+		var clamped: bool = float(_layer.get(&"edge1")) <= float(_layer.get(&"edge0"))
+		_set_control_context(find_editor_property(&"edge1", _layer), "Upper edge is at or below Lower edge. The shader uses a sharp threshold at Lower edge." if clamped else "")
+		_set_control_context(find_editor_property(&"edge0", _layer), "This threshold controls transparency. Input values at or below Lower edge disappear." if _threshold_controls_alpha() else "")
+	if _layer.coord == null:
+		return
+	var coord: GSTCoordBlock = _layer.coord
+	var no_warp: bool = coord.warp_x == &"" and coord.warp_y == &""
+	var x_axis_only: bool = _layer.entry in ["generative/linear_gradient", "generative/stripes"]
+	var inactive_warp: bool = no_warp or (x_axis_only and coord.warp_x == &"")
+	var warp_hint: String = ""
+	if inactive_warp:
+		warp_hint = "Connect Horizontal distortion to use Distortion strength with this function." if x_axis_only else "Connect Horizontal distortion or Vertical distortion to use Distortion strength."
+	_set_control_context(find_coord_editor_property(&"warp_strength"), warp_hint, inactive_warp)
+	_set_control_context(find_coord_editor_property(&"offset"), "This function uses X Position. Y Position has no effect." if x_axis_only else "")
+	_set_control_context(find_coord_editor_property(&"scroll"), "This function uses X Movement speed. Y Movement speed and Vertical distortion have no effect." if x_axis_only else "")
+	var radial_function: bool = _layer.entry in ["sdf/circle", "sdf/ring", "generative/radial_gradient"]
+	var rotation_invariant: bool = radial_function and coord.offset == Vector2.ZERO and coord.scroll == Vector2.ZERO and no_warp
+	_set_control_context(find_coord_editor_property(&"rotation"), "Rotation has no effect on this function while Position and Movement speed are zero and distortion is disconnected." if rotation_invariant else "")
+
+
+func _threshold_controls_alpha() -> bool:
+	if _stack.output_alpha == _layer.id:
+		return true
+	var alpha: GSTLayer = GSTStackOps.find_layer(_stack, _stack.output_alpha)
+	return alpha != null and alpha.entry == "fieldops/multiply" and _layer.id in alpha.slots.values()
+
+
+func _set_control_context(property: EditorProperty, text: String, inactive: bool = false) -> void:
+	if property == null:
+		return
+	property.set_read_only(inactive)
+	var label: Label = property.get_meta(&"gst_context_label", null) as Label
+	if label != null:
+		label.text = text
+		label.visible = not text.is_empty()
 
 
 func _schedule_inspector_layout_update(inspector: EditorInspector) -> void:
@@ -375,6 +459,7 @@ func refresh() -> void:
 	_coord_inspector.edit(_layer.coord)
 	_schedule_inspector_layout_update(_parameter_inspector)
 	_schedule_inspector_layout_update(_coord_inspector)
+	_schedule_context_update()
 
 
 ## The object the underlying EditorInspector currently edits, so callers can

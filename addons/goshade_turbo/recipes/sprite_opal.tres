@@ -10,9 +10,35 @@ id = &"0"
 entry = "source/texture"
 kind_out = 1
 
+[sub_resource type="Resource" id="Coord_motion_x"]
+script = ExtResource("2_e63ot")
+scale = Vector2(2.5, 2.5)
+scroll = Vector2(0.1, 0.06)
+
+[sub_resource type="Resource" id="Layer_motion_x"]
+script = ExtResource("1_iew8x")
+id = &"4"
+entry = "generative/snoise"
+coord = SubResource("Coord_motion_x")
+
+[sub_resource type="Resource" id="Coord_motion_y"]
+script = ExtResource("2_e63ot")
+scale = Vector2(2.5, 2.5)
+offset = Vector2(5.2, 1.7)
+scroll = Vector2(-0.06, 0.1)
+
+[sub_resource type="Resource" id="Layer_motion_y"]
+script = ExtResource("1_iew8x")
+id = &"5"
+entry = "generative/snoise"
+coord = SubResource("Coord_motion_y")
+
 [sub_resource type="Resource" id="Resource_0227x"]
 script = ExtResource("2_e63ot")
-scroll = Vector2(0.15, 0.1)
+offset = Vector2(-0.5, -0.5)
+warp_x = &"4"
+warp_y = &"5"
+warp_strength = 0.25
 
 [sub_resource type="Resource" id="Resource_u7kjw"]
 script = ExtResource("1_iew8x")
@@ -50,7 +76,7 @@ params = {
 
 [resource]
 script = ExtResource("3_fg8s2")
-layers = Array[ExtResource("1_iew8x")]([SubResource("Resource_tgw56"), SubResource("Resource_u7kjw"), SubResource("Resource_4xyrc"), SubResource("Resource_uaa2i")])
+layers = Array[ExtResource("1_iew8x")]([SubResource("Resource_tgw56"), SubResource("Layer_motion_x"), SubResource("Layer_motion_y"), SubResource("Resource_u7kjw"), SubResource("Resource_4xyrc"), SubResource("Resource_uaa2i")])
 output_color = &"3"
 output_alpha = &"texture"
-next_id = 4
+next_id = 6

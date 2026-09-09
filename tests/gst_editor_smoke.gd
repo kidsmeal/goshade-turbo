@@ -561,7 +561,8 @@ func _run_phase5_checker_render(plugin: EditorPlugin, panel: GSTMainPanel, stack
 		await plugin.get_tree().process_frame
 	var img1: Image = preview.get_viewport_image()
 	var nonuniform: bool = img1 != null and not _image_is_uniform(img1)
-	_check("1", nonuniform, "checker layer renders non-uniform pixels after 3 frames (img_null=%s)" % [img1 == null])
+	var checker_outside_viewport: bool = preview.get_child_count() >= 2 and preview.get_child(0) is ColorRect and preview.get_child(1) is SubViewportContainer
+	_check("1", nonuniform and checker_outside_viewport, "checker layer nonuniform=%s UI checker outside viewport=%s img_null=%s" % [nonuniform, checker_outside_viewport, img1 == null])
 
 	var coord: GSTCoordBlock = checker.coord
 	var old_scale: Vector2 = coord.scale
@@ -683,12 +684,12 @@ func _run_phase5_texture_source(plugin: EditorPlugin, panel: GSTMainPanel, stack
 	var got: Color = Color.BLACK
 	var want: Color = Color.BLACK
 	if viewport_img != null:
-		var source_img: Image = Image.new()
-		source_img.load("res://addons/goshade_turbo/assets/preview_default.png")
+		var source_texture: Texture2D = load("res://addons/goshade_turbo/assets/preview_default.png") as Texture2D
+		var source_img: Image = source_texture.get_image()
 		got = viewport_img.get_pixel(viewport_img.get_width() / 2, viewport_img.get_height() / 2)
 		want = source_img.get_pixel(source_img.get_width() / 2, source_img.get_height() / 2)
 		close = _colors_close(got, want, 0.12)
-	_check("5", close, "texture source center pixel got=%s want=%s" % [got, want])
+	_check("5", close and absf(got.a - want.a) <= 0.02, "texture source center pixel got=%s want=%s alpha_delta=%.4f" % [got, want, absf(got.a - want.a)])
 	return tex_layer
 
 
@@ -708,12 +709,12 @@ func _run_phase5_screen_source(plugin: EditorPlugin, panel: GSTMainPanel, stack_
 	var got: Color = Color.BLACK
 	var want: Color = Color.BLACK
 	if viewport_img != null:
-		var source_img: Image = Image.new()
-		source_img.load("res://addons/goshade_turbo/assets/preview_default.png")
+		var source_texture: Texture2D = load("res://addons/goshade_turbo/assets/preview_default.png") as Texture2D
+		var source_img: Image = source_texture.get_image()
 		got = viewport_img.get_pixel(viewport_img.get_width() / 2, viewport_img.get_height() / 2)
 		want = source_img.get_pixel(source_img.get_width() / 2, source_img.get_height() / 2)
 		close = _colors_close(got, want, 0.12)
-	_check("6", close, "screen source center pixel got=%s want=%s" % [got, want])
+	_check("6", close and absf(got.a - want.a) <= 0.02, "screen source center pixel got=%s want=%s alpha_delta=%.4f" % [got, want, absf(got.a - want.a)])
 
 
 ## Item 7: switching the stack column's coord space to local through the
@@ -834,25 +835,22 @@ func _run_phase5_checker_grid_evidence(plugin: EditorPlugin, panel: GSTMainPanel
 	var matches_uv: bool = _colors_all_close(local_samples, uv_samples, 0.05)
 	_check("7d2", uv_nonuniform and matches_uv, "local corner samples=%s match uv corner samples=%s (tolerance 0.05)" % [local_samples, uv_samples])
 
-	# Negative control: bumping rotation under local only (the uv reference
-	# above stays captured at scale 1, rotation 0) proves the four-point
-	# comparison can actually fail, not pass regardless of input. Rotation
-	# rather than scale (docs/PLAN.md Phase 8: generative/checker.tres gained
-	# a "cells" int param, default 8, multiplying the coord inside the
-	# function): a scale bump alone can land back on a parity that
-	# coincidentally still matches the uv reference at these four exact
-	# corner points once cells multiplies the density (verified empirically:
-	# scale=(2,2) with cells=8 produced all four corners identical to the uv
-	# reference here). A rotation shears the cell grid instead of merely
-	# resampling it at a different density, so it reliably moves the corner
-	# samples off the reference's parity regardless of the cells value.
+	# Negative control: changing rotation under local must alter a substantial
+	# fraction of the rendered frame. Corner parity is an invalid oracle for a
+	# checker because a rotated grid can still produce the same four values.
+	var local_unrotated_image: Image = preview.get_viewport_image()
 	_set_coord_property(grid.coord, stack, &"rotation", 0.4)
-	for i: int in range(2):
+	var local_rotated_image: Image = null
+	var changed_fraction: float = 0.0
+	for i: int in range(8):
 		await plugin.get_tree().process_frame
+		local_rotated_image = preview.get_viewport_image()
+		changed_fraction = _image_changed_fraction(local_unrotated_image, local_rotated_image, 0.05)
+		if changed_fraction >= 0.1:
+			break
 
-	var local_rotated_samples: Array[Color] = _sample_points(preview.get_viewport_image(), fracs)
-	var differs_from_uv: bool = not _colors_all_close(local_rotated_samples, uv_samples, 0.05)
-	_check("7d3", differs_from_uv, "local rotation=0.4 corner samples=%s vs uv reference=%s (expect at least one differs)" % [local_rotated_samples, uv_samples])
+	var same_frame_size: bool = local_unrotated_image != null and local_rotated_image != null and local_unrotated_image.get_size() == local_rotated_image.get_size()
+	_check("7d3", same_frame_size and changed_fraction >= 0.1, "local rotation=0.4 same_frame_size=%s changed_fraction=%.4f (expect >=0.1)" % [same_frame_size, changed_fraction])
 
 
 ## Item 8: mutating the stack directly through GSTStackOps (bypassing
@@ -1786,6 +1784,18 @@ func _images_equal(a: Image, b: Image) -> bool:
 			if not a.get_pixel(x, y).is_equal_approx(b.get_pixel(x, y)):
 				return false
 	return true
+
+
+func _image_changed_fraction(a: Image, b: Image, tolerance: float) -> float:
+	if a == null or b == null or a.get_size() != b.get_size() or a.get_width() == 0 or a.get_height() == 0:
+		return 0.0
+	var changed: int = 0
+	var total: int = a.get_width() * a.get_height()
+	for y: int in range(a.get_height()):
+		for x: int in range(a.get_width()):
+			if not _colors_close(a.get_pixel(x, y), b.get_pixel(x, y), tolerance):
+				changed += 1
+	return float(changed) / float(total)
 
 
 func _colors_close(a: Color, b: Color, tolerance: float) -> bool:

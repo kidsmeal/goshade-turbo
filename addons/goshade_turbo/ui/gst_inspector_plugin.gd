@@ -34,6 +34,25 @@ func _parse_property(object: Object, type: Variant.Type, name: String, hint_type
 		return false
 	var description: String = String(metadata["description"])
 	add_property_editor(name, editor, false, String(metadata["label"]))
+	if (object is GSTCoordBlock and name in ["warp_strength", "offset", "scroll", "rotation"]) or (object is GSTLayer and name in ["gain", "edge0", "edge1"]):
+		var context: Label = Label.new()
+		context.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		context.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		context.hide()
+		context.tree_entered.connect(_on_context_entered.bind(context))
+		editor.set_meta(&"gst_context_label", context)
+		add_custom_control(context)
 	# EditorInspector assigns its default property tooltip after parsing.
 	editor.call_deferred("set_tooltip_text", description)
 	return true
+
+
+## Inspector parsing can finish after the column's selection callback.
+## Refresh after each actual row enters the inspector, including rebuilds.
+func _on_context_entered(label: Label) -> void:
+	var parent: Node = label.get_parent()
+	while parent != null:
+		if parent is GSTInspectorColumn:
+			(parent as GSTInspectorColumn).refresh_control_context()
+			return
+		parent = parent.get_parent()

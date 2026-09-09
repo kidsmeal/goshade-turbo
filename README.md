@@ -98,6 +98,13 @@ Add `-- --write-screenshots` to also save every checked stack's rendered
 godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd -- --write-screenshots
 ```
 
+Foil and Opal motion and control response at fixed times (`1`, `30`, and
+`120` seconds):
+
+```
+godot --path . --rendering-driver opengl3 -s res://tests/run_recipe_motion_checks.gd
+```
+
 `godot` above is whatever command resolves to a Godot 4.4+ binary on your
 system.
 
