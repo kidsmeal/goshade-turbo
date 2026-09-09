@@ -128,3 +128,87 @@ func test_editor_metadata_does_not_enter_saved_resources() -> void:
 	if loaded["ok"]:
 		assert_true(_compare_stacks(stack, loaded["stack"]).is_empty(), "hidden storage fields and original parameter keys survive save/load")
 	DirAccess.remove_absolute(path)
+
+
+func test_palette_color_center_uses_color_editor_without_changing_vec3_schema() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var entry: GSTManifestEntry = lib.get_entry("color/palette")
+	var stack: GSTStack = GSTStack.new()
+	var palette: GSTLayer = GSTStackOps.add_layer(stack, "color/palette", GSTLayer.Kind.COLOR, false)
+	palette.manifest = entry
+	var a_schema: Dictionary = {}
+	for param: Dictionary in entry.params:
+		if String(param.get("name", "")) == "a":
+			a_schema = param
+	var property_info: Dictionary = {}
+	var vector_properties: Array[String] = []
+	for property: Dictionary in palette.get_property_list():
+		var property_name: String = String(property.get("name", ""))
+		if property_name == "a":
+			property_info = property
+		elif int(property.get("type", -1)) == TYPE_VECTOR3:
+			vector_properties.append(property_name)
+	vector_properties.sort()
+	assert_eq(String(a_schema.get("type", "")), "vec3", "palette a retains its vec3 shader/storage schema")
+	assert_eq(String(a_schema.get("editor", "")), "color_rgb", "palette a opts into the RGB color editor")
+	assert_eq(int(property_info.get("type", -1)), TYPE_COLOR, "palette a exposes a Color dynamic editor property")
+	assert_eq(int(property_info.get("hint", -1)), PROPERTY_HINT_COLOR_NO_ALPHA, "palette a color editor has no alpha channel")
+	assert_eq(vector_properties, ["b", "c", "d"], "palette b/c/d remain Vector3 editor properties")
+
+
+func test_palette_color_center_access_preserves_rgb_and_ignores_alpha() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var palette: GSTLayer = GSTStackOps.add_layer(GSTStack.new(), "color/palette", GSTLayer.Kind.COLOR, false)
+	palette.manifest = lib.get_entry(palette.entry)
+	var default_value: Variant = palette.get(&"a")
+	assert_true(default_value is Color, "palette a reads its raw vec3 default through a Color editor value")
+	assert_eq(default_value, Color(0.5, 0.5, 0.5, 1.0), "palette a default preserves RGB and supplies opaque editor alpha")
+	var raw_value: Vector3 = Vector3(-0.25, 1.75, 3.5)
+	palette.set(&"a", raw_value)
+	assert_eq(palette.params.get("a"), raw_value, "a direct Vector3 write remains accepted and raw")
+	assert_eq(palette.get(&"a"), Color(raw_value.x, raw_value.y, raw_value.z, 1.0), "negative and HDR Vector3 components survive the Color read adapter")
+	var editor_value: Color = Color(-0.5, 2.25, 4.0, 0.125)
+	palette.set(&"a", editor_value)
+	assert_true(palette.params.get("a") is Vector3, "a Color editor write is normalized to Vector3 backing storage")
+	assert_eq(palette.params.get("a"), Vector3(editor_value.r, editor_value.g, editor_value.b), "Color alpha is ignored while negative and HDR RGB are preserved")
+	assert_eq(palette.get(&"a"), Color(editor_value.r, editor_value.g, editor_value.b, 1.0), "the adapted read remains opaque without clamping RGB")
+
+
+func test_palette_color_center_reads_do_not_mutate_and_color_writes_round_trip_as_vec3() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var source: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	source.manifest = lib.get_entry(source.entry)
+	var palette: GSTLayer = GSTStackOps.add_layer(stack, "color/palette", GSTLayer.Kind.COLOR, false)
+	palette.manifest = lib.get_entry(palette.entry)
+	GSTStackOps.assign_slot(stack, palette.id, "t", source.id, lib)
+	var raw_before: Dictionary = palette.params.duplicate(true)
+	var header_before: String = GSTHeader.header_line(stack)
+	var shader_before: String = GSTCodegen.generate(stack, lib)
+	var unused_editor_read: Variant = palette.get(&"a")
+	assert_true(unused_editor_read is Color, "palette a can be read through the editor adapter")
+	assert_eq(palette.params, raw_before, "reading palette a does not insert or rewrite a raw param key")
+	assert_eq(GSTHeader.header_line(stack), header_before, "reading palette a leaves the serialized header byte-identical")
+	assert_eq(GSTCodegen.generate(stack, lib), shader_before, "reading palette a leaves generated shader text byte-identical")
+
+	var written: Color = Color(1.4, -0.2, 0.625, 0.05)
+	palette.set(&"a", written)
+	var expected_raw: Vector3 = Vector3(written.r, written.g, written.b)
+	var path: String = "user://gst_test_palette_color_center_roundtrip.tres"
+	var saved: Dictionary = GSTStackIO.save(stack, path)
+	assert_true(saved["ok"], "palette color-center stack saves: %s" % saved["reason"])
+	var loaded_result: Dictionary = GSTStackIO.load(path, lib)
+	assert_true(loaded_result["ok"], "palette color-center stack reloads: %s" % loaded_result["reason"])
+	if loaded_result["ok"]:
+		var loaded_palette: GSTLayer = (loaded_result["stack"] as GSTStack).layers[1]
+		assert_true(loaded_palette.params.get("a") is Vector3, "saved palette a reloads as Vector3 backing storage")
+		assert_eq(loaded_palette.params.get("a"), expected_raw, "saved palette a preserves the written RGB vector")
+		assert_eq(loaded_palette.get(&"a"), Color(expected_raw.x, expected_raw.y, expected_raw.z, 1.0), "reloaded palette a exposes the matching opaque Color")
+	var header_result: Dictionary = GSTHeader.parse(GSTHeader.header_line(stack), lib)
+	assert_true(header_result["ok"], "palette color-center shader header parses")
+	if header_result["ok"]:
+		var header_palette: GSTLayer = (header_result["stack"] as GSTStack).layers[1]
+		assert_true(header_palette.params.get("a") is Vector3, "shader header keeps palette a as a three-component vector")
+		assert_eq(header_palette.params.get("a"), expected_raw, "shader header preserves the written palette RGB vector")
+	assert_true(GSTCodegen.generate(stack, lib).contains("uniform vec3 l%s_palette_a" % String(palette.id)), "palette a remains a vec3 shader uniform after a Color editor write")
+	DirAccess.remove_absolute(path)

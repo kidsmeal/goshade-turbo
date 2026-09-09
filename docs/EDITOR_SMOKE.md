@@ -2236,3 +2236,29 @@ User evidence: Fire preview contains sharp diagonal, parallelogram-shaped discon
 - Independent quick-fix review: `PASS`, no required fixes, fix-now notes, deferred notes, or documentation impact.
 - Reviewer independently passed `142` unit methods and both Forward+/Compatibility render runs on `4.6.2`: `78` stacks plus continuity at `0.039216`, range `0.701961`; exits `0`, empty stderr.
 - Reviewer-owned engine processes exited. The user's existing editor was left running. User authorized commit and push on `2026-09-09`.
+
+## Palette Color center picker (2026-09-09)
+
+- User decision: retain the cosine formula and replace only Color center (`a`) with a native RGB color picker. Alpha is hidden; `b`, `c`, and `d` remain vector editors.
+- `GSTLayer` copies RGB components between the editor's `Color` and raw `Vector3` storage. Manifest types, uniform names, and the palette formula remain unchanged.
+- `tests/test_stack_io.gd` verifies negative/HDR RGB, ignored alpha, direct Vector3 writes, unchanged header/shader text after reads, and Vector3 `.tres`/header round trips.
+- Red baseline: `145` unit methods with `9` failures plus type errors before the adapter; green `4.6.2` run: `145/0`, exit `0`, empty stderr.
+- `ui_labels` focuses the native swatch, presses Space, types `3366cc` into the actual hex input, and checks raw storage, displayed color, and material uniform through edit/undo/redo. It also checks Randomize undo and save/reopen.
+- Independent review found the legacy Randomize range test reading editor values. It now checks raw stored values against the manifest schema.
+- `4.6.2` regression checks: selector `4` passes `50/0`, selector `8` passes `16/0`, and `ui_complete` passes `34/0`; exits `0`, empty stderr.
+- Compatibility rendering on `4.6.2`: all `78` stacks and noise continuity pass; maximum adjacent difference `0.039216`, range `0.701961`, exit `0`, empty stderr.
+- Evidence directory: `C:/Users/atk67/.codex/visualizations/2026/09/09/01a083c7-014d-7361-ae67-8eddff9c46f1/phase5-evidence`; logs use `palette-` prefixes.
+- Inspected `palette-4.6.2-palette-popup.png`: color wheel, RGB controls, and hex input visible; alpha absent. Swatch screenshot shows Color center beside the unchanged vector controls.
+- Native-popup texture readback fails on `4.4`; the smoke test retains root-window screenshots and verifies the popup through visible controls and input events.
+- Final `4.4` and `4.7` runs each pass `145/0` unit methods, `23/0` native-label checks including four screenshots, and `16/0` Randomize checks; all exit `0` with empty stderr (`palette-final3-<version>` logs).
+- Independent quick review: `PASS`, no remaining findings. Reviewer independently passed `145/0` unit methods and `19/0` native-label assertions on final `4.6.2` code, exit `0`, empty stderr. Reviewer-owned engines exited; the user's editor was left running.
+
+## Intermittent picker text slicing (2026-09-09, unresolved)
+
+- User reported horizontally sliced letters in a library row. Moving the pointer away did not clear it; closing and reopening the picker cleared it in the user's session.
+- The exact trigger and cause remain unverified. No production layout or font changes were applied.
+- Fresh-editor checks on `4.4` with Forward+ and Compatibility, plus `4.6.2` Compatibility, did not reproduce the slicing. Existing picker smoke checks passed `45/0`.
+- A temporary pixel probe on `4.4` Forward+ compared normal and hovered text for `21` rows at `1920x1080`; no measured foreground pixels disappeared.
+- The probe also checked `30` half-pixel scroll offsets at normal, `125%`, and `150%` editor scale without reproducing disappearing glyph pixels. Scaled runs used isolated settings.
+- Probe scripts and captures remain outside the repository in the evidence directory above, under `picker-*-probe.gd` and `row-*`. Temporary test instrumentation was removed.
+- Next reproduction: capture the affected row before closing the picker and record the preceding search, resize, or scroll action. Reopening clears the state needed for diagnosis.

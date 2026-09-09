@@ -21,8 +21,9 @@ params = Array[Dictionary]([{
 "default": Vector3(0.5, 0.5, 0.5),
 "name": "a",
 "type": "vec3",
+"editor": "color_rgb",
 "label": "Color center",
-"description": "The central red, green, and blue values around which the palette varies. X is red, Y is green, Z is blue."
+"description": "Choose the central RGB color around which the palette varies. The other palette controls determine the resulting colors."
 }, {
 "default": Vector3(0.5, 0.5, 0.5),
 "name": "b",

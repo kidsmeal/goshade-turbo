@@ -187,6 +187,13 @@ func _layer_ids(stack: GSTStack) -> Array[StringName]:
 	return ids
 
 
+func _property_info(object: Object, property_name: StringName) -> Dictionary:
+	for property: Dictionary in object.get_property_list():
+		if StringName(property.get("name", &"")) == property_name:
+			return property
+	return {}
+
+
 ## Output block defaults (decision 12, docs/PLAN.md Phase 4 amendment): with
 ## no color layer in the stack, the color button names the empty automatic
 ## result; with no source/texture layer, Transparency names automatic opaque.
@@ -197,12 +204,10 @@ func _check_output_defaults(item: String, panel: GSTMainPanel, context: String) 
 	_check(item, ok, "%s: color='%s' transparency='%s'" % [context, color_text, alpha_text])
 
 
-## color/palette (fix pass 2, item 1): a real shipped manifest whose a, b, c,
-## d params are declared "vec3", not scalar approximations. GSTLayer must map
-## "vec3" to TYPE_VECTOR3 in its dynamic property list so the inspector
-## column shows four Vector3 fields, not four bare floats, against the real
-## on-disk manifest rather than a synthetic fixture. Self-canceling like the
-## excursion below: undone here, before any other real action commits.
+## color/palette: all four formula params retain their vec3 schema. The
+## color-center param `a` opts into a no-alpha Color editor adapter while
+## b/c/d remain native Vector3 editors. Self-canceling like the excursion
+## below: undone here, before any other real action commits.
 func _run_palette_inspector_check(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, history: UndoRedo) -> void:
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
 	var palette_layer: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -214,11 +219,13 @@ func _run_palette_inspector_check(plugin: EditorPlugin, panel: GSTMainPanel, sta
 		if int(prop.get("type", -1)) == TYPE_VECTOR3:
 			vec3_names.append(String(prop["name"]))
 	vec3_names.sort()
-	var expected_names: Array[String] = ["a", "b", "c", "d"]
-	_check("15a", vec3_names == expected_names, "color/palette TYPE_VECTOR3 property names: %s (expect %s)" % [vec3_names, expected_names])
+	var a_property: Dictionary = _property_info(palette_layer, &"a")
+	var editor_schema: Dictionary = palette_layer.get_param_schema(&"a")
+	var expected_names: Array[String] = ["b", "c", "d"]
+	_check("15a", vec3_names == expected_names and int(a_property.get("type", -1)) == TYPE_COLOR and int(a_property.get("hint", -1)) == PROPERTY_HINT_COLOR_NO_ALPHA and String(editor_schema.get("editor", "")) == "color_rgb", "color/palette vectors=%s a_type=%s a_hint=%s editor='%s'" % [vec3_names, a_property.get("type"), a_property.get("hint"), editor_schema.get("editor")])
 
 	var a_value: Variant = palette_layer.get("a")
-	_check("15b", a_value is Vector3, "layer.get('a') type: %s (expect Vector3)" % [typeof(a_value)])
+	_check("15b", a_value is Color and (a_value as Color).is_equal_approx(Color(0.5, 0.5, 0.5, 1.0)) and not palette_layer.params.has("a"), "layer.get('a')=%s type=%s raw_key=%s" % [a_value, typeof(a_value), palette_layer.params.has("a")])
 
 	inspector.edit(&"")
 	history.undo()
@@ -1394,7 +1401,7 @@ func _every_param_in_range(stack: GSTStack, library: GSTLibrary) -> bool:
 		if entry == null:
 			continue
 		for param: Dictionary in entry.params:
-			var value: Variant = layer.get(StringName(param["name"]))
+			var value: Variant = layer.params.get(String(param["name"]), param["default"])
 			if not _value_in_range(param, value):
 				return false
 	return true

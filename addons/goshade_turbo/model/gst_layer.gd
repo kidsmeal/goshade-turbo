@@ -56,10 +56,9 @@ func _validate_property(property: Dictionary) -> void:
 
 ## One dynamic property per manifest param (decision 13: the inspector
 ## column is the layer resource's own property editor). float and int
-## params get PROPERTY_HINT_RANGE from the manifest's min/max; color, vec2,
-## and vec3 params get TYPE_COLOR/TYPE_VECTOR2/TYPE_VECTOR3 with no hint
-## (docs/PLAN.md phase 4 fix pass 2, item 1: color/palette's a/b/c/d are
-## real "vec3" params). Editor-only usage: params stays the single stored
+## params get PROPERTY_HINT_RANGE from the manifest's min/max. A vec3 with
+## editor = color_rgb uses a native RGB picker while retaining Vector3
+## storage and shader values. Editor-only usage: params stays the single stored
 ## source of truth via the @export above, so these are never also written
 ## to the .tres by ResourceSaver.
 func _get_property_list() -> Array[Dictionary]:
@@ -73,7 +72,10 @@ func _get_property_list() -> Array[Dictionary]:
 			"type": _property_type_for(param_type, String(param["name"])),
 			"usage": PROPERTY_USAGE_EDITOR,
 		}
-		if param_type == "float" or param_type == "int":
+		if _uses_rgb_editor(param):
+			prop["type"] = TYPE_COLOR
+			prop["hint"] = PROPERTY_HINT_COLOR_NO_ALPHA
+		elif param_type == "float" or param_type == "int":
 			prop["hint"] = PROPERTY_HINT_RANGE
 			prop["hint_string"] = "%s,%s" % [str(param["min"]), str(param["max"])]
 		list.append(prop)
@@ -84,14 +86,25 @@ func _get(property: StringName) -> Variant:
 	var param: Variant = _find_param(property)
 	if param == null:
 		return null
-	return params.get(String(property), (param as Dictionary)["default"])
+	var value: Variant = params.get(String(property), (param as Dictionary)["default"])
+	if _uses_rgb_editor(param):
+		var rgb: Vector3 = value
+		return Color(rgb.x, rgb.y, rgb.z, 1.0)
+	return value
 
 
 func _set(property: StringName, value: Variant) -> bool:
-	if _find_param(property) == null:
+	var param: Variant = _find_param(property)
+	if param == null:
 		return false
+	if _uses_rgb_editor(param) and value is Color:
+		value = Vector3(value.r, value.g, value.b)
 	params[String(property)] = value
 	return true
+
+
+func _uses_rgb_editor(param: Dictionary) -> bool:
+	return param.get("type", "") == "vec3" and param.get("editor", "") == "color_rgb"
 
 
 func _find_param(property: StringName) -> Variant:

@@ -24,6 +24,7 @@ extends Resource
 ## Slider schema: [{name, type, min, max, default, label, description}]. Label
 ## and description are required editor metadata; serialization and uniform
 ## generation continue to use the original parameter name.
+## Optional editor: "color_rgb" presents a vec3 as a native RGB color picker.
 @export var params: Array[Dictionary] = []
 ## True for generators (decision 4): the layer carries a coord block.
 @export var coord: bool = false

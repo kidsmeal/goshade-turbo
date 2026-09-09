@@ -97,6 +97,8 @@ func run(plugin: EditorPlugin) -> void:
 		await _save_screenshot(plugin, screenshot_path.get_basename() + "-coords.png", "screenshot_coords")
 		settings_scroll.scroll_vertical = 0
 
+	await _check_native_palette_color(plugin, panel, inspector)
+
 	var mix: GSTLayer = panel.get_stack_list().add_layer_by_entry_id("color/mix")
 	panel.get_stack_list().select_layer(mix.id)
 	for i: int in range(3):
@@ -177,6 +179,196 @@ func _check_native_coord_edit(plugin: EditorPlugin, panel: GSTMainPanel, inspect
 		await plugin.get_tree().process_frame
 	var undone_uniform: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
 	_check("native_coord_undo", layer.coord.offset.is_equal_approx(old_value) and undone_uniform is Vector2 and (undone_uniform as Vector2).is_equal_approx(old_value), "value=%s uniform=%s expected=%s" % [layer.coord.offset, undone_uniform, old_value])
+
+
+func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn) -> void:
+	panel.open_recipe("sprite_holographic")
+	for i: int in range(5):
+		await plugin.get_tree().process_frame
+	var palette: GSTLayer = _find_layer_by_entry(panel.get_stack(), "color/palette")
+	if palette == null:
+		_check("palette_color_setup", false, "sprite_holographic palette layer is absent")
+		return
+	panel.get_stack_list().select_layer(palette.id)
+	panel.set_narrow_tab(1)
+	for i: int in range(4):
+		await plugin.get_tree().process_frame
+	var a_info: Dictionary = _find_property_info(palette, "a")
+	var vectors: Array[String] = []
+	for property_info: Dictionary in palette.get_property_list():
+		if int(property_info.get("type", -1)) == TYPE_VECTOR3:
+			vectors.append(String(property_info.get("name", "")))
+	vectors.sort()
+	var property: EditorProperty = inspector.find_editor_property(&"a", palette)
+	var settings_scroll: ScrollContainer = inspector.get_settings_scroll()
+	if property != null:
+		settings_scroll.ensure_control_visible(property)
+		for i: int in range(2):
+			await plugin.get_tree().process_frame
+	var color_button: ColorPickerButton = _find_color_button(property)
+	var schema_ok: bool = int(a_info.get("type", -1)) == TYPE_COLOR and int(a_info.get("hint", -1)) == PROPERTY_HINT_COLOR_NO_ALPHA and vectors == ["b", "c", "d"]
+	var button_visible: bool = color_button != null and color_button.is_visible_in_tree() and color_button.size.x > 0.0 and color_button.size.y > 0.0 and property.get_global_rect().intersects(settings_scroll.get_global_rect())
+	_check("palette_color_native", schema_ok and button_visible and not color_button.edit_alpha, "a_type=%s hint=%s vectors=%s button=%s visible=%s edit_alpha=%s" % [a_info.get("type"), a_info.get("hint"), vectors, color_button != null, button_visible, color_button.edit_alpha if color_button != null else true])
+	if color_button == null:
+		return
+
+	var screenshot_path: String = OS.get_environment("GST_UI_SCREENSHOT_PATH")
+	if not screenshot_path.is_empty():
+		await _save_screenshot(plugin, screenshot_path.get_basename() + "-palette-swatch.png", "screenshot_palette_swatch")
+	color_button.grab_focus()
+	await plugin.get_tree().process_frame
+	_push_key(color_button, KEY_SPACE)
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var picker: ColorPicker = color_button.get_picker()
+	var popup: PopupPanel = color_button.get_popup()
+	var hex_edit: LineEdit = _find_hex_line_edit(picker)
+	var popup_ready: bool = popup.visible and picker.visible and not picker.edit_alpha and hex_edit != null and hex_edit.is_visible_in_tree()
+	var initial_fields: Array[String] = _visible_line_edit_texts(picker)
+	var requested_hex: String = "3366cc"
+	var actual_hex_control: bool = false
+	if hex_edit != null:
+		hex_edit.grab_focus()
+		await plugin.get_tree().process_frame
+		actual_hex_control = hex_edit.has_focus() and hex_edit.is_visible_in_tree()
+		await _replace_line_edit(plugin, hex_edit, requested_hex)
+	popup.hide()
+	for i: int in range(4):
+		await plugin.get_tree().process_frame
+	var expected_color: Color = Color(0x33 / 255.0, 0x66 / 255.0, 0xcc / 255.0, 1.0)
+	var expected_raw: Vector3 = Vector3(expected_color.r, expected_color.g, expected_color.b)
+	var uniform_name: String = GSTUniformNames.param_uniform(palette.id, "palette", "a")
+	var uniform_value: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
+	var history: UndoRedo = _history_for(palette)
+	var edit_applied: bool = popup_ready and actual_hex_control and palette.params.get("a") is Vector3 and (palette.params.get("a") as Vector3).is_equal_approx(expected_raw) and palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(expected_color) and uniform_value is Vector3 and (uniform_value as Vector3).is_equal_approx(expected_raw) and history.has_undo()
+	_check("palette_color_edit", edit_applied, "popup=%s hex=%s initial_fields=%s raw=%s displayed=%s uniform=%s history=%s" % [popup_ready, actual_hex_control, initial_fields, palette.params.get("a"), color_button.color, uniform_value, history.has_undo()])
+	if not edit_applied:
+		return
+
+	history.undo()
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var undo_button: ColorPickerButton = _find_color_button(inspector.find_editor_property(&"a", palette))
+	var undo_raw: Variant = palette.params.get("a")
+	var undo_uniform: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
+	var undo_ok: bool = undo_button != null and undo_raw is Vector3 and undo_uniform is Vector3 and (undo_button.color as Color).is_equal_approx(Color(0.5, 0.5, 0.5, 1.0)) and (undo_raw as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5)) and (undo_uniform as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5))
+	history.redo()
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var redo_button: ColorPickerButton = _find_color_button(inspector.find_editor_property(&"a", palette))
+	var redo_raw: Variant = palette.params.get("a")
+	var redo_uniform: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
+	var redo_ok: bool = redo_button != null and redo_raw is Vector3 and redo_uniform is Vector3 and (redo_button.color as Color).is_equal_approx(expected_color) and (redo_raw as Vector3).is_equal_approx(expected_raw) and (redo_uniform as Vector3).is_equal_approx(expected_raw)
+	_check("palette_color_undo_redo", undo_ok and redo_ok, "undo=%s/%s/%s redo=%s/%s/%s" % [undo_button.color if undo_button != null else Color.TRANSPARENT, undo_raw, undo_uniform, redo_button.color if redo_button != null else Color.TRANSPARENT, redo_raw, redo_uniform])
+
+	var raw_before_randomize: Dictionary = palette.params.duplicate(true)
+	var random_history: UndoRedo = panel.get_watched_history()
+	panel.get_randomize_button().pressed.emit()
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var randomized_vectors: bool = _palette_raw_params_are_vectors(palette, true)
+	if random_history.has_undo():
+		random_history.undo()
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var random_undo_ok: bool = randomized_vectors and _palette_raw_params_are_vectors(palette, false) and palette.params == raw_before_randomize
+	_check("palette_randomize_vectors", random_undo_ok, "randomized_vectors=%s restored=%s raw=%s" % [randomized_vectors, palette.params == raw_before_randomize, palette.params])
+
+	var path: String = "user://gst_ui_labels_palette_color.tres"
+	var saved: Dictionary = GSTStackIO.save(panel.get_stack(), path)
+	if saved["ok"]:
+		panel.open_path(path)
+	for i: int in range(5):
+		await plugin.get_tree().process_frame
+	var opened: bool = saved["ok"] and panel.get_current_path() == path
+	var loaded_palette: GSTLayer = _find_layer_by_entry(panel.get_stack(), "color/palette")
+	if loaded_palette != null:
+		panel.get_stack_list().select_layer(loaded_palette.id)
+		panel.set_narrow_tab(1)
+		for i: int in range(3):
+			await plugin.get_tree().process_frame
+	var loaded_button: ColorPickerButton = _find_color_button(inspector.find_editor_property(&"a", loaded_palette)) if loaded_palette != null else null
+	var reopened_ok: bool = opened and loaded_palette != null and loaded_palette.params.get("a") is Vector3 and (loaded_palette.params.get("a") as Vector3).is_equal_approx(expected_raw) and loaded_button != null and loaded_button.color.is_equal_approx(expected_color)
+	_check("palette_color_reopen", reopened_ok, "saved=%s opened=%s raw=%s displayed=%s" % [saved["ok"], opened, loaded_palette.params.get("a") if loaded_palette != null else null, loaded_button.color if loaded_button != null else Color.TRANSPARENT])
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _find_color_button(node: Node) -> ColorPickerButton:
+	if node == null:
+		return null
+	if node is ColorPickerButton and (node as ColorPickerButton).is_visible_in_tree():
+		return node as ColorPickerButton
+	for child: Node in node.get_children(true):
+		var found: ColorPickerButton = _find_color_button(child)
+		if found != null:
+			return found
+	return null
+
+
+func _find_hex_line_edit(picker: ColorPicker) -> LineEdit:
+	var expected: String = picker.color.to_html(false).to_lower()
+	for node: Node in picker.find_children("*", "LineEdit", true, false):
+		var edit: LineEdit = node as LineEdit
+		var normalized: String = edit.text.strip_edges().trim_prefix("#").to_lower()
+		if edit.is_visible_in_tree() and edit.editable and normalized == expected:
+			return edit
+	return null
+
+
+func _visible_line_edit_texts(picker: ColorPicker) -> Array[String]:
+	var texts: Array[String] = []
+	for node: Node in picker.find_children("*", "LineEdit", true, false):
+		var edit: LineEdit = node as LineEdit
+		if edit.is_visible_in_tree():
+			texts.append(edit.text)
+	return texts
+
+
+func _replace_line_edit(plugin: EditorPlugin, edit: LineEdit, text: String) -> void:
+	edit.grab_focus()
+	await plugin.get_tree().process_frame
+	_push_key(edit, KEY_A, true)
+	for index: int in range(text.length()):
+		var event: InputEventKey = InputEventKey.new()
+		event.unicode = text.unicode_at(index)
+		event.pressed = true
+		event.window_id = edit.get_window().get_window_id()
+		edit.get_viewport().push_input(event, true)
+		event = event.duplicate()
+		event.pressed = false
+		edit.get_viewport().push_input(event, true)
+	_push_key(edit, KEY_ENTER)
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+
+
+func _push_key(target: Control, keycode: Key, ctrl: bool = false) -> void:
+	var event: InputEventKey = InputEventKey.new()
+	event.keycode = keycode
+	event.pressed = true
+	event.ctrl_pressed = ctrl
+	event.window_id = target.get_window().get_window_id()
+	target.get_viewport().push_input(event, true)
+	event = event.duplicate()
+	event.pressed = false
+	target.get_viewport().push_input(event, true)
+
+
+func _palette_raw_params_are_vectors(layer: GSTLayer, require_all: bool) -> bool:
+	for name: String in ["a", "b", "c", "d"]:
+		if require_all and not layer.params.has(name):
+			return false
+		if layer.params.has(name) and not (layer.params[name] is Vector3):
+			return false
+	return layer.params.has("a") and layer.params["a"] is Vector3
+
+
+func _find_layer_by_entry(stack: GSTStack, entry_id: String) -> GSTLayer:
+	for layer: GSTLayer in stack.layers:
+		if layer.entry == entry_id:
+			return layer
+	return null
 
 
 func _history_for(object: Object) -> UndoRedo:
