@@ -17,11 +17,11 @@ Last touched: 2026-09-08
 
 ## Active thread (only one)
 
-**GoShade Turbo v0.1**
+**GoShade Turbo editor UI redesign**
 
 Next physical action:
 
-- [ ] release gate: user tuning pass in the editor (enable plugin, open each recipe, drag every slider across its range), then tick docs/DESIGN.md line 153 and move r-0907-1 to Shipped
+- [ ] Phase 1 commit approved; next action is phase 2 atomic layer additions and conversions
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

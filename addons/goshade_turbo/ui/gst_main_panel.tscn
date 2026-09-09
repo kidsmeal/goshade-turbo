@@ -7,40 +7,22 @@
 [ext_resource type="PackedScene" path="res://addons/goshade_turbo/ui/gst_preview.tscn" id="5"]
 
 [node name="GSTMainPanel" type="VBoxContainer"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
 script = ExtResource("1")
 
 [node name="FileToolbar" type="HBoxContainer" parent="."]
 layout_mode = 2
 
-[node name="NewButton" type="Button" parent="FileToolbar"]
+[node name="FileMenu" type="MenuButton" parent="FileToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "New"
-
-[node name="OpenButton" type="Button" parent="FileToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Open..."
+text = "File"
 
 [node name="SaveButton" type="Button" parent="FileToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Save"
-
-[node name="SaveAsButton" type="Button" parent="FileToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Save As..."
-
-[node name="ExportButton" type="Button" parent="FileToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Export..."
-
-[node name="ReopenShaderButton" type="Button" parent="FileToolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Reopen Shader..."
 
 [node name="RecipesButton" type="MenuButton" parent="FileToolbar"]
 unique_name_in_owner = true
@@ -53,72 +35,144 @@ layout_mode = 2
 disabled = true
 text = "Randomize"
 
-[node name="Columns" type="HSplitContainer" parent="."]
+[node name="ToolbarSpacer" type="Control" parent="FileToolbar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ExportButton" type="Button" parent="FileToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Export..."
+
+[node name="MainSeparator" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="MainSplit" type="HSplitContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="LeftColumn" type="VBoxContainer" parent="Columns"]
+[node name="EditingArea" type="VBoxContainer" parent="MainSplit"]
+unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(260, 0)
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.5
 
-[node name="StackHeader" type="HBoxContainer" parent="Columns/LeftColumn"]
+[node name="EditingSplit" type="HSplitContainer" parent="MainSplit/EditingArea"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LayerPane" type="VBoxContainer" parent="MainSplit/EditingArea/EditingSplit"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LayersHeading" type="Label" parent="MainSplit/EditingArea/EditingSplit/LayerPane"]
+layout_mode = 2
+text = "Layers"
+theme_type_variation = &"HeaderSmall"
+
+[node name="LayersSeparator" type="HSeparator" parent="MainSplit/EditingArea/EditingSplit/LayerPane"]
 layout_mode = 2
 
-[node name="CoordSpaceLabel" type="Label" parent="Columns/LeftColumn/StackHeader"]
+[node name="StackHeader" type="HBoxContainer" parent="MainSplit/EditingArea/EditingSplit/LayerPane"]
+layout_mode = 2
+
+[node name="CoordSpaceLabel" type="Label" parent="MainSplit/EditingArea/EditingSplit/LayerPane/StackHeader"]
 layout_mode = 2
 text = "Coord space"
 
-[node name="CoordSpaceOption" type="OptionButton" parent="Columns/LeftColumn/StackHeader"]
+[node name="CoordSpaceOption" type="OptionButton" parent="MainSplit/EditingArea/EditingSplit/LayerPane/StackHeader"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+fit_to_longest_item = false
+clip_text = true
 
-[node name="StackList" parent="Columns/LeftColumn" instance=ExtResource("2")]
+[node name="StackList" parent="MainSplit/EditingArea/EditingSplit/LayerPane" instance=ExtResource("2")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="OutputBlock" parent="Columns/LeftColumn" instance=ExtResource("3")]
+[node name="SettingsPane" type="VBoxContainer" parent="MainSplit/EditingArea/EditingSplit"]
 unique_name_in_owner = true
-layout_mode = 2
-
-[node name="RightColumns" type="HSplitContainer" parent="Columns"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="InspectorColumn" type="VBoxContainer" parent="Columns/RightColumns"]
+[node name="SettingsHeading" type="Label" parent="MainSplit/EditingArea/EditingSplit/SettingsPane"]
+layout_mode = 2
+text = "Layer settings"
+theme_type_variation = &"HeaderSmall"
+
+[node name="SettingsSeparator" type="HSeparator" parent="MainSplit/EditingArea/EditingSplit/SettingsPane"]
+layout_mode = 2
+
+[node name="InspectorColumn" type="VBoxContainer" parent="MainSplit/EditingArea/EditingSplit/SettingsPane"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(280, 0)
+size_flags_vertical = 3
 script = ExtResource("4")
 
-[node name="PreviewSlot" type="VBoxContainer" parent="Columns/RightColumns"]
+[node name="EditingTabs" type="TabContainer" parent="MainSplit/EditingArea"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PreviewArea" type="VBoxContainer" parent="MainSplit"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.0
 
-[node name="PreviewControls" type="HBoxContainer" parent="Columns/RightColumns/PreviewSlot"]
+[node name="PreviewHeading" type="Label" parent="MainSplit/PreviewArea"]
+layout_mode = 2
+text = "Preview"
+theme_type_variation = &"HeaderSmall"
+
+[node name="PreviewSeparator" type="HSeparator" parent="MainSplit/PreviewArea"]
 layout_mode = 2
 
-[node name="PresetOption" type="OptionButton" parent="Columns/RightColumns/PreviewSlot/PreviewControls"]
+[node name="PreviewControls" type="HBoxContainer" parent="MainSplit/PreviewArea"]
+layout_mode = 2
+
+[node name="PresetOption" type="OptionButton" parent="MainSplit/PreviewArea/PreviewControls"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+fit_to_longest_item = false
+clip_text = true
 
-[node name="ImageButton" type="Button" parent="Columns/RightColumns/PreviewSlot/PreviewControls"]
+[node name="ImageButton" type="Button" parent="MainSplit/PreviewArea/PreviewControls"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Image..."
 
-[node name="SoloCheck" type="CheckButton" parent="Columns/RightColumns/PreviewSlot/PreviewControls"]
+[node name="SoloCheck" type="CheckButton" parent="MainSplit/PreviewArea/PreviewControls"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Solo"
 
-[node name="Preview" parent="Columns/RightColumns/PreviewSlot" instance=ExtResource("5")]
+[node name="Preview" parent="MainSplit/PreviewArea" instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="MessageLabel" type="Label" parent="."]
+[node name="FinalOutputHeading" type="Label" parent="MainSplit/PreviewArea"]
+layout_mode = 2
+text = "Final output"
+theme_type_variation = &"HeaderSmall"
+
+[node name="FinalOutputSeparator" type="HSeparator" parent="MainSplit/PreviewArea"]
+layout_mode = 2
+
+[node name="OutputBlock" parent="MainSplit/PreviewArea" instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="MessageLabel" type="Label" parent="MainSplit/PreviewArea"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
+autowrap_mode = 2

@@ -51,6 +51,8 @@ func refresh() -> void:
 	if _stack == null or _library == null:
 		return
 	var selected_id: StringName = get_selected_layer_id()
+	var anchor_id: StringName = get_scroll_anchor_id()
+	var anchor_offset: float = _scroll_anchor_offset()
 	_list.clear()
 	for i: int in range(_stack.layers.size() - 1, -1, -1):
 		var layer: GSTLayer = _stack.layers[i]
@@ -60,6 +62,8 @@ func refresh() -> void:
 		_list.add_item("l%s  %s (%s)" % [String(layer.id), function_name, kind_label])
 		_list.set_item_metadata(_list.item_count - 1, layer.id)
 	_select_layer_silently(selected_id)
+	if anchor_id != &"":
+		_restore_scroll_anchor.call_deferred(anchor_id, anchor_offset)
 
 
 func select_layer(layer_id: StringName) -> void:
@@ -86,6 +90,66 @@ func get_picker() -> GSTPicker:
 
 func get_item_count() -> int:
 	return _list.item_count
+
+
+## Wired-by: tests/gst_editor_ui_layout_smoke.gd.
+func get_item_id(index: int) -> StringName:
+	if index < 0 or index >= _list.item_count:
+		return &""
+	return _list.get_item_metadata(index) as StringName
+
+
+## Wired-by: refresh() and tests/gst_editor_ui_layout_smoke.gd.
+func get_scroll_anchor_id() -> StringName:
+	if _list.item_count == 0:
+		return &""
+	var row_height: float = _row_height()
+	var index: int = clampi(int(floor(_list.get_v_scroll_bar().value / row_height)), 0, _list.item_count - 1)
+	return get_item_id(index)
+
+
+func _scroll_anchor_offset() -> float:
+	if _list.item_count == 0:
+		return 0.0
+	var row_height: float = _row_height()
+	return fmod(_list.get_v_scroll_bar().value, row_height)
+
+
+func _restore_scroll_anchor(layer_id: StringName, offset: float) -> void:
+	var index: int = _item_index_for_id(layer_id)
+	if index == -1:
+		return
+	_list.get_v_scroll_bar().value = float(index) * _row_height() + offset
+
+
+func _item_index_for_id(layer_id: StringName) -> int:
+	for i: int in range(_list.item_count):
+		if get_item_id(i) == layer_id:
+			return i
+	return -1
+
+
+func _row_height() -> float:
+	if _list.item_count == 0:
+		return 1.0
+	return maxf(1.0, _list.get_item_rect(0).size.y)
+
+
+## Wired-by: tests/gst_editor_ui_layout_smoke.gd.
+func scroll_to_fraction(fraction: float) -> void:
+	var bar: VScrollBar = _list.get_v_scroll_bar()
+	bar.value = lerpf(bar.min_value, bar.max_value, clampf(fraction, 0.0, 1.0))
+
+
+## Wired-by: tests/gst_editor_ui_layout_smoke.gd.
+func has_fixed_row_heights() -> bool:
+	if _list.item_count < 2:
+		return true
+	var expected: float = _list.get_item_rect(0).size.y
+	for i: int in range(1, _list.item_count):
+		if not is_equal_approx(_list.get_item_rect(i).size.y, expected):
+			return false
+	return true
 
 
 func _on_add_pressed() -> void:

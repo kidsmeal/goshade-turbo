@@ -1,5 +1,7 @@
 # Editor smoke results
 
+Current UI redesign evidence is recorded in the final section, `Editor UI redesign, phase 1`. Earlier sections describe the original phase 4 through 8 implementation.
+
 Per-phase record of `tests/gst_editor_smoke.gd` runs (docs/PLAN.md Phase 4
 Files). Method: `$env:GST_EDITOR_SMOKE="4"; godot --editor --path .`,
 captured stdout, `config/features` in `project.godot` reset to `"4.4"`
@@ -1864,3 +1866,66 @@ GST tests: 21 file(s), 123 test method(s), 0 failure(s)
 run_codegen_tests: PASS, child exit 0 and no error markers in output
 run_render_checks: PASS, 78 stack(s) checked
 ```
+
+## Editor UI redesign, phase 1 (2026-09-08)
+
+Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 1. Verification uses `tests/gst_editor_ui_layout_smoke.gd` through selector `GST_EDITOR_SMOKE=ui_layout` on Godot `4.6.2`, OpenGL compatibility rendering, NVIDIA GeForce RTX 5070 Ti Laptop GPU.
+
+### Geometry and interaction evidence
+
+- Pre-change editor run: host `1346x1002`, panel `1346x181`, root size flags `1/1`, preview `644x74`.
+- Pre-change result: `pass=1 fail=2`; the full-height assertion failed and the new layout measurement API was absent.
+- Final run explicitly set the editor window to `1366x768`; surrounding Godot docks remained visible.
+- Final editor scale: `1.00`; host and panel both occupy `(287,80), 792x641`; root size flags are `3/3`.
+- Editing area: `(287,129), 473x592`; preview area: `(763,129), 316x592`; divider width: `3`.
+- Default editing width: `473`, compared with `473.4` for `60%` of the available child width.
+- Preview control and rendered viewport: `316x358`; Final output: `(763,618), 316x70`.
+- Measured editing breakpoint: `388`; configured preview minimum: `220x180`.
+- The before/after runs use different host sizes. They verify the collapsed-height defect and its removal; they do not establish a same-window size multiplier.
+- Captured `1366x768` editor image was inspected by the implementer and orchestrator: titled sections and separators are visible; Final output remains beneath the preview.
+
+```text
+SMOKE ui_layout_file_menu PASS items=["New", "Open...", "Save As...", "Reopen Shader..."] new_installed=true save_export_visible=true
+SMOKE ui_layout_section_persistence PASS collapsed=true content_visible=false metadata={ "inputs": true, "parameters": false, "position": false }
+SMOKE ui_layout_split_persistence PASS inner=0.455->0.506->0.506 main=0.599->0.525->0.525
+SMOKE ui_layout_responsive_tabs PASS breakpoint=388.0 widths=388.0/473.0 narrow=true wide=false enclosed=true/true one_inspector=true tab_persisted=true
+SMOKE ui_layout_stable_scroll PASS items=20 selected=true reorder=true anchor=13/13/13 fixed_rows=true
+SMOKE ui_layout_native_preview_edit PASS editor_property=true image_before=(316, 358) image_after=(316, 358)
+SMOKE SUMMARY pass=14 fail=0
+```
+
+- Both splitter checks inject mouse events into the editor viewport and verify movement before restoring metadata.
+- Responsive checks resize the actual editor window and move its divider; both layouts remain inside the host with one native inspector.
+- The stack check exercises `20` layers, real scrolling, reordering, rebuilding, retained selection, and a stable first-visible layer ID.
+- The long-content check verifies a long input caption inside Layer settings and a wrapped refusal inside the preview area.
+- The native parameter check requires non-null before/after GPU images and verifies their pixels change through an `EditorProperty` edit.
+- Exit: `0`; stderr: empty.
+
+### Regression evidence
+
+- Implementer runs of existing editor selectors passed on `4.6.2`: `4` = `46/0`, `5` = `18/0`, `6` = `16/0`, `7` = `25/0`, `8` = `16/0` (pass/fail).
+- Orchestrator reran `godot --headless --path . --import` after the final smoke-only cleanup: exit `0`, no script errors.
+- Orchestrator reran `godot --headless --path . -s res://tests/run_codegen_tests.gd` on the final implementation: `21` files, `123` methods, `0` failures; wrapper exit `0`, no error markers.
+- `project.godot` minimum version restored to `4.4` after editor-generated `4.6` churn.
+- Phase 1 has not rerun the redesign on `4.4` or `4.7`; the earlier version matrix describes the pre-redesign tree.
+- Independent review round `1`: unit suite `123/0`; GPU `ui_layout` `14/0`, exit `0`.
+- Reviewer code inspection found that metadata restore updates the saved narrow-tab value without always selecting that visible tab. The existing assertion inspected the backing value, so the review verdict is `FAIL` pending a production fix and visible-pane regression check.
+- The review sandbox denied Godot AppData/cache writes. Its GPU assertions completed, but that run does not establish persistence across editor restarts.
+
+### Review round 1 fix
+
+- Strengthened the narrow-tab test to select visible tab `0`, restore saved tab `1`, and inspect `EditingTabs.current_tab` plus both pane visibilities.
+- Before the production fix: `different_start=true tab_persisted=false`, `13/1`, exit `1`.
+- Fixed `_apply_restored_layout` to apply the preferred tab when narrow mode is active.
+- After the fix: `different_start=true tab_persisted=true`, `14/0`, exit `0`; stderr empty.
+- Final import passed; named unit suite passed `21` files, `123` methods, `0` failures.
+- `project.godot` restored to `4.4`; `git diff --check` passed.
+
+### Independent re-review
+
+- Verdict: `PASS`; no required fixes, deferred notes, or additional docs impact.
+- Named unit command: `21` files, `123` methods, `0` failures.
+- GPU `ui_layout`: `14/0`, exit `0`, stderr empty.
+- Visible-tab restore: `different_start=true tab_persisted=true`; both pane visibility assertions passed.
+- Splitter persistence, responsive tabs, overflow, preview allocation, and native parameter edits passed.
+- Orchestrator restored `project.godot` to `4.4` after the review run. Phase 1 is ready for commit approval; phases 2 through 5 remain pending.

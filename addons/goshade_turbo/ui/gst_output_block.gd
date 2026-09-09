@@ -1,6 +1,6 @@
 @tool
 class_name GSTOutputBlock
-extends HBoxContainer
+extends VBoxContainer
 
 ## Fixed output block at the panel bottom (decision 12). output_color:
 ## OptionButton over every layer (a field layer converts to grayscale).

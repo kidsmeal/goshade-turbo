@@ -2,6 +2,8 @@
 
 Status: grilled and locked 2026-09-07, revised the same day after external review (12 findings, all applied, see Review revisions). Name: GoShade Turbo (locked 2026-09-07). Repo `goshade-turbo`, addon folder `addons/goshade_turbo`, class prefix `GST`.
 
+Editor UI redesign: the reviewed interview decisions are recorded in `docs/EDITOR_UI_DESIGN_reviewed.md`; implementation status is tracked in `docs/EDITOR_UI_DESIGN_reviewed-plan.md`. They supersede the output placement in decision `12` and picker/solo presentation in decision `13`, and add explicit output assignment to UI add actions. The data model and remaining product constraints are retained.
+
 ## What it is
 
 A Godot editor plugin. A user builds a `canvas_item` shader by stacking typed layers, each one a function from a bundled MIT library, with sliders, live preview, and a self-contained `.gdshader` export. Target user: someone with no shader knowledge who wants to click things and see what happens, then ship the result.

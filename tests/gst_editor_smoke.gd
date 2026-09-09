@@ -22,7 +22,10 @@ var _fail_count: int = 0
 ## keeps running the phase 4 checks unchanged.
 func run(plugin: EditorPlugin) -> void:
 	var flag: String = OS.get_environment("GST_EDITOR_SMOKE")
-	if flag == "5":
+	if flag == "ui_layout":
+		var layout_smoke: RefCounted = load("res://tests/gst_editor_ui_layout_smoke.gd").new()
+		await layout_smoke.run(plugin)
+	elif flag == "5":
 		await _run_phase5(plugin)
 	elif flag == "6":
 		await _run_phase6(plugin)

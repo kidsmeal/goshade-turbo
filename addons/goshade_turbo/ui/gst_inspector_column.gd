@@ -15,12 +15,16 @@ signal edit_refused(reason: String)
 ## Decision 20 excludes these from GSTUndo entirely, so this signal is the
 ## only path a live inspector edit reaches the panel.
 signal param_edited(property: String)
+signal section_state_changed(states: Dictionary)
 
 const PICKER_SCENE: PackedScene = preload("res://addons/goshade_turbo/ui/gst_picker.tscn")
 
 var _inspector: EditorInspector = null
-var _slots_box: VBoxContainer = null
+var _inputs_box: VBoxContainer = null
+var _warp_box: VBoxContainer = null
 var _slot_picker: GSTPicker = null
+var _section_buttons: Dictionary = {}
+var _section_contents: Dictionary = {}
 
 var _stack: GSTStack = null
 var _library: GSTLibrary = null
@@ -33,15 +37,63 @@ var _pending_slot_name: String = ""
 
 
 func _ready() -> void:
+	var inputs: Dictionary = _build_section("inputs", "Inputs")
+	_inputs_box = inputs["content"] as VBoxContainer
+
+	var parameters: Dictionary = _build_section("parameters", "Parameters")
 	_inspector = EditorInspector.new()
 	_inspector.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_inspector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_inspector.property_edited.connect(_on_property_edited)
-	add_child(_inspector)
-	_slots_box = VBoxContainer.new()
-	add_child(_slots_box)
+	(parameters["content"] as VBoxContainer).add_child(_inspector)
+
+	var position: Dictionary = _build_section("position", "Position and movement")
+	_warp_box = position["content"] as VBoxContainer
 	_slot_picker = PICKER_SCENE.instantiate()
 	add_child(_slot_picker)
 	_slot_picker.entry_picked.connect(_on_slot_entry_picked)
+
+
+func _build_section(key: String, title: String) -> Dictionary:
+	var section: VBoxContainer = VBoxContainer.new()
+	section.size_flags_vertical = Control.SIZE_EXPAND_FILL if key == "parameters" else Control.SIZE_SHRINK_BEGIN
+	add_child(section)
+	var heading: Button = Button.new()
+	heading.text = title
+	heading.flat = true
+	heading.toggle_mode = true
+	heading.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	section.add_child(heading)
+	var separator: HSeparator = HSeparator.new()
+	section.add_child(separator)
+	var content: VBoxContainer = VBoxContainer.new()
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL if key == "parameters" else Control.SIZE_SHRINK_BEGIN
+	section.add_child(content)
+	heading.toggled.connect(_on_section_toggled.bind(key, content, heading))
+	_section_buttons[key] = heading
+	_section_contents[key] = content
+	return {"section": section, "content": content}
+
+
+func _on_section_toggled(collapsed: bool, key: String, content: VBoxContainer, heading: Button) -> void:
+	content.visible = not collapsed
+	heading.tooltip_text = "Expand %s" % heading.text if collapsed else "Collapse %s" % heading.text
+	section_state_changed.emit(get_section_states())
+
+
+func get_section_states() -> Dictionary:
+	var states: Dictionary = {}
+	for key: Variant in _section_buttons:
+		states[key] = (_section_buttons[key] as Button).button_pressed
+	return states
+
+
+func set_section_states(states: Dictionary) -> void:
+	for key: Variant in _section_buttons:
+		var collapsed: bool = bool(states.get(key, false))
+		var button: Button = _section_buttons[key] as Button
+		button.set_pressed_no_signal(collapsed)
+		(_section_contents[key] as VBoxContainer).visible = not collapsed
 
 
 func setup(stack: GSTStack, library: GSTLibrary, undo: GSTUndo) -> void:
@@ -82,8 +134,9 @@ func _on_property_edited(property: String) -> void:
 
 
 func _rebuild_slots() -> void:
-	for child: Node in _slots_box.get_children():
-		child.queue_free()
+	for box: VBoxContainer in [_inputs_box, _warp_box]:
+		for child: Node in box.get_children():
+			child.queue_free()
 	if _layer == null:
 		return
 	var entry: GSTManifestEntry = _library.get_entry(_layer.entry)
@@ -103,6 +156,9 @@ func _add_slot_row(slot_name: String, slot_kind: GSTLayer.Kind, samples_source: 
 	label.text = slot_name
 	row.add_child(label)
 	var option: OptionButton = OptionButton.new()
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	option.fit_to_longest_item = false
+	option.clip_text = true
 	option.add_item("(none)")
 	option.set_item_metadata(0, &"")
 	var select_idx: int = 0
@@ -128,7 +184,7 @@ func _add_slot_row(slot_name: String, slot_kind: GSTLayer.Kind, samples_source: 
 	add_button.tooltip_text = "Add a new layer for slot %s" % slot_name
 	add_button.pressed.connect(_on_add_for_slot_pressed.bind(slot_name, slot_kind))
 	row.add_child(add_button)
-	_slots_box.add_child(row)
+	_inputs_box.add_child(row)
 
 
 func _add_warp_row(axis: String, current: StringName, layer_idx: int) -> void:
@@ -137,6 +193,9 @@ func _add_warp_row(axis: String, current: StringName, layer_idx: int) -> void:
 	label.text = "warp_%s" % axis
 	row.add_child(label)
 	var option: OptionButton = OptionButton.new()
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	option.fit_to_longest_item = false
+	option.clip_text = true
 	option.add_item("(none)")
 	option.set_item_metadata(0, &"")
 	var select_idx: int = 0
@@ -156,7 +215,7 @@ func _add_warp_row(axis: String, current: StringName, layer_idx: int) -> void:
 	_syncing = false
 	option.item_selected.connect(_on_warp_selected.bind(axis, option))
 	row.add_child(option)
-	_slots_box.add_child(row)
+	_warp_box.add_child(row)
 
 
 func _on_slot_selected(index: int, slot_name: String, option: OptionButton) -> void:

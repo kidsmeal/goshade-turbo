@@ -2,11 +2,9 @@
 class_name GSTMainPanel
 extends VBoxContainer
 
-## Main screen panel (decision 13): three-column layout (stack list,
-## inspector column, the phase-5 preview column), an output block docked
-## under the stack list, a coord-space selector above it, and a message
-## label at the bottom that shows the last codegen error or a refused
-## structural edit's reason.
+## Main screen panel: a responsive editing allocation beside a persistent
+## preview allocation. The editing allocation holds Layers and Layer
+## settings in a split or tabs; Final output stays below the preview.
 ##
 ## Holds the current GSTStack (a new empty stack on open) and the GSTLibrary
 ## (scanned once). stack_changed fires after every structural edit so this
@@ -50,18 +48,30 @@ signal stack_changed
 @onready var _image_button: Button = %ImageButton
 @onready var _solo_check: CheckButton = %SoloCheck
 @onready var _coord_space_option: OptionButton = %CoordSpaceOption
-@onready var _new_button: Button = %NewButton
-@onready var _open_button: Button = %OpenButton
 @onready var _save_button: Button = %SaveButton
-@onready var _save_as_button: Button = %SaveAsButton
 @onready var _export_button: Button = %ExportButton
-@onready var _reopen_shader_button: Button = %ReopenShaderButton
 @onready var _recipes_button: MenuButton = %RecipesButton
 @onready var _randomize_button: Button = %RandomizeButton
+@onready var _file_menu: MenuButton = %FileMenu
+@onready var _main_split: HSplitContainer = %MainSplit
+@onready var _editing_area: VBoxContainer = %EditingArea
+@onready var _editing_split: HSplitContainer = %EditingSplit
+@onready var _editing_tabs: TabContainer = %EditingTabs
+@onready var _layer_pane: VBoxContainer = %LayerPane
+@onready var _settings_pane: VBoxContainer = %SettingsPane
+@onready var _preview_area: VBoxContainer = %PreviewArea
 
 const COORD_SPACE_NAMES: Array[String] = ["uv", "screen_uv", "local"]
 ## docs/PLAN.md Phase 7 Files: the Recipes MenuButton lists every .tres here.
 const RECIPES_DIR: String = "res://addons/goshade_turbo/recipes"
+const LAYOUT_METADATA_SECTION: String = "goshade_turbo/layout"
+const DEFAULT_MAIN_RATIO: float = 0.6
+const DEFAULT_INNER_RATIO: float = 0.42
+const PREVIEW_IMAGE_MINIMUM: Vector2 = Vector2(220.0, 180.0)
+const FILE_NEW: int = 0
+const FILE_OPEN: int = 1
+const FILE_SAVE_AS: int = 2
+const FILE_REOPEN_SHADER: int = 3
 
 var _stack: GSTStack = null
 var _library: GSTLibrary = null
@@ -118,9 +128,25 @@ var _recipe_open: bool = false
 ## change set from that duplicate, so GST_EDITOR_SMOKE=8's post-randomize
 ## checks compare against an exact expectation instead of merely "changed".
 var _randomize_rng: RandomNumberGenerator = null
+var _editor_settings: EditorSettings = null
+var _tab_breakpoint: float = 0.0
+var _narrow_layout: bool = false
+var _restoring_layout: bool = false
+var _preferred_narrow_tab: int = 0
 
 
 func _ready() -> void:
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_preview.custom_minimum_size = PREVIEW_IMAGE_MINIMUM
+	_tab_breakpoint = _measure_tab_breakpoint()
+	_main_split.dragged.connect(_on_main_split_dragged)
+	_main_split.resized.connect(_on_editing_area_resized)
+	_editing_split.dragged.connect(_on_inner_split_dragged)
+	_editing_area.resized.connect(_on_editing_area_resized)
+	resized.connect(_on_editing_area_resized)
+	_editing_tabs.tab_changed.connect(_on_editing_tab_changed)
+	_inspector_column.section_state_changed.connect(_on_section_state_changed)
 	_library = GSTLibrary.new()
 	_library.scan()
 	_stack = GSTStack.new()
@@ -166,12 +192,15 @@ func _ready() -> void:
 	_file_dialog.file_selected.connect(_on_preview_image_selected)
 	add_child(_file_dialog)
 
-	_new_button.pressed.connect(_on_new_pressed)
-	_open_button.pressed.connect(_on_open_pressed)
 	_save_button.pressed.connect(_on_save_pressed)
-	_save_as_button.pressed.connect(_on_save_as_pressed)
 	_export_button.pressed.connect(_on_export_pressed)
-	_reopen_shader_button.pressed.connect(_on_reopen_shader_pressed)
+	var file_popup: PopupMenu = _file_menu.get_popup()
+	file_popup.add_item("New", FILE_NEW)
+	file_popup.add_item("Open...", FILE_OPEN)
+	file_popup.add_separator()
+	file_popup.add_item("Save As...", FILE_SAVE_AS)
+	file_popup.add_item("Reopen Shader...", FILE_REOPEN_SHADER)
+	file_popup.id_pressed.connect(_on_file_menu_pressed)
 
 	_refresh_recipes_menu()
 	_recipes_button.get_popup().index_pressed.connect(_on_recipe_index_pressed)
@@ -209,6 +238,249 @@ func _ready() -> void:
 	_overwrite_dialog = ConfirmationDialog.new()
 	_overwrite_dialog.confirmed.connect(_on_overwrite_confirmed)
 	add_child(_overwrite_dialog)
+	_apply_default_layout.call_deferred()
+
+
+func set_editor_plugin(plugin: EditorPlugin) -> void:
+	_editor_settings = plugin.get_editor_interface().get_editor_settings()
+	restore_layout_metadata.call_deferred()
+
+
+func _apply_default_layout() -> void:
+	_tab_breakpoint = _measure_tab_breakpoint()
+	update_responsive_layout()
+	_set_split_ratio(_main_split, DEFAULT_MAIN_RATIO)
+	_set_split_ratio(_editing_split, DEFAULT_INNER_RATIO)
+
+
+func _measure_tab_breakpoint() -> float:
+	var separation: float = float(_editing_split.get_theme_constant("separation"))
+	return _layer_pane.get_combined_minimum_size().x + _settings_pane.get_combined_minimum_size().x + separation
+
+
+func _on_editing_area_resized() -> void:
+	update_responsive_layout.call_deferred()
+
+
+func update_responsive_layout() -> void:
+	if _layer_pane == null or _settings_pane == null:
+		return
+	if not _narrow_layout:
+		_tab_breakpoint = _measure_tab_breakpoint()
+	var main_available: float = maxf(0.0, _main_split.size.x - float(_main_split.get_theme_constant("separation")))
+	var width: float = minf(_editing_area.size.x, main_available * _current_main_ratio())
+	var should_narrow: bool = width <= _tab_breakpoint + 0.5
+	if should_narrow == _narrow_layout:
+		return
+	_narrow_layout = should_narrow
+	if _narrow_layout:
+		_layer_pane.reparent(_editing_tabs)
+		_settings_pane.reparent(_editing_tabs)
+		_editing_split.hide()
+		_editing_tabs.show()
+		_editing_tabs.set_tab_title(0, "Layers")
+		_editing_tabs.set_tab_title(1, "Layer settings")
+		_editing_tabs.current_tab = _preferred_narrow_tab
+	else:
+		_layer_pane.reparent(_editing_split)
+		_settings_pane.reparent(_editing_split)
+		_layer_pane.show()
+		_settings_pane.show()
+		_editing_tabs.hide()
+		_editing_split.show()
+		_apply_inner_ratio.call_deferred(_metadata_float("inner_ratio", DEFAULT_INNER_RATIO))
+	_persist_metadata("narrow_tab", _preferred_narrow_tab)
+
+
+func _on_main_split_dragged(_offset: int) -> void:
+	if _restoring_layout:
+		return
+	_persist_main_drag.call_deferred()
+
+
+func _persist_main_drag() -> void:
+	_persist_metadata("main_ratio", _current_main_ratio())
+	update_responsive_layout()
+
+
+func _on_inner_split_dragged(_offset: int) -> void:
+	if _restoring_layout or _narrow_layout:
+		return
+	_persist_inner_drag.call_deferred()
+
+
+func _persist_inner_drag() -> void:
+	if _narrow_layout:
+		return
+	_persist_metadata("inner_ratio", _current_inner_ratio())
+
+
+func _on_editing_tab_changed(tab: int) -> void:
+	if tab < 0:
+		return
+	_preferred_narrow_tab = tab
+	if not _restoring_layout:
+		_persist_metadata("narrow_tab", tab)
+
+
+func _on_section_state_changed(states: Dictionary) -> void:
+	if not _restoring_layout:
+		_persist_metadata("sections", states)
+
+
+func _current_main_ratio() -> float:
+	return _split_ratio(_main_split)
+
+
+func _current_inner_ratio() -> float:
+	return _split_ratio(_editing_split)
+
+
+func _split_ratio(split: HSplitContainer) -> float:
+	if split.get_child_count() < 2:
+		return 0.5
+	var first: Control = split.get_child(0) as Control
+	var second: Control = split.get_child(1) as Control
+	var total: float = first.size.x + second.size.x
+	return first.size.x / total if total > 0.0 else 0.5
+
+
+func _bounded_split_ratio(split: HSplitContainer, ratio: float) -> float:
+	if split.get_child_count() < 2 or split.size.x <= 0.0:
+		return clampf(ratio, 0.05, 0.95)
+	var first: Control = split.get_child(0) as Control
+	var second: Control = split.get_child(1) as Control
+	var available: float = first.size.x + second.size.x
+	if available <= 0.0:
+		return clampf(ratio, 0.05, 0.95)
+	var first_minimum: float = first.get_combined_minimum_size().x
+	var second_minimum: float = second.get_combined_minimum_size().x
+	var minimum_ratio: float = minf(0.95, first_minimum / available)
+	var maximum_ratio: float = maxf(0.05, 1.0 - second_minimum / available)
+	return clampf(ratio, minimum_ratio, maximum_ratio)
+
+
+func _set_split_ratio(split: HSplitContainer, ratio: float) -> void:
+	if split.get_child_count() < 2 or split.size.x <= 0.0:
+		return
+	var first: Control = split.get_child(0) as Control
+	var second: Control = split.get_child(1) as Control
+	var available: float = first.size.x + second.size.x
+	if available <= 0.0:
+		return
+	var bounded: float = _bounded_split_ratio(split, ratio)
+	var target: float = available * bounded
+	split.split_offset += roundi(target - first.size.x)
+
+
+func _apply_inner_ratio(ratio: float) -> void:
+	if not _narrow_layout:
+		_set_split_ratio(_editing_split, ratio)
+
+
+## Wired-by: tests/gst_editor_ui_layout_smoke.gd.
+func set_narrow_tab(tab: int) -> void:
+	_preferred_narrow_tab = clampi(tab, 0, 1)
+	if _editing_tabs.get_tab_count() > _preferred_narrow_tab:
+		_editing_tabs.current_tab = _preferred_narrow_tab
+	_persist_metadata("narrow_tab", _preferred_narrow_tab)
+
+
+## Wired-by: tests/gst_editor_ui_layout_smoke.gd.
+func get_narrow_tab() -> int:
+	return _preferred_narrow_tab
+
+
+func restore_layout_metadata() -> void:
+	if _editor_settings == null:
+		return
+	_restoring_layout = true
+	var sections: Variant = _metadata_value("sections", {})
+	_inspector_column.set_section_states(sections as Dictionary if sections is Dictionary else {})
+	_preferred_narrow_tab = clampi(int(_metadata_value("narrow_tab", 0)), 0, 1)
+	_apply_restored_layout.call_deferred(_metadata_float("main_ratio", DEFAULT_MAIN_RATIO), _metadata_float("inner_ratio", DEFAULT_INNER_RATIO))
+
+
+func _apply_restored_layout(main_ratio: float, inner_ratio: float) -> void:
+	_set_split_ratio(_main_split, main_ratio)
+	update_responsive_layout()
+	if _narrow_layout and _editing_tabs.get_tab_count() > _preferred_narrow_tab:
+		_editing_tabs.current_tab = _preferred_narrow_tab
+	_apply_restored_inner.call_deferred(inner_ratio)
+
+
+func _apply_restored_inner(inner_ratio: float) -> void:
+	_apply_inner_ratio(inner_ratio)
+	_restoring_layout = false
+
+
+## Wired-by: tests/gst_editor_ui_layout_smoke.gd.
+func get_layout_metadata_snapshot() -> Dictionary:
+	return {
+		"main_ratio": _metadata_value("main_ratio", DEFAULT_MAIN_RATIO),
+		"inner_ratio": _metadata_value("inner_ratio", DEFAULT_INNER_RATIO),
+		"narrow_tab": _metadata_value("narrow_tab", 0),
+		"sections": _metadata_value("sections", {}),
+	}
+
+
+## Wired-by: tests/gst_editor_ui_layout_smoke.gd.
+func restore_layout_metadata_snapshot(snapshot: Dictionary) -> void:
+	for key: Variant in snapshot:
+		_persist_metadata(String(key), snapshot[key])
+	restore_layout_metadata()
+
+
+func _metadata_value(key: String, fallback: Variant) -> Variant:
+	if _editor_settings == null:
+		return fallback
+	return _editor_settings.get_project_metadata(LAYOUT_METADATA_SECTION, key, fallback)
+
+
+func _metadata_float(key: String, fallback: float) -> float:
+	var value: Variant = _metadata_value(key, fallback)
+	return float(value) if value is float or value is int else fallback
+
+
+func _persist_metadata(key: String, value: Variant) -> void:
+	if _editor_settings != null:
+		_editor_settings.set_project_metadata(LAYOUT_METADATA_SECTION, key, value)
+
+
+## Wired-by: tests/gst_editor_ui_layout_smoke.gd.
+func get_layout_measurements() -> Dictionary:
+	var host: Control = get_parent() as Control
+	var main_children_width: float = _editing_area.size.x + _preview_area.size.x
+	var inner_children_width: float = _layer_pane.size.x + _settings_pane.size.x
+	var editing_minimum: float = maxf(_layer_pane.get_combined_minimum_size().x, _settings_pane.get_combined_minimum_size().x) if _narrow_layout else _tab_breakpoint
+	var preview_minimum_width: float = _preview_area.get_combined_minimum_size().x
+	var main_min_ratio: float = minf(0.95, editing_minimum / main_children_width) if main_children_width > 0.0 else 0.0
+	var main_max_ratio: float = maxf(0.05, 1.0 - preview_minimum_width / main_children_width) if main_children_width > 0.0 else 1.0
+	var layer_minimum: float = _layer_pane.get_combined_minimum_size().x
+	var settings_minimum: float = _settings_pane.get_combined_minimum_size().x
+	var inner_min_ratio: float = minf(0.95, layer_minimum / inner_children_width) if inner_children_width > 0.0 else 0.0
+	var inner_max_ratio: float = maxf(0.05, 1.0 - settings_minimum / inner_children_width) if inner_children_width > 0.0 else 1.0
+	return {
+		"editor_scale": EditorInterface.get_editor_scale(),
+		"host_rect": host.get_global_rect(),
+		"root_rect": get_global_rect(),
+		"editing_rect": _editing_area.get_global_rect(),
+		"preview_area_rect": _preview_area.get_global_rect(),
+		"preview_rect": _preview.get_global_rect(),
+		"output_rect": _output_block.get_global_rect(),
+		"editing_minimum": Vector2(editing_minimum, 0.0),
+		"preview_minimum": PREVIEW_IMAGE_MINIMUM,
+		"main_divider_width": float(_main_split.get_theme_constant("separation")),
+		"main_minimums_permit_default": main_children_width * DEFAULT_MAIN_RATIO >= editing_minimum and main_children_width * (1.0 - DEFAULT_MAIN_RATIO) >= preview_minimum_width,
+		"main_ratio": _current_main_ratio(),
+		"inner_ratio": _current_inner_ratio(),
+		"main_ratio_min": main_min_ratio,
+		"main_ratio_max": main_max_ratio,
+		"inner_ratio_min": inner_min_ratio,
+		"inner_ratio_max": inner_max_ratio,
+		"tab_breakpoint": _tab_breakpoint,
+		"narrow": _narrow_layout,
+	}
 
 
 ## Called once by plugin.gd right after instantiation (decision 20's
@@ -390,6 +662,18 @@ func hide_export_dialog() -> void:
 func _on_new_pressed() -> void:
 	replace_stack(GSTStack.new(), "", false)
 	_message_label.text = ""
+
+
+func _on_file_menu_pressed(id: int) -> void:
+	match id:
+		FILE_NEW:
+			_on_new_pressed()
+		FILE_OPEN:
+			_on_open_pressed()
+		FILE_SAVE_AS:
+			_on_save_as_pressed()
+		FILE_REOPEN_SHADER:
+			_on_reopen_shader_pressed()
 
 
 func _on_open_pressed() -> void:

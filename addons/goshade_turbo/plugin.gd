@@ -12,6 +12,7 @@ var _panel: Control = null
 func _enter_tree() -> void:
 	_panel = load("res://addons/goshade_turbo/ui/gst_main_panel.tscn").instantiate()
 	get_editor_interface().get_editor_main_screen().add_child(_panel)
+	_panel.set_editor_plugin(self)
 	_panel.set_undo_redo_manager(get_undo_redo())
 	_panel.hide()
 	var smoke_flag: String = OS.get_environment("GST_EDITOR_SMOKE")
