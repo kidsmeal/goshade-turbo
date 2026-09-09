@@ -10,18 +10,18 @@ This file is generated (design section 4): the facts below (Mode, Position, from
 
 Mode: (none - idle)
 Position: idle - pick a mode with /claudhd:start or /claudhd:design
-from: (unplanned work)
+from: r-0907-1
 Counts: queue 0 · quick fixes 0 · ideas untriaged 0
 
 Last touched: 2026-09-09
 
 ## Active thread (only one)
 
-**Recipe and preview fixes ready for user tuning**
+**GoShade Turbo v0.1 release gate**
 
 Next physical action:
 
-- [ ] Load fresh Foil and Opal recipes, verify the visible controls, and report any remaining unclear or inactive effect; release tuning remains pending user sign-off
+- [ ] User tuning pass in the editor: load fresh Foil and Opal recipes, drag every slider on every recipe across its range, report any slider with no visible change; then tick docs/DESIGN.md line 155 and move r-0907-1 to Shipped
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
@@ -45,7 +45,13 @@ New idea mid-task: `/claudhd:idea <text>` records it in IDEAS.md so you can keep
 
 ## Loose ends
 
-(none yet)
+- Two commits unpushed on `main`: `f488370`, `9f765a9`. Push pending user say-so.
+- Release checklist: one item open, `docs/DESIGN.md` line 155 (user tuning pass). All other items ticked with evidence.
+- Picker text slicing (`docs/EDITOR_SMOKE.md` "Intermittent picker text slicing"): unresolved, not reproduced in three fresh-editor runs. Next repro step recorded there.
+- `clouds.tres` sits at the repo root (committed in `42a052f`). Decide: move to `sandbox/stacks/` or delete.
+- `docs/CURRENTNESS_AUDIT.md` and `docs/RUNTIME_VERIFICATION_QUEUE.md` still carry `<DATE>` template placeholders; the audit's deferred-notes list is real, the rest is scaffold.
+- `docs/CURRENTNESS_AUDIT.md` deferred note: `tests/run_render_checks.gd` cannot run in the GPU-less reviewer sandbox. Clears when a GPU reviewer exists.
+- Running `godot --import` on a newer Godot than 4.4 rewrites `sandbox/screenshots/glow.png.import`. Restore it before committing.
 
 ## Leaving this file when you stop
 
