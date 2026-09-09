@@ -21,7 +21,7 @@ Last touched: 2026-09-08
 
 Next physical action:
 
-- [ ] Phase 3 reviewed PASS; awaiting commit approval before phase 4 embedded choosers
+- [ ] Paused by user. Phase 5 entry flow and preview recovery remains pending; resume only when requested.
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

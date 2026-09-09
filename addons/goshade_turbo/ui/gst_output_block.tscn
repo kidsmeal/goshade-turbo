@@ -12,23 +12,43 @@ layout_mode = 2
 layout_mode = 2
 text = "Output color"
 
-[node name="ColorOption" type="OptionButton" parent="ColorRow"]
+[node name="ColorButton" type="Button" parent="ColorRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-fit_to_longest_item = false
+text = "Automatic: none"
+alignment = 0
 clip_text = true
+
+[node name="ColorConversion" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="ColorRefusal" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 2
 
 [node name="AlphaRow" type="HBoxContainer" parent="."]
 layout_mode = 2
 
 [node name="AlphaLabel" type="Label" parent="AlphaRow"]
 layout_mode = 2
-text = "Output alpha"
+text = "Transparency"
 
-[node name="AlphaOption" type="OptionButton" parent="AlphaRow"]
+[node name="AlphaButton" type="Button" parent="AlphaRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-fit_to_longest_item = false
+text = "Automatic: Opaque"
+alignment = 0
 clip_text = true
+
+[node name="AlphaRefusal" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 2

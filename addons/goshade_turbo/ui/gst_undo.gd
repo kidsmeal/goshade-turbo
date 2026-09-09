@@ -81,6 +81,8 @@ func add_layer_for_ui(entry_id: String) -> Dictionary:
 	var entry: GSTManifestEntry = _library.get_entry(entry_id)
 	if entry == null:
 		return {"ok": false, "reason": "entry %s not found in library" % entry_id, "layer": null}
+	if _stack.layers.is_empty() and not entry.inputs.is_empty():
+		return {"ok": false, "reason": "The first layer must work without another layer as input.", "layer": null}
 	var old_output_color: StringName = _stack.output_color
 	var layer: GSTLayer = GSTStackOps.add_layer(_stack, entry_id, entry.kind_out, entry.coord)
 	layer.manifest = entry
@@ -449,3 +451,38 @@ func _undo_add_below(layer_id: StringName, anchor_id: StringName, slot_name: Str
 func _notify() -> void:
 	if _on_changed.is_valid():
 		_on_changed.call()
+
+
+## Adds and connects a distortion source in one action, retaining output.
+func add_layer_below_and_wire_warp(anchor_id: StringName, entry_id: String, axis: String) -> Dictionary:
+	var anchor: GSTLayer = GSTStackOps.find_layer(_stack, anchor_id)
+	if anchor == null or anchor.coord == null or axis not in ["x", "y"]:
+		return {"ok": false, "reason": "The distortion destination is unavailable."}
+	var entry: GSTManifestEntry = _library.get_entry(entry_id)
+	if entry == null:
+		return {"ok": false, "reason": "entry %s not found in library" % entry_id}
+	var index: int = GSTStackOps.find_index(_stack, anchor_id)
+	var old_target: StringName = anchor.coord.warp_x if axis == "x" else anchor.coord.warp_y
+	var layer: GSTLayer = GSTStackOps.add_layer(_stack, entry_id, entry.kind_out, entry.coord)
+	layer.manifest = entry
+	_raw_reorder(layer.id, index)
+	GSTStackOps.initialize_inputs_from_immediate_below(_stack, layer.id, _library)
+	_raw_set_warp(anchor_id, axis, layer.id)
+	_create_action("GST: add %s for distortion" % entry_id)
+	_undo_redo.add_do_method(self, "_redo_add_warp", layer, index, anchor_id, axis)
+	_undo_redo.add_undo_method(self, "_undo_add_warp", layer.id, anchor_id, axis, old_target)
+	_undo_redo.add_do_method(self, "_notify")
+	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.commit_action(false)
+	_notify()
+	return {"ok": true, "reason": ""}
+
+
+func _redo_add_warp(layer: GSTLayer, index: int, anchor_id: StringName, axis: String) -> void:
+	_stack.layers.insert(index, layer)
+	_raw_set_warp(anchor_id, axis, layer.id)
+
+
+func _undo_add_warp(layer_id: StringName, anchor_id: StringName, axis: String, old_target: StringName) -> void:
+	_raw_set_warp(anchor_id, axis, old_target)
+	_undo_add(layer_id)

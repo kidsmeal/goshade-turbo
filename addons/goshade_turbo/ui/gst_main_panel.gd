@@ -50,15 +50,18 @@ signal stack_changed
 @onready var _coord_space_option: OptionButton = %CoordSpaceOption
 @onready var _save_button: Button = %SaveButton
 @onready var _export_button: Button = %ExportButton
-@onready var _recipes_button: MenuButton = %RecipesButton
+@onready var _recipes_button: Button = %RecipesButton
 @onready var _randomize_button: Button = %RandomizeButton
 @onready var _file_menu: MenuButton = %FileMenu
 @onready var _main_split: HSplitContainer = %MainSplit
-@onready var _editing_area: VBoxContainer = %EditingArea
+@onready var _editing_area: PanelContainer = %EditingArea
 @onready var _editing_split: HSplitContainer = %EditingSplit
 @onready var _editing_tabs: TabContainer = %EditingTabs
 @onready var _layer_pane: VBoxContainer = %LayerPane
 @onready var _settings_pane: VBoxContainer = %SettingsPane
+@onready var _picker: GSTPicker = %EmbeddedPicker
+@onready var _codegen_message: Label = %CodegenMessage
+@onready var _editing_content: VBoxContainer = %EditingContent
 @onready var _preview_area: VBoxContainer = %PreviewArea
 
 const COORD_SPACE_NAMES: Array[String] = ["uv", "screen_uv", "local"]
@@ -133,6 +136,10 @@ var _tab_breakpoint: float = 0.0
 var _narrow_layout: bool = false
 var _restoring_layout: bool = false
 var _preferred_narrow_tab: int = 0
+var _picker_context: Dictionary = {}
+var _picker_focus: WeakRef = null
+var _applying_choice: bool = false
+var _control_refusals: Dictionary = {}
 
 
 func _ready() -> void:
@@ -151,8 +158,12 @@ func _ready() -> void:
 	_library.scan()
 	_stack = GSTStack.new()
 	_stack_list.layer_selected.connect(_on_layer_selected)
-	_stack_list.structural_edit_refused.connect(_on_refused)
-	_inspector_column.edit_refused.connect(_on_refused)
+	for control: Node in [_stack_list, _inspector_column, _output_block]:
+		control.set_shared_picker(_picker)
+		control.chooser_requested.connect(_on_chooser_requested)
+	_picker.choice_requested.connect(_on_picker_choice)
+	_picker.cancelled.connect(_close_picker)
+	_picker.tab_changed.connect(_on_picker_tab_changed)
 	_inspector_column.param_edited.connect(_on_param_edited)
 	stack_changed.connect(_resync_material)
 
@@ -202,8 +213,7 @@ func _ready() -> void:
 	file_popup.add_item("Reopen Shader...", FILE_REOPEN_SHADER)
 	file_popup.id_pressed.connect(_on_file_menu_pressed)
 
-	_refresh_recipes_menu()
-	_recipes_button.get_popup().index_pressed.connect(_on_recipe_index_pressed)
+	_recipes_button.pressed.connect(_on_recipes_pressed)
 	_randomize_button.pressed.connect(_on_randomize_pressed)
 	_set_recipe_open(false)
 
@@ -507,11 +517,18 @@ func set_undo_redo_manager(undo_redo: EditorUndoRedoManager) -> void:
 ## with no action registered, by set_undo_redo_manager for the very first
 ## stack.
 func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
+	_picker.set_refusal("")
+	_control_refusals.clear()
+	_message_label.text = ""
+	_stack_list.clear_refusals()
+	_inspector_column.clear_refusals()
+	_output_block.clear_refusals()
 	_stack = stack
 	_undo = undo
 	_stack_list.setup(_stack, _library, _undo)
 	_output_block.setup(_stack, _library, _undo)
 	_inspector_column.setup(_stack, _library, _undo)
+	_inspector_column.edit(_stack_list.get_selected_layer_id())
 	_rewatch_history()
 	_syncing_coord_space = true
 	_coord_space_option.select(int(_stack.coord_space))
@@ -550,6 +567,8 @@ func get_stack() -> GSTStack:
 ## reopen_shader_path call this instead of mutating
 ## _stack/_current_path/_recipe_open directly.
 func replace_stack(new_stack: GSTStack, new_path: String, new_recipe_open: bool) -> void:
+	if is_picker_open() and not _applying_choice:
+		return
 	var old_stack: GSTStack = _stack
 	var old_undo: GSTUndo = _undo
 	var old_path: String = _current_path
@@ -617,7 +636,7 @@ func get_solo_check() -> CheckButton:
 
 ## Wired-by: none (editor smoke seam)
 func get_message_label() -> Label:
-	return _message_label
+	return _codegen_message if not _codegen_message.text.is_empty() else _message_label
 
 
 ## Wired-by: none (editor smoke seam)
@@ -660,6 +679,8 @@ func hide_export_dialog() -> void:
 
 
 func _on_new_pressed() -> void:
+	if is_picker_open() and not _applying_choice:
+		return
 	replace_stack(GSTStack.new(), "", false)
 	_message_label.text = ""
 
@@ -677,6 +698,8 @@ func _on_file_menu_pressed(id: int) -> void:
 
 
 func _on_open_pressed() -> void:
+	if is_picker_open() and not _applying_choice:
+		return
 	_open_dialog.popup_centered_ratio()
 
 
@@ -693,24 +716,14 @@ func _on_open_file_selected(path: String) -> void:
 ## file dialog (docs/PLAN.md Phase 4 Files precedent, gst_stack_list.gd's
 ## add_layer_by_entry_id).
 func open_path(path: String) -> void:
+	if is_picker_open() and not _applying_choice:
+		return
 	var result: Dictionary = GSTStackIO.load(path, _library)
 	if not result["ok"]:
-		_message_label.text = result["reason"]
+		_set_operation_message("Open", result["reason"])
 		return
 	replace_stack(result["stack"], path, false)
-	_message_label.text = ""
-
-
-## Rebuilds the Recipes MenuButton's popup from every .tres under
-## RECIPES_DIR, by file name (docs/PLAN.md Phase 7 Files). Called once from
-## _ready(); the recipe roster is fixed at edit time in this phase (no
-## structural add/remove path adds one during a session), so no further
-## refresh trigger exists yet.
-func _refresh_recipes_menu() -> void:
-	var popup: PopupMenu = _recipes_button.get_popup()
-	popup.clear()
-	for recipe_name: String in _recipe_names():
-		popup.add_item(recipe_name)
+	_set_operation_message("Open", "")
 
 
 func _recipe_names() -> Array[String]:
@@ -729,16 +742,6 @@ func _recipe_names() -> Array[String]:
 	return names
 
 
-## PopupMenu.add_item() auto-assigns each item's id equal to its own index
-## (no explicit id was ever passed above), so index_pressed's index maps
-## directly onto _recipe_names()'s own sorted order without a second lookup.
-func _on_recipe_index_pressed(index: int) -> void:
-	var names: Array[String] = _recipe_names()
-	if index < 0 or index >= names.size():
-		return
-	open_recipe(names[index])
-
-
 ## Loads RECIPES_DIR/<name>.tres and installs it via replace_stack (decision
 ## 20: an undoable "Replace stack" action, same as New/Open/Reopen Shader),
 ## with the new current_path left empty rather than set to the recipe's own
@@ -747,13 +750,15 @@ func _on_recipe_index_pressed(index: int) -> void:
 ## This is the Recipes menu's own handler; public so
 ## tests/gst_editor_smoke.gd can drive the same path directly.
 func open_recipe(name: String) -> void:
+	if is_picker_open() and not _applying_choice:
+		return
 	var path: String = "%s/%s.tres" % [RECIPES_DIR, name]
 	var result: Dictionary = GSTStackIO.load(path, _library)
 	if not result["ok"]:
-		_message_label.text = result["reason"]
+		_set_operation_message("Recipes", result["reason"])
 		return
 	replace_stack(result["stack"], "", true)
-	_message_label.text = ""
+	_set_operation_message("Recipes", "")
 
 
 func _on_save_pressed() -> void:
@@ -777,10 +782,10 @@ func _on_save_as_file_selected(path: String) -> void:
 func save_to_path(path: String) -> void:
 	var result: Dictionary = GSTStackIO.save(_stack, path)
 	if not result["ok"]:
-		_message_label.text = result["reason"]
+		_set_operation_message("Save", result["reason"])
 		return
 	_current_path = path
-	_message_label.text = ""
+	_set_operation_message("Save", "")
 
 
 func _on_export_pressed() -> void:
@@ -812,9 +817,9 @@ func export_to_path(path: String, confirm: bool) -> void:
 	if _overwrite_dialog.visible:
 		_overwrite_dialog.hide()
 	if not result["ok"]:
-		_message_label.text = result["reason"]
+		_set_operation_message("Export", result["reason"])
 		return
-	_message_label.text = ""
+	_set_operation_message("Export", "")
 
 
 func _on_overwrite_confirmed() -> void:
@@ -823,6 +828,8 @@ func _on_overwrite_confirmed() -> void:
 
 
 func _on_reopen_shader_pressed() -> void:
+	if is_picker_open() and not _applying_choice:
+		return
 	_reopen_shader_dialog.popup_centered_ratio()
 
 
@@ -842,15 +849,17 @@ func _on_reopen_shader_file_selected(path: String) -> void:
 ## success clear. This is the Reopen Shader button's own file-selected
 ## handler; public so the smoke can drive it directly too.
 func reopen_shader_path(path: String) -> void:
+	if is_picker_open() and not _applying_choice:
+		return
 	var result: Dictionary = GSTExport.reopen(path, _library)
 	if not result["ok"]:
-		_message_label.text = result["reason"]
+		_set_operation_message("Reopen Shader", result["reason"])
 		return
 	replace_stack(result["stack"], "", false)
 	if result["body_differs"]:
-		_message_label.text = "%s reopened: its body differs from a fresh codegen of the header (hand edits detected, decision 8)" % path
+		_set_operation_message("Reopen Shader", "%s reopened: its body differs from a fresh codegen of the header (hand edits detected, decision 8)" % path)
 	else:
-		_message_label.text = ""
+		_set_operation_message("Reopen Shader", "")
 
 
 func _on_layer_selected(layer_id: StringName) -> void:
@@ -860,11 +869,15 @@ func _on_layer_selected(layer_id: StringName) -> void:
 
 
 func _on_refused(reason: String) -> void:
-	_message_label.text = reason
+	_stack_list.set_refusal(reason)
 
 
 ## GSTUndo's on_changed callback: fires after every do and undo.
 func _on_stack_changed() -> void:
+	for key: String in _control_refusals.keys():
+		if key.begins_with("input:") or key.begins_with("warp:"):
+			if GSTStackOps.find_layer(_stack, StringName(key.get_slice(":", 1))) == null:
+				_control_refusals.erase(key)
 	_stack_list.refresh()
 	_output_block.refresh()
 	_inspector_column.edit(_stack_list.get_selected_layer_id())
@@ -879,11 +892,12 @@ func _on_stack_changed() -> void:
 ## applied on top of a clean sync, so a real codegen error is never masked
 ## by it.
 func _on_preset_selected(index: int) -> void:
+	_set_operation_message("Preview", "")
 	var preset_name: String = GSTPreviewPresets.PRESET_NAMES[index]
 	_preview.set_preset(preset_name)
 	_resync_material()
-	if _message_label.text.is_empty() and GSTPreviewPresets.suggests_screen_uv(preset_name, _stack.coord_space):
-		_message_label.text = "text preset: coord space is uv; screen_uv reads more consistently on text (decision 11)"
+	if _codegen_message.text.is_empty() and GSTPreviewPresets.suggests_screen_uv(preset_name, _stack.coord_space):
+		_set_operation_message("Preview", "Text preview: use screen_uv for coordinates across the screen.")
 
 
 func _on_image_button_pressed() -> void:
@@ -911,14 +925,14 @@ func _on_target_rect_changed(size: Vector2) -> void:
 
 
 func _on_coord_space_selected(index: int) -> void:
-	if _syncing_coord_space:
+	if _syncing_coord_space or is_picker_open():
 		return
 	_undo.set_coord_space(index as GSTStack.CoordSpace)
 
 
 func _set_recipe_open(value: bool) -> void:
 	_recipe_open = value
-	_randomize_button.disabled = not value
+	_randomize_button.disabled = not value or is_picker_open()
 
 
 ## Registered as both the do and undo method of the randomize action,
@@ -970,6 +984,8 @@ func set_randomize_rng(rng: RandomNumberGenerator) -> void:
 ## _randomize_rng, when set via set_randomize_rng, replaces the fresh
 ## OS-seeded RandomNumberGenerator this handler otherwise draws from.
 func _on_randomize_pressed() -> void:
+	if is_picker_open() and not _applying_choice:
+		return
 	var rng: RandomNumberGenerator = _randomize_rng
 	if rng == null:
 		rng = RandomNumberGenerator.new()
@@ -1041,4 +1057,271 @@ func _resync_material() -> void:
 	var solo_id: StringName = _stack_list.get_selected_layer_id() if _solo_check.button_pressed else &""
 	var rect_size: Vector2 = _preview.get_target_rect_size()
 	var result: GSTCodegenResult = GSTMaterialSync.sync(_stack, _library, _material, solo_id, rect_size)
-	_message_label.text = result.error
+	_codegen_message.text = result.error
+	_codegen_message.visible = not result.error.is_empty()
+
+
+func get_picker() -> GSTPicker:
+	return _picker
+
+
+func is_picker_open() -> bool:
+	return not _picker_context.is_empty()
+
+
+func get_picker_context() -> Dictionary:
+	return _picker_context.duplicate()
+
+
+func _on_recipes_pressed() -> void:
+	_on_chooser_requested("recipe", &"", "", _recipes_button)
+
+
+func _on_chooser_requested(purpose: String, layer_id: StringName, slot_name: String, initiator: Control) -> void:
+	if purpose not in ["add", "recipe", "output_color", "output_alpha", "input", "warp"]:
+		return
+	if is_picker_open():
+		return
+	_picker_context = {"stack": _stack, "purpose": purpose, "layer_id": layer_id, "slot_name": slot_name}
+	_picker_focus = weakref(initiator)
+	var title: String = {"add": "Add Layer", "recipe": "Recipes", "output_color": "Output color", "output_alpha": "Transparency", "input": "Choose input", "warp": "Choose distortion"}.get(purpose, "Choose layer")
+	if purpose == "input" or purpose == "warp":
+		var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+		if layer != null:
+			var entry: GSTManifestEntry = _library.get_entry(layer.entry)
+			var label: String = slot_name.capitalize()
+			if purpose == "warp":
+				label = "Horizontal distortion" if slot_name == "x" else "Vertical distortion"
+			elif entry != null:
+				for input: Dictionary in entry.inputs:
+					if String(input["name"]) == slot_name:
+						label = input.get("label", label)
+			title = "%s: %s (l%s)" % [label, entry.function if entry != null else layer.entry, String(layer_id)]
+	_set_picker_modality(true)
+	_picker.open_choices(title, _choice_rows(0), purpose == "input" or purpose == "warp")
+	_picker.set_refusal(String(_control_refusals.get(_picker_key(), "")))
+
+
+func _set_picker_modality(blocked: bool) -> void:
+	_stack_list.set_mutations_blocked(blocked)
+	_inspector_column.set_mutations_blocked(blocked)
+	_output_block.set_mutations_blocked(blocked)
+	_coord_space_option.disabled = blocked
+	_recipes_button.disabled = blocked
+	_randomize_button.disabled = blocked or not _recipe_open
+	var popup: PopupMenu = _file_menu.get_popup()
+	for id: int in [FILE_NEW, FILE_OPEN, FILE_REOPEN_SHADER]:
+		popup.set_item_disabled(popup.get_item_index(id), blocked)
+
+
+func _input(event: InputEvent) -> void:
+	if not is_picker_open() or not is_visible_in_tree() or not event is InputEventKey:
+		return
+	var key: InputEventKey = event as InputEventKey
+	if not key.pressed:
+		return
+	# Editor undo/redo is a stack mutation while a destination is captured.
+	if key.ctrl_pressed or key.meta_pressed:
+		if key.keycode in [KEY_Z, KEY_Y, KEY_N, KEY_O, KEY_DELETE]:
+			get_viewport().set_input_as_handled()
+	var focus: Control = get_viewport().gui_get_focus_owner()
+	if focus != null and _editing_content.is_ancestor_of(focus):
+		_picker.get_search_control().grab_focus()
+		get_viewport().set_input_as_handled()
+
+
+func _close_picker() -> void:
+	if not is_picker_open():
+		return
+	var context: Dictionary = _picker_context
+	_picker_context = {}
+	_picker.hide()
+	_set_picker_modality(false)
+	var target: Control = _picker_focus.get_ref() as Control if _picker_focus != null else null
+	if context["stack"] == _stack:
+		if context["purpose"] == "input":
+			target = _inspector_column.get_input_button(context["slot_name"])
+		elif context["purpose"] == "warp":
+			target = _inspector_column.get_warp_button(context["slot_name"])
+	if not is_instance_valid(target) or not target.is_visible_in_tree():
+		target = _stack_list.get_node("%AddButton") as Control
+	if target.is_visible_in_tree():
+		target.grab_focus.call_deferred()
+	_picker_focus = null
+
+
+func _picker_key() -> String:
+	return "%s:%s:%s" % [_picker_context.get("purpose", ""), _picker_context.get("layer_id", ""), _picker_context.get("slot_name", "")]
+
+
+func _picker_refusal(reason: String) -> void:
+	_control_refusals[_picker_key()] = reason
+	_picker.set_refusal(reason)
+	var purpose: String = _picker_context["purpose"]
+	if purpose == "input" or purpose == "warp":
+		_inspector_column.set_refusal(_picker_context["layer_id"], _picker_context["slot_name"], purpose, reason)
+	elif purpose.begins_with("output_"):
+		_output_block.set_refusal(purpose, reason)
+	elif purpose == "add":
+		_stack_list.set_refusal(reason)
+	elif purpose == "recipe":
+		_set_operation_message("Recipes", reason)
+
+
+func _on_picker_tab_changed(tab: int) -> void:
+	if is_picker_open():
+		_picker.set_choices(_choice_rows(tab))
+
+
+func _destination_error() -> String:
+	if _picker_context.get("stack") != _stack:
+		return "The open stack changed. Close this chooser and choose again."
+	var purpose: String = _picker_context["purpose"]
+	if purpose != "input" and purpose != "warp":
+		return ""
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, _picker_context["layer_id"])
+	if layer == null:
+		return "This layer was removed. Close this chooser and choose again."
+	var name: String = _picker_context["slot_name"]
+	if purpose == "warp":
+		return "" if layer.coord != null and name in ["x", "y"] else "This distortion input is no longer available."
+	var entry: GSTManifestEntry = _library.get_entry(layer.entry)
+	if entry != null:
+		for input: Dictionary in entry.inputs:
+			if String(input["name"]) == name:
+				return ""
+	return "This input is no longer available."
+
+
+func _choice_rows(tab: int) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	if not _destination_error().is_empty():
+		return rows
+	var purpose: String = _picker_context["purpose"]
+	var dest: GSTLayer = GSTStackOps.find_layer(_stack, _picker_context["layer_id"])
+	var wanted_kind: int = GSTLayer.Kind.FIELD if purpose == "warp" else -1
+	var source_only: bool = false
+	if purpose == "input":
+		var manifest: GSTManifestEntry = _library.get_entry(dest.entry)
+		source_only = manifest.samples_source
+		for input: Dictionary in manifest.inputs:
+			if String(input["name"]) == _picker_context["slot_name"]:
+				wanted_kind = int(input["kind"])
+	if purpose == "add" or (purpose in ["input", "warp"] and tab == 1):
+		var ids: Array = _library.entries.keys()
+		ids.sort()
+		for id: String in ids:
+			var entry: GSTManifestEntry = _library.get_entry(id)
+			if _stack.layers.is_empty() and not entry.inputs.is_empty():
+				continue
+			if source_only and id not in ["source/texture", "source/screen"]:
+				continue
+			var input_kinds: Array[String] = []
+			for input: Dictionary in entry.inputs:
+				input_kinds.append(_kind_name(int(input["kind"])))
+			rows.append({"value": id, "title": entry.function, "category": id.get_slice("/", 0), "kind": "(%s) -> %s" % [", ".join(input_kinds), _kind_name(entry.kind_out)], "description": entry.description, "conversion": _conversion(entry.kind_out, wanted_kind)})
+		return rows
+	if purpose == "recipe":
+		for name: String in _recipe_names():
+			rows.append({"value": name, "title": name, "category": "Recipes", "kind": "stack", "description": "Open this bundled recipe as an editable stack.", "conversion": ""})
+		return rows
+	if purpose in ["input", "warp"]:
+		rows.append(_mode_row("", "No layer", "Leave this input unconnected."))
+	elif purpose == "output_color":
+		wanted_kind = GSTLayer.Kind.COLOR
+		rows.append(_mode_row("", _output_block.get_automatic_color_text(), "Use the highest color layer in the stack."))
+	elif purpose == "output_alpha":
+		rows.append(_mode_row("", _output_block.get_automatic_alpha_text(), "Use texture transparency when a texture source exists; otherwise use opaque."))
+		rows.append(_mode_row("none", "Opaque", "Show the finished effect without transparency."))
+		rows.append(_mode_row("texture", "Texture transparency", "Use the original texture transparency."))
+		rows.append(_mode_row("color_alpha", "Output layer transparency", "Use the output layer transparency. A field output is opaque."))
+	var limit: int = GSTStackOps.find_index(_stack, dest.id) if dest != null else _stack.layers.size()
+	for i: int in range(limit - 1, -1, -1):
+		var layer: GSTLayer = _stack.layers[i]
+		if source_only and layer.entry not in ["source/texture", "source/screen"]:
+			continue
+		if purpose == "output_alpha" and layer.kind_out != GSTLayer.Kind.FIELD:
+			continue
+		var entry: GSTManifestEntry = _library.get_entry(layer.entry)
+		rows.append({"value": String(layer.id), "title": "%s (l%s)" % [entry.function if entry != null else layer.entry, String(layer.id)], "category": "Layers", "kind": _kind_name(layer.kind_out), "description": entry.description if entry != null else "", "conversion": _conversion(layer.kind_out, wanted_kind)})
+	return rows
+
+
+func _mode_row(value: String, title: String, description: String) -> Dictionary:
+	return {"value": value, "title": title, "category": "Options", "kind": "", "description": description, "conversion": ""}
+
+
+func _kind_name(kind: int) -> String:
+	return "field" if kind == GSTLayer.Kind.FIELD else "color"
+
+
+func _conversion(kind: int, wanted: int) -> String:
+	if wanted < 0 or kind == wanted:
+		return ""
+	return "field -> color: grayscale" if kind == GSTLayer.Kind.FIELD else "color -> field: luminance"
+
+
+func _on_picker_choice(choice: Dictionary) -> void:
+	if not is_picker_open():
+		return
+	if not choice.has("value"):
+		_picker_refusal("This choice has no value.")
+		return
+	var error: String = _destination_error()
+	if not error.is_empty():
+		_picker_refusal(error)
+		return
+	var value: String = String(choice.get("value", ""))
+	var eligible: bool = false
+	for row: Dictionary in _choice_rows(_picker.get_tab_index()):
+		if row["value"] == value:
+			eligible = true
+			break
+	if not eligible:
+		_picker_refusal("This choice is no longer available for this input.")
+		return
+	var purpose: String = _picker_context["purpose"]
+	var layer_id: StringName = _picker_context["layer_id"]
+	var slot: String = _picker_context["slot_name"]
+	var result: Dictionary = {"ok": true, "reason": ""}
+	_applying_choice = true
+	match purpose:
+		"add":
+			result = _undo.add_layer_for_ui(value)
+			if result["ok"]:
+				_stack_list.select_layer(result["layer"].id)
+		"input":
+			result = _undo.add_layer_below_and_wire(layer_id, value, slot) if _picker.get_tab_index() == 1 else _undo.assign_slot(layer_id, slot, StringName(value))
+		"warp":
+			result = _undo.add_layer_below_and_wire_warp(layer_id, value, slot) if _picker.get_tab_index() == 1 else _undo.assign_warp(layer_id, slot, StringName(value))
+		"output_color":
+			if _stack.output_color != StringName(value):
+				result = _undo.set_output_color(StringName(value))
+		"output_alpha":
+			if _stack.output_alpha != StringName(value):
+				result = _undo.set_output_alpha(StringName(value))
+		"recipe":
+			var loaded: Dictionary = GSTStackIO.load("%s/%s.tres" % [RECIPES_DIR, value], _library)
+			result = loaded
+			if loaded["ok"]:
+				replace_stack(loaded["stack"], "", true)
+	_applying_choice = false
+	if not result["ok"]:
+		_picker_refusal(result["reason"])
+		return
+	_picker_refusal("")
+	_close_picker()
+
+
+func _set_operation_message(control: String, reason: String) -> void:
+	var key: String = "file:" + control
+	if reason.is_empty():
+		_control_refusals.erase(key)
+	else:
+		_control_refusals[key] = reason
+	var lines: Array[String] = []
+	for name: String in _control_refusals:
+		if name.begins_with("file:"):
+			lines.append("%s: %s" % [name.trim_prefix("file:"), _control_refusals[name]])
+	_message_label.text = "\n".join(lines)
+	_message_label.visible = not lines.is_empty()

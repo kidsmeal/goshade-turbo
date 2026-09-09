@@ -26,6 +26,10 @@ func run(plugin: EditorPlugin) -> void:
 		_check("inspector_api", false, "parameter and coordinate inspector accessors are absent")
 		_finish(plugin)
 		return
+	var saved_section_states: Dictionary = inspector.get_section_states().duplicate(true)
+	inspector.set_section_states({})
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
 
 	var layer: GSTLayer = panel.get_stack_list().add_layer_by_entry_id("generative/fbm")
 	panel.get_stack_list().select_layer(layer.id)
@@ -113,18 +117,16 @@ func run(plugin: EditorPlugin) -> void:
 		await plugin.get_tree().process_frame
 	var long_label: Label = _find_label(inspector, "Second comparison value")
 	var long_row: Control = long_label.get_parent() as Control if long_label != null else null
-	var long_option: OptionButton = null
-	if long_row != null:
-		var option_nodes: Array[Node] = long_row.find_children("*", "OptionButton", true, false)
-		if not option_nodes.is_empty():
-			long_option = option_nodes[0] as OptionButton
+	var input_button: Button = inspector.get_input_button("b")
 	var row_bounded: bool = long_row != null and inspector.get_global_rect().encloses(long_row.get_global_rect())
-	var readable_option: bool = long_option != null and long_option.size.x >= 48.0
-	_check("long_input_label", long_label != null and not long_label.clip_text and long_label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and row_bounded and readable_option, "label=%s lines=%d row=%s inspector=%s option_width=%.1f" % [long_label.text if long_label != null else "missing", long_label.get_line_count() if long_label != null else 0, long_row.get_global_rect() if long_row != null else Rect2(), inspector.get_global_rect(), long_option.size.x if long_option != null else 0.0])
+	var readable_button: bool = input_button != null and input_button.size.x >= 48.0 and input_button.text == _reference_text(panel, max_layer.slots.get("b", &"") as StringName)
+	var input_controls_visible: bool = long_label != null and long_label.is_visible_in_tree() and input_button != null and input_button.is_visible_in_tree()
+	_check("long_input_label", input_controls_visible and not long_label.clip_text and long_label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and row_bounded and readable_button, "label=%s visible=%s lines=%d row=%s inspector=%s button_visible=%s button_width=%.1f" % [long_label.text if long_label != null else "missing", long_label.is_visible_in_tree() if long_label != null else false, long_label.get_line_count() if long_label != null else 0, long_row.get_global_rect() if long_row != null else Rect2(), inspector.get_global_rect(), input_button.is_visible_in_tree() if input_button != null else false, input_button.size.x if input_button != null else 0.0])
 
 	if not screenshot_path.is_empty():
 		await _save_screenshot(plugin, screenshot_path.get_basename() + "-inputs.png", "screenshot_inputs")
 
+	inspector.set_section_states(saved_section_states)
 	_finish(plugin)
 
 
@@ -187,6 +189,19 @@ func _find_schema(schema: Array[Dictionary], name: String) -> Dictionary:
 	return {}
 
 
+func _reference_text(panel: GSTMainPanel, layer_id: StringName) -> String:
+	if layer_id == &"":
+		return "(none)"
+	var layer: GSTLayer = GSTStackOps.find_layer(panel.get_stack(), layer_id)
+	var entry: GSTManifestEntry = panel.get_library().get_entry(layer.entry) if layer != null else null
+	var function_name: String = ""
+	if entry != null:
+		function_name = entry.function
+	elif layer != null:
+		function_name = layer.entry
+	return "l%s %s" % [String(layer_id), function_name]
+
+
 func _find_property_info(object: Object, name: String) -> Dictionary:
 	for property: Dictionary in object.get_property_list():
 		if String(property.get("name", "")) == name:
@@ -196,7 +211,7 @@ func _find_property_info(object: Object, name: String) -> Dictionary:
 
 func _has_label(root: Node, text: String, tooltip: String) -> bool:
 	var label: Label = _find_label(root, text)
-	return label != null and label.tooltip_text == tooltip
+	return label != null and label.is_visible_in_tree() and label.size.x > 0.0 and label.size.y > 0.0 and label.tooltip_text == tooltip
 
 
 func _find_label(root: Node, text: String) -> Label:

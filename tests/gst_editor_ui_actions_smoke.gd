@@ -78,7 +78,17 @@ func run(plugin: EditorPlugin) -> void:
 
 	var field: GSTLayer = stack_list.add_layer_by_entry_id("generative/hash")
 	await plugin.get_tree().process_frame
-	_check("color_warp_candidate", _option_tree_has_metadata(panel.get_inspector_column(), mix.id), "warp controls contain color layer '%s'" % String(mix.id))
+	var warp_button: Button = panel.get_inspector_column().get_warp_button("x")
+	warp_button.pressed.emit()
+	await plugin.get_tree().process_frame
+	var warp_rows: Array[Dictionary] = panel.get_picker().get_visible_rows()
+	var color_warp_candidate: bool = false
+	for row: Dictionary in warp_rows:
+		if String(row.get("value", "")) == String(mix.id) and String(row.get("conversion", "")) == "color -> field: luminance":
+			color_warp_candidate = true
+	_check("color_warp_candidate", color_warp_candidate, "warp chooser rows=%s include color layer='%s' with luminance conversion=%s" % [panel.get_picker().get_visible_entry_ids(), String(mix.id), color_warp_candidate])
+	panel._close_picker()
+	await plugin.get_tree().process_frame
 	var illegal_filter: GSTLayer = stack_list.add_layer_by_entry_id("filter/pixelate")
 	await plugin.get_tree().process_frame
 	_check("illegal_filter_default", field != null and illegal_filter != null and not illegal_filter.slots.has("source") and stack.output_color == illegal_filter.id, "source_present=%s output='%s'" % [illegal_filter.slots.has("source"), String(stack.output_color)])
@@ -141,16 +151,3 @@ func _image_is_uniform(image: Image) -> bool:
 			if not image.get_pixel(x, y).is_equal_approx(first):
 				return false
 	return true
-
-
-func _option_tree_has_metadata(root: Node, value: StringName) -> bool:
-	if root is OptionButton:
-		var option: OptionButton = root as OptionButton
-		for i: int in range(option.item_count):
-			var metadata: Variant = option.get_item_metadata(i)
-			if typeof(metadata) == TYPE_STRING_NAME and metadata == value:
-				return true
-	for child: Node in root.get_children():
-		if _option_tree_has_metadata(child, value):
-			return true
-	return false

@@ -2037,3 +2037,78 @@ Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 3. Phase 2 was committed
 - The `4.7` final assertion run remains the implementer's `14/0` evidence; independent review did not repeat it.
 - Orchestrator restored only `project.godot` feature metadata to `4.4` after review. No production code changed after the passing review.
 - Phase 3 is ready for commit approval. Phases 4 and 5 remain pending.
+
+## Editor UI redesign phase 4: embedded choosers
+
+### Implementation and evidence
+
+- Phase 3 committed as `68d0c6e`; this section records phase 4 verification.
+- `GST_EDITOR_SMOKE=ui_picker` dispatches `tests/gst_editor_ui_picker_smoke.gd` inside the real editor.
+- Evidence directory: `C:/Users/atk67/.codex/visualizations/2026/09/09/01a083c7-014d-7361-ae67-8eddff9c46f1/phase4-evidence`.
+- Baseline `red.stdout.log`: embedded `PanelContainer` assertion failed before implementation.
+- Add Layer, inputs, distortion, Recipes, output color, and Transparency now share the editing-area chooser.
+- Input and distortion choices use Existing layers and Add new tabs; both include eligible automatic conversions.
+- `GSTUndo.add_layer_below_and_wire_warp` adds, initializes, inserts, and connects a distortion source in one undo action without changing output.
+- `GSTUndo.add_layer_for_ui` rejects input-dependent entries on an empty stack before allocating an ID.
+- Native parameter and coordinate inspectors remain the property-editing surface.
+- Control refusal labels and the code generation label have independent state. Code generation errors appear above the preview.
+
+### Failures found during implementation
+
+- Early keyboard tests ran before the editor finished startup. Events reached the panel but native controls did not receive them; waiting for startup allowed actual viewport keyboard dispatch.
+- Enter uses native `LineEdit.text_submitted` and `Tree.item_activated` signals. Single-click activation uses the tree's selected item.
+- An applied input edit rebuilt its button before focus restoration. Closing now resolves the current destination button.
+- Screenshot inspection found the chooser inheriting an empty panel style, leaving underlying controls visible. The chooser now supplies an opaque editor-colored panel.
+- Resizing exposed stale tree-column minimum widths and horizontal scrolling. Columns now use expansion ratios updated on the tree's own resize signal.
+- The native label smoke inherited a collapsed Inputs section and measured hidden rows. It now expands sections, requires visible positive geometry, and restores the previous section state.
+- A temporary test indentation error caused one bounded timeout and unrelated script-load errors in the following label run. That run is not clean verification; the typo was corrected before `ui_picker-final2`.
+- Recipe replacement left the inspector editing an old resource. Stack installation now points it at the selected layer in the installed stack.
+- A preview coordinate suggestion survived switching back to Sprite. Preset changes now update only their own message state.
+
+### Implementation verification on 4.6.2
+
+- Import exited `0` with empty stderr before integration runs.
+- Named unit suite: `21` files, `138` test methods, `0` failures; wrapper exit `0`. Independent review must repeat after the final empty-stack guard.
+- `ui_picker-final2.stdout.log`: `45/0`, normal exit, empty stderr.
+- Chooser coverage includes actual mouse activation, arrow navigation, Enter, Escape, focus return, retained search/context, description search, earlier/source eligibility, conversions, and every Transparency mode.
+- Atomic distortion add/undo/redo preserves output and resource identity; invalid destinations allocate no ID or history action.
+- Stale stack and removed destination checks retain the captured context and register no edit.
+- Mutating handlers and undo shortcut are blocked while open. Save and Export file dialogs remain reachable; animated fire preview pixels continue changing.
+- `1366x768` default allocation: host/root `792x641`, editing `473x559`, preview area `316x559`, rendered preview `316x358` before adding a conversion row to Final output.
+- Wide-to-narrow transition retained context. Narrow editing width measured `443`; preview remained `296x180`.
+- At the restored `1366x768` size, tree columns total `439` pixels inside a `453`-pixel tree; conversion text line widths fit the visible kind column.
+- Orchestrator inspected `picker-conversion.png`: opaque chooser, all three columns visible, complete two-line luminance conversion, persistent output grayscale tag, and visible preview.
+- `ui_layout-2`: `15/0`, empty stderr, including independent stack/settings refusal bounds and removal cleanup.
+- `ui_actions-1`: `20/0`, empty stderr.
+- Legacy selectors: `4` = `50/0`, `5` = `18/0`, `6` = `16/0`, `7` = `25/0`, `8` = `16/0`.
+- Selector `5` reports the existing direct-PNG-load warnings in its texture/screen test fixtures; assertions pass.
+- Final native label rerun and independent review are pending. The complete cross-version matrix remains phase 5 work.
+
+### Independent phase 4 review, round 1
+
+- Verdict: `FAIL`; one required test correction, no production defect, documentation impact, or deferred note reported.
+- Import on `4.6.2`: exit `0`, empty stderr.
+- Named unit suite: `138/0`, exit `0`, empty stderr.
+- `ui_picker` on `4.6.2`: `45/0`; `ui_labels`: `14/0`; `ui_layout`: `15/0`; `ui_actions`: `20/0`. All exited `0` with empty stderr.
+- `ui_picker` on `4.4`: `44/1`, exit `1`, empty stderr.
+- The failed assertion assumed a requested `720x600` editor size forced narrow mode. Godot `4.4` clamped the host width to `781`, giving editing `466` pixels against a `458`-pixel breakpoint; wide mode remained valid.
+- Required correction: drag the splitter below the measured breakpoint when resizing does not cross it; retain actual-crossing, narrow-mode, frozen-context, and enclosure assertions.
+- Re-review and passing chooser runs on both versions are required before the commit gate.
+
+### Round 1 fix verification
+
+- The chooser smoke captures the actual wide breakpoint and drives the real main splitter when resizing leaves editing above it.
+- On `4.4`, the first drag stopped at the wide minimum while activating tabs. A second conditional drag then crossed below that threshold using the reduced tab minimum.
+- The test retains strict below-breakpoint, active-tab-layout, frozen-context, and picker-enclosure assertions.
+- `fix2-ui_picker-4.4` and `fix2-ui_picker-4.6.2`: `45/0` each, normal exits, empty stderr.
+- Production code is unchanged after the first independent review. Re-review is pending.
+
+### Independent phase 4 re-review
+
+- Verdict: `PASS`; no required fixes, fix-now notes, deferred notes, or documentation impact.
+- Final `ui_picker` on `4.4` and `4.6.2`: `45/0` each, exit `0`, empty stderr.
+- Actual narrow crossings: `4.4` editing width `434` against breakpoint `458`; `4.6.2` editing width `443` against breakpoint `471`.
+- Reviewer confirmed real splitter input, strict threshold crossing, preserved destination, and enclosed chooser.
+- `git diff --check` passed. All owned Godot processes exited.
+- Orchestrator restored only `project.godot` feature metadata to `4.4` after review.
+- Phase 4 is ready for commit approval. Phase 5 remains pending.

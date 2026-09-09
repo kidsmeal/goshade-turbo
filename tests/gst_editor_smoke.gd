@@ -22,7 +22,10 @@ var _fail_count: int = 0
 ## keeps running the phase 4 checks unchanged.
 func run(plugin: EditorPlugin) -> void:
 	var flag: String = OS.get_environment("GST_EDITOR_SMOKE")
-	if flag == "ui_layout":
+	if flag == "ui_picker":
+		var picker_smoke: RefCounted = load("res://tests/gst_editor_ui_picker_smoke.gd").new()
+		await picker_smoke.run(plugin)
+	elif flag == "ui_layout":
 		var layout_smoke: RefCounted = load("res://tests/gst_editor_ui_layout_smoke.gd").new()
 		await layout_smoke.run(plugin)
 	elif flag == "ui_actions":
@@ -71,7 +74,9 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	_check("2b", stack.output_color == hash_layer.id and invert.slots.get("x", &"") == fbm.id, "UI adds assign top output='%s' (expect '%s') and initialize invert.x='%s' (expect '%s')" % [String(stack.output_color), String(hash_layer.id), String(invert.slots.get("x", &"")), String(fbm.id)])
 
 	await plugin.get_tree().process_frame
-	panel.get_output_block()._on_color_selected(0)
+	panel.get_output_block().get_color_button().pressed.emit()
+	await plugin.get_tree().process_frame
+	panel.get_picker().activate_value("")
 	await plugin.get_tree().process_frame
 	_check_output_defaults("3", panel, "after the adds, before any output-block or color-layer state exists")
 	history.undo()
@@ -95,7 +100,7 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	stack_list._on_up_pressed()
 	await plugin.get_tree().process_frame
 	var order_after_attempt: Array[StringName] = _layer_ids(stack)
-	var refusal_reason: String = panel.get_message_label().text
+	var refusal_reason: String = stack_list.get_refusal_label().text
 	var refused_as_expected: bool = refusal_reason.contains("references layer %s, which would be at or above it after this move" % String(fbm.id))
 	_check("7", refused_as_expected and order_after_attempt == order_before_attempt, "up-press fbm above invert message='%s' order_unchanged=%s" % [refusal_reason, order_after_attempt == order_before_attempt])
 
@@ -120,16 +125,17 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	_check("10", output_color_result["ok"] and stack.output_color == invert.id, "set output color to invert: ok=%s applied='%s' (expect '%s')" % [output_color_result["ok"], String(stack.output_color), String(invert.id)])
 
 	var output_alpha_result: Dictionary = undo.set_output_alpha(&"none")
-	var alpha_applied: bool = stack.output_alpha == &"none" and panel.get_output_block().get_selected_alpha_text() == "none"
-	_check("11", output_alpha_result["ok"] and alpha_applied, "set output alpha to none: ok=%s applied='%s' selected_text='%s' (expect 'none')" % [output_alpha_result["ok"], String(stack.output_alpha), panel.get_output_block().get_selected_alpha_text()])
+	var alpha_applied: bool = stack.output_alpha == &"none" and panel.get_output_block().get_selected_alpha_text() == "Opaque"
+	_check("11", output_alpha_result["ok"] and alpha_applied, "set output alpha to none: ok=%s applied='%s' selected_text='%s' (expect 'Opaque')" % [output_alpha_result["ok"], String(stack.output_alpha), panel.get_output_block().get_selected_alpha_text()])
 
-	# Selecting the output block's default row (fix pass 2, item 5) must be
-	# undoable, driven through the same private handler the OptionButton's
-	# item_selected signal calls (same pattern as stack_list._on_up_pressed()
-	# above). Undone immediately after the check so _run_undo_sequence below
+	# Selecting the output chooser's Automatic row must be undoable, driven
+	# through the real button and shared picker. Undone immediately after the
+	# check so _run_undo_sequence below
 	# still finds exactly the 7 actions its own comment documents.
 	var count_before_default_pick: int = history.get_history_count()
-	panel.get_output_block()._on_alpha_selected(0)
+	panel.get_output_block().get_alpha_button().pressed.emit()
+	await plugin.get_tree().process_frame
+	panel.get_picker().activate_value("")
 	await plugin.get_tree().process_frame
 	var count_after_default_pick: int = history.get_history_count()
 	_check("11b", stack.output_alpha == &"" and count_after_default_pick == count_before_default_pick + 1, "select default alpha row after explicit none: output_alpha='%s' (expect empty), history_count %d -> %d (expect +1)" % [String(stack.output_alpha), count_before_default_pick, count_after_default_pick])
@@ -160,13 +166,13 @@ func _layer_ids(stack: GSTStack) -> Array[StringName]:
 
 
 ## Output block defaults (decision 12, docs/PLAN.md Phase 4 amendment): with
-## no color layer in the stack, the color option shows "(none)"; with no
-## source/texture layer, the alpha option shows "(default) none".
+## no color layer in the stack, the color button names the empty automatic
+## result; with no source/texture layer, Transparency names automatic opaque.
 func _check_output_defaults(item: String, panel: GSTMainPanel, context: String) -> void:
 	var color_text: String = panel.get_output_block().get_selected_color_text()
 	var alpha_text: String = panel.get_output_block().get_selected_alpha_text()
-	var ok: bool = color_text == "(none)" and alpha_text == "(default) none"
-	_check(item, ok, "%s: color option='%s' alpha option='%s' (expect '(none)' and '(default) none')" % [context, color_text, alpha_text])
+	var ok: bool = color_text == "Automatic: none" and alpha_text == "Automatic: Opaque"
+	_check(item, ok, "%s: color='%s' transparency='%s'" % [context, color_text, alpha_text])
 
 
 ## color/palette (fix pass 2, item 1): a real shipped manifest whose a, b, c,
@@ -209,19 +215,21 @@ func _run_color_alpha_default_excursion(plugin: EditorPlugin, panel: GSTMainPane
 	var fill: GSTLayer = stack_list.add_layer_by_entry_id("color/fill")
 	await plugin.get_tree().process_frame
 	var fill_entry: GSTManifestEntry = library.get_entry("color/fill")
-	var expect_color: String = "(default) l%s %s" % [String(fill.id), fill_entry.function]
+	var expect_color: String = "Automatic: l%s %s" % [String(fill.id), fill_entry.function]
 	_check("4", panel.get_output_block().get_selected_color_text() == "l%s %s" % [String(fill.id), fill_entry.function], "UI add selects fill explicitly: '%s'" % panel.get_output_block().get_selected_color_text())
-	panel.get_output_block()._on_color_selected(0)
+	panel.get_output_block().get_color_button().pressed.emit()
+	await plugin.get_tree().process_frame
+	panel.get_picker().activate_value("")
 	await plugin.get_tree().process_frame
 	_check("4a", panel.get_output_block().get_selected_color_text() == expect_color, "color default after adding fill: '%s' (expect '%s')" % [panel.get_output_block().get_selected_color_text(), expect_color])
 
 	stack_list.add_layer_by_entry_id("source/texture")
 	await plugin.get_tree().process_frame
-	_check("4b", panel.get_output_block().get_selected_alpha_text() == "(default) texture", "alpha default after adding texture: '%s' (expect '(default) texture')" % [panel.get_output_block().get_selected_alpha_text()])
+	_check("4b", panel.get_output_block().get_selected_alpha_text() == "Automatic: Texture transparency", "automatic transparency after adding texture: '%s'" % [panel.get_output_block().get_selected_alpha_text()])
 
 	history.undo()
 	await plugin.get_tree().process_frame
-	_check("4c", panel.get_output_block().get_selected_alpha_text() == "(default) none", "alpha default after undoing texture add: '%s' (expect '(default) none')" % [panel.get_output_block().get_selected_alpha_text()])
+	_check("4c", panel.get_output_block().get_selected_alpha_text() == "Automatic: Opaque", "automatic transparency after undoing texture add: '%s'" % [panel.get_output_block().get_selected_alpha_text()])
 
 	history.undo()
 	await plugin.get_tree().process_frame
@@ -232,10 +240,9 @@ func _run_color_alpha_default_excursion(plugin: EditorPlugin, panel: GSTMainPane
 	_check("4e", panel.get_stack().output_color == previous_output, "undoing fill add restores the previous UI output '%s' (expect '%s')" % [String(panel.get_stack().output_color), String(previous_output)])
 
 
-## Drives the inspector column's "Add for slot" button on invert's field
-## slot "x" rather than calling GSTPicker.open_for_slot() directly (fix 3):
-## presses the button, checks the resulting picker is field-kind-only and
-## search-filters within that set, picks an entry, checks the compound add +
+## Drives the inspector column's input button on invert's field slot "x",
+## switches to Add new, checks automatic-conversion candidates, then
+## search-filters within that set and checks the compound add +
 ## wire landed directly below invert, then undoes it. This excursion is also
 ## self-canceling for the same reason as the one above.
 func _run_add_for_slot_excursion(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, library: GSTLibrary, history: UndoRedo, invert: GSTLayer) -> void:
@@ -244,14 +251,21 @@ func _run_add_for_slot_excursion(plugin: EditorPlugin, panel: GSTMainPanel, stac
 	stack_list.select_layer(invert.id)
 	await plugin.get_tree().process_frame
 
-	inspector._on_add_for_slot_pressed("x", GSTLayer.Kind.FIELD)
+	var input_button: Button = inspector.get_input_button("x")
+	input_button.pressed.emit()
+	await plugin.get_tree().process_frame
 	var picker: GSTPicker = inspector.get_slot_picker()
+	picker.switch_tab(1)
+	await plugin.get_tree().process_frame
 	var all_ids: Array[String] = picker.get_all_entry_ids()
-	var all_field: bool = not all_ids.is_empty()
+	var has_field: bool = false
+	var has_color: bool = false
 	for entry_id: String in all_ids:
-		if library.get_entry(entry_id).kind_out != GSTLayer.Kind.FIELD:
-			all_field = false
-	_check("5a", all_field, "add-for-slot picker listed %d entries, all field kind=%s" % [all_ids.size(), all_field])
+		if library.get_entry(entry_id).kind_out == GSTLayer.Kind.FIELD:
+			has_field = true
+		else:
+			has_color = true
+	_check("5a", has_field and has_color, "add-new input chooser listed %d entries, field=%s color=%s" % [all_ids.size(), has_field, has_color])
 
 	picker.set_search_text("checker")
 	var visible_ids: Array[String] = picker.get_visible_entry_ids()
@@ -259,7 +273,7 @@ func _run_add_for_slot_excursion(plugin: EditorPlugin, panel: GSTMainPanel, stac
 	_check("5b", only_checker, "search 'checker' visible=%s (expect ['generative/checker'])" % [visible_ids])
 
 	var count_before_pick: int = stack.layers.size()
-	picker.entry_picked.emit("generative/checker")
+	picker.activate_value("generative/checker")
 	await plugin.get_tree().process_frame
 	var invert_idx_now: int = GSTStackOps.find_index(stack, invert.id)
 	var new_layer: GSTLayer = stack.layers[invert_idx_now - 1] if invert_idx_now > 0 else null

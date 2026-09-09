@@ -1,153 +1,400 @@
 @tool
 class_name GSTPicker
-extends PopupPanel
+extends PanelContainer
 
-## Grouped-by-taxonomy-folder entry picker (decision 19): function name, kind
-## signature, description. No display names, no thumbnails. `open_for_add()`
-## shows every entry; `open_for_slot(kind)` pre-filters to entries whose
-## output kind matches. Search filters the currently shown set.
+## Embedded chooser view for the editing area. The owner supplies eligible
+## rows and owns destination validation, mutation, refusal lifetime, and close.
 
-signal entry_picked(entry_id: String)
+signal choice_requested(choice: Dictionary)
+signal cancelled()
+signal tab_changed(tab: int)
 
+@onready var _heading: Label = %Heading
+@onready var _close_button: Button = %CloseButton
+@onready var _tabs: TabBar = %Tabs
 @onready var _search: LineEdit = %Search
 @onready var _tree: Tree = %Tree
+@onready var _selected_details: Label = %SelectedDetails
+@onready var _refusal: Label = %Refusal
 
-var _library: GSTLibrary = null
-var _has_kind_filter: bool = false
-var _kind_filter: GSTLayer.Kind = GSTLayer.Kind.FIELD
+var _rows: Array[Dictionary] = []
+var _has_tabs: bool = false
+var _suppress_tab_signal: bool = false
+var _ignore_item_activated: bool = false
 
 
 func _ready() -> void:
+	_apply_opaque_panel_style()
+	_close_button.pressed.connect(_on_cancel_requested)
+	_tabs.tab_changed.connect(_on_tabs_tab_changed)
 	_search.text_changed.connect(_on_search_changed)
-	_tree.item_activated.connect(_on_item_activated)
+	_search.text_submitted.connect(_on_search_submitted)
+	_search.gui_input.connect(_on_search_gui_input)
+	_tree.item_mouse_selected.connect(_on_tree_item_mouse_selected)
+	_tree.item_activated.connect(_on_tree_item_activated)
+	_tree.item_selected.connect(_update_selected_details)
+	_tree.gui_input.connect(_on_tree_gui_input)
+	_tree.set_column_title(0, "Function")
+	_tree.set_column_title(1, "Kind")
+	_tree.set_column_title(2, "Description")
+	_tree.set_column_expand(0, true)
+	_tree.set_column_expand(1, true)
+	_tree.set_column_expand(2, true)
+	_tree.resized.connect(_update_column_widths)
+	_update_column_widths.call_deferred()
 
 
-func open_for_add(library: GSTLibrary) -> void:
-	_library = library
-	_has_kind_filter = false
+func open_choices(heading: String, rows: Array[Dictionary], has_tabs: bool = false, initial_tab: int = 0) -> void:
+	_heading.text = heading
+	_heading.tooltip_text = heading
+	_has_tabs = has_tabs
+	_tabs.visible = has_tabs
+	_suppress_tab_signal = true
+	_tabs.current_tab = clampi(initial_tab, 0, maxi(0, _tabs.tab_count - 1))
+	_suppress_tab_signal = false
 	_search.text = ""
+	set_refusal("")
+	set_choices(rows)
+	show()
+	_search.call_deferred("grab_focus")
+
+
+## Replaces the owner's eligible rows while preserving query and tab state.
+func set_choices(rows: Array[Dictionary]) -> void:
+	_rows.clear()
+	for row: Dictionary in rows:
+		_rows.append(row.duplicate(true))
 	_populate()
-	popup_centered()
 
 
-func open_for_slot(library: GSTLibrary, kind: GSTLayer.Kind) -> void:
-	_library = library
-	_has_kind_filter = true
-	_kind_filter = kind
-	_search.text = ""
-	_populate()
-	popup_centered()
+## Changes the active choice source without clearing the search query.
+func switch_tab(index: int) -> void:
+	if not _has_tabs:
+		return
+	var bounded_index: int = clampi(index, 0, maxi(0, _tabs.tab_count - 1))
+	_suppress_tab_signal = true
+	_tabs.current_tab = bounded_index
+	_suppress_tab_signal = false
+	tab_changed.emit(bounded_index)
 
 
-func _kind_label(kind: GSTLayer.Kind) -> String:
-	return "field" if kind == GSTLayer.Kind.FIELD else "color"
+func set_refusal(reason: String) -> void:
+	_refusal.text = reason
+	_refusal.visible = not reason.strip_edges().is_empty()
 
 
-func _kind_signature(entry: GSTManifestEntry) -> String:
-	var input_labels: Array[String] = []
-	for input: Dictionary in entry.inputs:
-		input_labels.append(_kind_label(input["kind"] as GSTLayer.Kind))
-	return "(%s) -> %s" % [", ".join(input_labels), _kind_label(entry.kind_out)]
+func set_search_text(text: String) -> void:
+	_search.text = text
+	_apply_search_filter(text)
 
 
-func _taxonomy_folder(entry_id: String) -> String:
-	var slash: int = entry_id.find("/")
-	if slash == -1:
-		return entry_id
-	return entry_id.substr(0, slash)
+func get_search_control() -> LineEdit:
+	return _search
+
+
+func get_results_tree() -> Tree:
+	return _tree
+
+
+func get_tab_index() -> int:
+	return _tabs.current_tab
+
+
+## Every current choice value, regardless of the search filter.
+func get_all_entry_ids() -> Array[String]:
+	var values: Array[String] = []
+	for row: Dictionary in _rows:
+		values.append(String(row.get("value", "")))
+	return values
+
+
+## Every current choice value whose title or description matches the query.
+func get_visible_entry_ids() -> Array[String]:
+	var values: Array[String] = []
+	for row: Dictionary in get_visible_rows():
+		values.append(String(row.get("value", "")))
+	return values
+
+
+func get_visible_rows() -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	var root: TreeItem = _tree.get_root()
+	if root == null:
+		return rows
+	for folder_item: TreeItem in root.get_children():
+		if not folder_item.visible:
+			continue
+		for item: TreeItem in folder_item.get_children():
+			if not item.visible:
+				continue
+			var data: Variant = item.get_metadata(0)
+			if typeof(data) == TYPE_DICTIONARY:
+				rows.append((data as Dictionary).duplicate(true))
+	return rows
+
+
+## Activates an existing visible row through the same path as mouse and Enter.
+func activate_value(value: String) -> bool:
+	for item: TreeItem in _visible_items():
+		var data: Variant = item.get_metadata(0)
+		if typeof(data) == TYPE_DICTIONARY and String((data as Dictionary).get("value", "")) == value:
+			item.select(0)
+			return _activate_item(item)
+	return false
 
 
 func _populate() -> void:
 	_tree.clear()
-	if _library == null:
-		return
 	var root: TreeItem = _tree.create_item()
-	_tree.hide_root = true
-	var folder_items: Dictionary = {}
-	var ids: Array = _library.entries.keys()
-	ids.sort()
-	for entry_id: String in ids:
-		var entry: GSTManifestEntry = _library.get_entry(entry_id)
-		if _has_kind_filter and entry.kind_out != _kind_filter:
-			continue
-		var folder: String = _taxonomy_folder(entry_id)
-		if not folder_items.has(folder):
+	var folders: Dictionary = {}
+	for source_row: Dictionary in _rows:
+		var row: Dictionary = source_row.duplicate(true)
+		var category: String = String(row.get("category", ""))
+		if category.is_empty():
+			category = "Other"
+		if not folders.has(category):
 			var folder_item: TreeItem = _tree.create_item(root)
-			folder_item.set_text(0, folder)
-			folder_item.set_selectable(0, false)
-			folder_items[folder] = folder_item
-		var row: TreeItem = _tree.create_item(folder_items[folder])
-		row.set_text(0, "%s %s - %s" % [entry.function, _kind_signature(entry), entry.description])
-		row.set_metadata(0, entry.id)
+			folder_item.set_text(0, category)
+			folder_item.set_tooltip_text(0, category)
+			for column: int in range(3):
+				folder_item.set_selectable(column, false)
+			folder_item.set_collapsed(false)
+			folders[category] = folder_item
+		var item: TreeItem = _tree.create_item(folders[category] as TreeItem)
+		var title: String = String(row.get("title", ""))
+		var kind: String = String(row.get("kind", ""))
+		var description: String = String(row.get("description", ""))
+		var conversion: String = String(row.get("conversion", ""))
+		var kind_or_conversion: String = conversion if not conversion.is_empty() else kind
+		item.set_text(0, title)
+		item.set_text(1, _kind_column_text(kind, conversion, _tree.size.x < 600.0))
+		item.set_text(2, description)
+		if item.get_text(1).contains("\n"):
+			item.set_custom_minimum_height(int(36.0 * EditorInterface.get_editor_scale()))
+		item.set_tooltip_text(0, title)
+		item.set_tooltip_text(1, kind_or_conversion)
+		item.set_tooltip_text(2, description)
+		item.set_metadata(0, row)
 	_apply_search_filter(_search.text)
+	_update_selected_details()
+	_update_column_widths()
+
+
+func _apply_search_filter(text: String) -> void:
+	var needle: String = text.strip_edges().to_lower()
+	var root: TreeItem = _tree.get_root()
+	if root == null:
+		return
+	for folder_item: TreeItem in root.get_children():
+		var any_visible: bool = false
+		for item: TreeItem in folder_item.get_children():
+			var data: Variant = item.get_metadata(0)
+			var visible_row: bool = false
+			if typeof(data) == TYPE_DICTIONARY:
+				var row: Dictionary = data as Dictionary
+				var title: String = String(row.get("title", "")).to_lower()
+				var description: String = String(row.get("description", "")).to_lower()
+				visible_row = needle.is_empty() or title.contains(needle) or description.contains(needle)
+			item.visible = visible_row
+			any_visible = any_visible or visible_row
+		folder_item.visible = any_visible
+	_update_selected_details()
+
+
+func _visible_items() -> Array[TreeItem]:
+	var items: Array[TreeItem] = []
+	var root: TreeItem = _tree.get_root()
+	if root == null:
+		return items
+	for folder_item: TreeItem in root.get_children():
+		if not folder_item.visible:
+			continue
+		for item: TreeItem in folder_item.get_children():
+			if item.visible:
+				items.append(item)
+	return items
+
+
+func _first_or_selected_visible_item() -> TreeItem:
+	var items: Array[TreeItem] = _visible_items()
+	if items.is_empty():
+		return null
+	var selected: TreeItem = _tree.get_selected()
+	if selected != null and items.has(selected):
+		return selected
+	return items[0]
+
+
+func _move_from_search(direction: int) -> void:
+	var items: Array[TreeItem] = _visible_items()
+	if items.is_empty():
+		return
+	var selected: TreeItem = _tree.get_selected()
+	var selected_index: int = items.find(selected)
+	var target_index: int = 0 if direction > 0 else items.size() - 1
+	if selected_index != -1:
+		target_index = clampi(selected_index + direction, 0, items.size() - 1)
+	items[target_index].select(0)
+	_tree.grab_focus()
+
+
+func _activate_item(item: TreeItem) -> bool:
+	if item == null:
+		return false
+	var data: Variant = item.get_metadata(0)
+	if typeof(data) != TYPE_DICTIONARY:
+		return false
+	var choice: Dictionary = (data as Dictionary).duplicate(true)
+	if not choice.has("value"):
+		return false
+	choice_requested.emit(choice)
+	return true
+
+
+func _update_selected_details() -> void:
+	var item: TreeItem = _tree.get_selected()
+	if item == null or not item.visible or item.get_parent() == null or not item.get_parent().visible:
+		_selected_details.text = ""
+		_selected_details.visible = false
+		return
+	var data: Variant = item.get_metadata(0)
+	if typeof(data) != TYPE_DICTIONARY:
+		_selected_details.text = ""
+		_selected_details.visible = false
+		return
+	var row: Dictionary = data as Dictionary
+	var kind: String = String(row.get("kind", ""))
+	var conversion: String = String(row.get("conversion", ""))
+	var details: Array[String] = [String(row.get("title", ""))]
+	if not conversion.is_empty():
+		details.append(conversion)
+	elif not kind.is_empty():
+		details.append(kind)
+	var description: String = String(row.get("description", ""))
+	if not description.is_empty():
+		details.append(description)
+	_selected_details.text = "\n".join(details)
+	_selected_details.tooltip_text = description
+	_selected_details.visible = true
 
 
 func _on_search_changed(text: String) -> void:
 	_apply_search_filter(text)
 
 
-## Sets the search box text and applies the filter immediately. Test helper
-## (tests/gst_editor_smoke.gd): setting LineEdit.text alone does not emit
-## text_changed.
-func set_search_text(text: String) -> void:
-	_search.text = text
-	_apply_search_filter(text)
+func _on_search_submitted(_text: String) -> void:
+	_activate_item(_first_or_selected_visible_item())
 
 
-## Hides leaf rows whose function name does not contain the search text, and
-## hides a folder row once every child under it is hidden.
-func _apply_search_filter(text: String) -> void:
-	var needle: String = text.to_lower()
+func _on_search_gui_input(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
+	var key_event: InputEventKey = event as InputEventKey
+	if not key_event.pressed:
+		return
+	match key_event.keycode:
+		KEY_DOWN:
+			_move_from_search(1)
+			_search.accept_event()
+		KEY_UP:
+			_move_from_search(-1)
+			_search.accept_event()
+		KEY_ESCAPE:
+			if not key_event.echo:
+				cancelled.emit()
+			_search.accept_event()
+
+
+func _on_tree_gui_input(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
+	var key_event: InputEventKey = event as InputEventKey
+	if not key_event.pressed:
+		return
+	if key_event.keycode == KEY_ESCAPE:
+		if not key_event.echo:
+			cancelled.emit()
+		_tree.accept_event()
+
+
+func _on_tree_item_mouse_selected(_position: Vector2, mouse_button_index: int) -> void:
+	if mouse_button_index != MOUSE_BUTTON_LEFT:
+		return
+	_ignore_item_activated = true
+	_reset_item_activated_guard.call_deferred()
+	_activate_item(_tree.get_selected())
+
+
+func _on_tree_item_activated() -> void:
+	if _ignore_item_activated:
+		_ignore_item_activated = false
+		return
+	_activate_item(_first_or_selected_visible_item())
+
+
+func _reset_item_activated_guard() -> void:
+	_ignore_item_activated = false
+
+
+func _on_tabs_tab_changed(tab: int) -> void:
+	if not _suppress_tab_signal:
+		tab_changed.emit(tab)
+
+
+func _on_cancel_requested() -> void:
+	cancelled.emit()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not visible or not event is InputEventKey:
+		return
+	var key_event: InputEventKey = event as InputEventKey
+	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE:
+		cancelled.emit()
+		get_viewport().set_input_as_handled()
+
+
+func _update_column_widths() -> void:
+	if _tree == null:
+		return
+	var narrow: bool = _tree.size.x < 600.0
+	_tree.set_column_custom_minimum_width(0, 0)
+	_tree.set_column_custom_minimum_width(1, 0)
+	_tree.set_column_custom_minimum_width(2, 0)
+	_tree.set_column_expand_ratio(0, 45 if narrow else 35)
+	_tree.set_column_expand_ratio(1, 30 if narrow else 25)
+	_tree.set_column_expand_ratio(2, 25 if narrow else 40)
+	_update_kind_column_rows(narrow)
+
+
+func _update_kind_column_rows(narrow: bool) -> void:
 	var root: TreeItem = _tree.get_root()
 	if root == null:
 		return
 	for folder_item: TreeItem in root.get_children():
-		var any_visible: bool = false
-		for row: TreeItem in folder_item.get_children():
-			var entry_id: String = row.get_metadata(0)
-			var entry: GSTManifestEntry = _library.get_entry(entry_id)
-			var visible: bool = needle.is_empty() or entry.function.to_lower().contains(needle)
-			row.visible = visible
-			if visible:
-				any_visible = true
-		folder_item.visible = any_visible
+		for item: TreeItem in folder_item.get_children():
+			var data: Variant = item.get_metadata(0)
+			if typeof(data) != TYPE_DICTIONARY:
+				continue
+			var row: Dictionary = data as Dictionary
+			var kind: String = String(row.get("kind", ""))
+			var conversion: String = String(row.get("conversion", ""))
+			var text: String = _kind_column_text(kind, conversion, narrow)
+			item.set_text(1, text)
+			item.set_custom_minimum_height(int(36.0 * EditorInterface.get_editor_scale()) if text.contains("\n") else 0)
 
 
-## Every entry id currently loaded into the tree, regardless of search text
-## (post kind-filter). Test/introspection helper (tests/gst_editor_smoke.gd).
-func get_all_entry_ids() -> Array[String]:
-	var out: Array[String] = []
-	var root: TreeItem = _tree.get_root()
-	if root == null:
-		return out
-	for folder_item: TreeItem in root.get_children():
-		for row: TreeItem in folder_item.get_children():
-			out.append(row.get_metadata(0) as String)
-	return out
+func _kind_column_text(kind: String, conversion: String, narrow: bool) -> String:
+	if not conversion.is_empty():
+		return conversion.replace(": ", ":\n")
+	if narrow:
+		return kind.replace(") -> ", ")\n-> ")
+	return kind
 
 
-## Every entry id currently visible in the tree (post kind-filter and post
-## search-filter). Test/introspection helper (tests/gst_editor_smoke.gd).
-func get_visible_entry_ids() -> Array[String]:
-	var out: Array[String] = []
-	var root: TreeItem = _tree.get_root()
-	if root == null:
-		return out
-	for folder_item: TreeItem in root.get_children():
-		if not folder_item.visible:
-			continue
-		for row: TreeItem in folder_item.get_children():
-			if row.visible:
-				out.append(row.get_metadata(0) as String)
-	return out
-
-
-func _on_item_activated() -> void:
-	var selected: TreeItem = _tree.get_selected()
-	if selected == null:
-		return
-	var entry_id: Variant = selected.get_metadata(0)
-	if entry_id == null:
-		return
-	entry_picked.emit(entry_id as String)
-	hide()
+func _apply_opaque_panel_style() -> void:
+	var panel_style: StyleBoxFlat = StyleBoxFlat.new()
+	var base_color: Color = get_theme_color(&"base_color", &"Editor")
+	base_color.a = 1.0
+	panel_style.bg_color = base_color
+	add_theme_stylebox_override(&"panel", panel_style)

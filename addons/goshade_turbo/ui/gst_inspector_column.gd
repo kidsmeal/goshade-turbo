@@ -6,14 +6,13 @@ extends VBoxContainer
 ## native inspectors; input and distortion references route through GSTUndo.
 
 signal edit_refused(reason: String)
+signal chooser_requested(purpose: String, layer_id: StringName, slot_name: String, initiator: Control)
 ## Real EditorInspector-driven param edit (a slider or a GSTCoordBlock
 ## field), relayed so GSTMainPanel can resync the preview material.
 ## Decision 20 excludes these from GSTUndo entirely, so this signal is the
 ## only path a live inspector edit reaches the panel.
 signal param_edited(property: String)
 signal section_state_changed(states: Dictionary)
-
-const PICKER_SCENE: PackedScene = preload("res://addons/goshade_turbo/ui/gst_picker.tscn")
 
 var _scroll: ScrollContainer = null
 var _sections: VBoxContainer = null
@@ -22,6 +21,8 @@ var _coord_inspector: EditorInspector = null
 var _inputs_box: VBoxContainer = null
 var _warp_box: VBoxContainer = null
 var _slot_picker: GSTPicker = null
+var _input_buttons: Dictionary = {}
+var _warp_buttons: Dictionary = {}
 var _section_buttons: Dictionary = {}
 var _section_contents: Dictionary = {}
 
@@ -29,10 +30,8 @@ var _stack: GSTStack = null
 var _library: GSTLibrary = null
 var _undo: GSTUndo = null
 var _layer: GSTLayer = null
-## Guards row rebuilds from re-triggering the undo call while populating.
-var _syncing: bool = false
-## Slot the open _slot_picker's next entry_picked should wire.
-var _pending_slot_name: String = ""
+var _mutations_blocked: bool = false
+var _refusals: Dictionary = {}
 
 
 func _ready() -> void:
@@ -67,13 +66,11 @@ func _ready() -> void:
 	_warp_box = VBoxContainer.new()
 	_warp_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	position_content.add_child(_warp_box)
-	_slot_picker = PICKER_SCENE.instantiate()
-	add_child(_slot_picker)
-	_slot_picker.entry_picked.connect(_on_slot_entry_picked)
 
 
 func _build_section(key: String, title: String) -> Dictionary:
 	var section: VBoxContainer = VBoxContainer.new()
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	section.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_sections.add_child(section)
 	var heading: Button = Button.new()
@@ -85,6 +82,7 @@ func _build_section(key: String, title: String) -> Dictionary:
 	var separator: HSeparator = HSeparator.new()
 	section.add_child(separator)
 	var content: VBoxContainer = VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	section.add_child(content)
 	heading.toggled.connect(_on_section_toggled.bind(key, content, heading))
@@ -118,6 +116,7 @@ func setup(stack: GSTStack, library: GSTLibrary, undo: GSTUndo) -> void:
 	_stack = stack
 	_library = library
 	_undo = undo
+	clear_refusals()
 
 
 ## Points the inspector at layer_id's GSTLayer. An empty id clears the
@@ -126,6 +125,7 @@ func edit(layer_id: StringName) -> void:
 	if _layer != null and _layer.coord != null and _layer.coord.changed.is_connected(_on_coord_changed):
 		_layer.coord.changed.disconnect(_on_coord_changed)
 	_layer = GSTStackOps.find_layer(_stack, layer_id)
+	_prune_refusals()
 	if _layer != null:
 		_layer.manifest = _library.get_entry(_layer.entry)
 	_parameter_inspector.edit(_layer)
@@ -171,6 +171,8 @@ func _update_inspector_layout(inspector: EditorInspector) -> void:
 
 
 func _rebuild_slots() -> void:
+	_input_buttons.clear()
+	_warp_buttons.clear()
 	for box: VBoxContainer in [_inputs_box, _warp_box]:
 		for child: Node in box.get_children():
 			child.queue_free()
@@ -179,19 +181,20 @@ func _rebuild_slots() -> void:
 	var entry: GSTManifestEntry = _library.get_entry(_layer.entry)
 	if entry == null:
 		return
-	var layer_idx: int = GSTStackOps.find_index(_stack, _layer.id)
 	for input: Dictionary in entry.inputs:
-		_add_slot_row(input, entry.samples_source, layer_idx)
+		_add_slot_row(input)
 	if _layer.coord != null:
-		_add_warp_row("x", _layer.coord.warp_x, layer_idx)
-		_add_warp_row("y", _layer.coord.warp_y, layer_idx)
+		_add_warp_row("x", _layer.coord.warp_x)
+		_add_warp_row("y", _layer.coord.warp_y)
 
 
-func _add_slot_row(input: Dictionary, samples_source: bool, layer_idx: int) -> void:
+func _add_slot_row(input: Dictionary) -> void:
 	var slot_name: String = String(input["name"])
 	var slot_kind: GSTLayer.Kind = input["kind"] as GSTLayer.Kind
 	var display_label: String = String(input.get("label", slot_name.capitalize()))
 	var description: String = String(input.get("description", ""))
+	var captured_layer_id: StringName = _layer.id
+	var current: StringName = _layer.slots.get(slot_name, &"")
 	var row: VBoxContainer = VBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var label: Label = Label.new()
@@ -200,45 +203,27 @@ func _add_slot_row(input: Dictionary, samples_source: bool, layer_idx: int) -> v
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
-	var choice_row: HBoxContainer = HBoxContainer.new()
-	choice_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(choice_row)
-	var option: OptionButton = OptionButton.new()
-	option.tooltip_text = description
-	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	option.fit_to_longest_item = false
-	option.clip_text = true
-	option.add_item("(none)")
-	option.set_item_metadata(0, &"")
-	var select_idx: int = 0
-	var current: StringName = _layer.slots.get(slot_name, &"")
-	for i: int in range(layer_idx):
-		var candidate: GSTLayer = _stack.layers[i]
-		if samples_source and candidate.entry != "source/texture" and candidate.entry != "source/screen":
-			continue
-		var candidate_entry: GSTManifestEntry = _library.get_entry(candidate.entry)
-		var function_name: String = candidate_entry.function if candidate_entry != null else candidate.entry
-		option.add_item("l%s %s" % [String(candidate.id), function_name])
-		var idx: int = option.item_count - 1
-		option.set_item_metadata(idx, candidate.id)
-		if candidate.id == current:
-			select_idx = idx
-	_syncing = true
-	option.select(select_idx)
-	_syncing = false
-	option.item_selected.connect(_on_slot_selected.bind(slot_name, option))
-	choice_row.add_child(option)
-	var add_button: Button = Button.new()
-	add_button.text = "+"
-	add_button.tooltip_text = "Add a new layer for slot %s" % slot_name
-	add_button.pressed.connect(_on_add_for_slot_pressed.bind(slot_name, slot_kind))
-	choice_row.add_child(add_button)
+	var button: Button = Button.new()
+	button.text = _reference_text(current)
+	button.tooltip_text = description
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.clip_text = true
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.disabled = _mutations_blocked
+	button.pressed.connect(_on_input_pressed.bind(captured_layer_id, slot_name, button))
+	row.add_child(button)
+	_input_buttons[slot_name] = button
+	var conversion: Label = _build_conversion_label(current, slot_kind)
+	row.add_child(conversion)
+	var refusal: Label = _build_refusal_label(captured_layer_id, slot_name, "input")
+	row.add_child(refusal)
 	_inputs_box.add_child(row)
 
 
-func _add_warp_row(axis: String, current: StringName, layer_idx: int) -> void:
+func _add_warp_row(axis: String, current: StringName) -> void:
 	var property_name: StringName = &"warp_x" if axis == "x" else &"warp_y"
 	var metadata: Dictionary = GSTCoordBlock.get_editor_metadata(property_name)
+	var captured_layer_id: StringName = _layer.id
 	var row: VBoxContainer = VBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var label: Label = Label.new()
@@ -247,70 +232,122 @@ func _add_warp_row(axis: String, current: StringName, layer_idx: int) -> void:
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
-	var option: OptionButton = OptionButton.new()
-	option.tooltip_text = String(metadata["description"])
-	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	option.fit_to_longest_item = false
-	option.clip_text = true
-	option.add_item("(none)")
-	option.set_item_metadata(0, &"")
-	var select_idx: int = 0
-	for i: int in range(layer_idx):
-		var candidate: GSTLayer = _stack.layers[i]
-		var candidate_entry: GSTManifestEntry = _library.get_entry(candidate.entry)
-		var function_name: String = candidate_entry.function if candidate_entry != null else candidate.entry
-		option.add_item("l%s %s" % [String(candidate.id), function_name])
-		var idx: int = option.item_count - 1
-		option.set_item_metadata(idx, candidate.id)
-		if candidate.id == current:
-			select_idx = idx
-	_syncing = true
-	option.select(select_idx)
-	_syncing = false
-	option.item_selected.connect(_on_warp_selected.bind(axis, option))
-	row.add_child(option)
+	var button: Button = Button.new()
+	button.text = _reference_text(current)
+	button.tooltip_text = String(metadata["description"])
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.clip_text = true
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.disabled = _mutations_blocked
+	button.pressed.connect(_on_warp_pressed.bind(captured_layer_id, axis, button))
+	row.add_child(button)
+	_warp_buttons[axis] = button
+	row.add_child(_build_conversion_label(current, GSTLayer.Kind.FIELD))
+	row.add_child(_build_refusal_label(captured_layer_id, axis, "warp"))
 	_warp_box.add_child(row)
 
 
-func _on_slot_selected(index: int, slot_name: String, option: OptionButton) -> void:
-	if _syncing:
+func _on_input_pressed(layer_id: StringName, slot_name: String, button: Button) -> void:
+	if _mutations_blocked:
 		return
-	var target_id: StringName = option.get_item_metadata(index) as StringName
-	var result: Dictionary = _undo.assign_slot(_layer.id, slot_name, target_id)
-	if not result["ok"]:
-		edit_refused.emit(result["reason"])
-	_rebuild_slots()
+	chooser_requested.emit("input", layer_id, slot_name, button)
 
 
-func _on_warp_selected(index: int, axis: String, option: OptionButton) -> void:
-	if _syncing:
+func _on_warp_pressed(layer_id: StringName, axis: String, button: Button) -> void:
+	if _mutations_blocked:
 		return
-	var target_id: StringName = option.get_item_metadata(index) as StringName
-	var result: Dictionary = _undo.assign_warp(_layer.id, axis, target_id)
-	if not result["ok"]:
-		edit_refused.emit(result["reason"])
-	_rebuild_slots()
-
-
-func _on_add_for_slot_pressed(slot_name: String, slot_kind: GSTLayer.Kind) -> void:
-	if _layer == null:
-		return
-	_pending_slot_name = slot_name
-	_slot_picker.open_for_slot(_library, slot_kind)
-
-
-func _on_slot_entry_picked(entry_id: String) -> void:
-	if _layer == null or _pending_slot_name.is_empty():
-		return
-	var slot_name: String = _pending_slot_name
-	_pending_slot_name = ""
-	var result: Dictionary = _undo.add_layer_below_and_wire(_layer.id, entry_id, slot_name)
-	if not result["ok"]:
-		edit_refused.emit(result["reason"])
+	chooser_requested.emit("warp", layer_id, axis, button)
 
 
 func get_slot_picker() -> GSTPicker:
 	return _slot_picker
+
+
+func set_shared_picker(picker: GSTPicker) -> void:
+	_slot_picker = picker
+
+
+func set_mutations_blocked(blocked: bool) -> void:
+	_mutations_blocked = blocked
+	for button: Variant in _input_buttons.values():
+		(button as Button).disabled = blocked
+	for button: Variant in _warp_buttons.values():
+		(button as Button).disabled = blocked
+
+
+func get_input_button(slot_name: String) -> Button:
+	return _input_buttons.get(slot_name) as Button
+
+
+func get_warp_button(axis: String) -> Button:
+	return _warp_buttons.get(axis) as Button
+
+
+func set_refusal(layer_id: StringName, slot_name: String, purpose: String, reason: String) -> void:
+	var key: String = _refusal_key(layer_id, slot_name, purpose)
+	if reason.is_empty():
+		_refusals.erase(key)
+	else:
+		_refusals[key] = {
+			"layer_id": layer_id,
+			"slot_name": slot_name,
+			"purpose": purpose,
+			"reason": reason,
+		}
+	if _layer != null and _layer.id == layer_id:
+		_rebuild_slots()
+
+
+func clear_refusals() -> void:
+	_refusals.clear()
+	if _inputs_box != null and _warp_box != null:
+		_rebuild_slots()
+
+
+func _prune_refusals() -> void:
+	if _stack == null:
+		_refusals.clear()
+		return
+	for key: Variant in _refusals.keys():
+		var refusal: Dictionary = _refusals[key]
+		if GSTStackOps.find_layer(_stack, refusal["layer_id"] as StringName) == null:
+			_refusals.erase(key)
+
+
+func _refusal_key(layer_id: StringName, slot_name: String, purpose: String) -> String:
+	return "%s\n%s\n%s" % [String(layer_id), purpose, slot_name]
+
+
+func _build_refusal_label(layer_id: StringName, slot_name: String, purpose: String) -> Label:
+	var label: Label = Label.new()
+	var refusal: Dictionary = _refusals.get(_refusal_key(layer_id, slot_name, purpose), {})
+	label.text = String(refusal.get("reason", ""))
+	label.visible = not label.text.is_empty()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return label
+
+
+func _build_conversion_label(reference_id: StringName, target_kind: GSTLayer.Kind) -> Label:
+	var label: Label = Label.new()
+	var source: GSTLayer = GSTStackOps.find_layer(_stack, reference_id) if reference_id != &"" else null
+	if source != null and source.kind_out != target_kind:
+		label.text = "field -> color: grayscale" if source.kind_out == GSTLayer.Kind.FIELD else "color -> field: luminance"
+	label.visible = not label.text.is_empty()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return label
+
+
+func _reference_text(reference_id: StringName) -> String:
+	if reference_id == &"":
+		return "(none)"
+	var reference: GSTLayer = GSTStackOps.find_layer(_stack, reference_id)
+	if reference == null:
+		return "Unavailable layer"
+	var entry: GSTManifestEntry = _library.get_entry(reference.entry)
+	var function_name: String = entry.function if entry != null else reference.entry
+	return "l%s %s" % [String(reference.id), function_name]
 
 
 ## External writes such as Randomize do not refresh built EditorProperty

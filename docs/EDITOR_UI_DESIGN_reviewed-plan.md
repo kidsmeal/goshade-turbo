@@ -179,7 +179,7 @@ Shared scope is permission to maintain integration and verification, not a requi
 
 ## Phase 4: Embedded contextual choosers and local refusal state
 
-**Status:** pending
+**Status:** committed (2026-09-08)
 
 **Goal:** Replace long menus with one editing-area chooser that preserves preview visibility and immutable destinations.
 
@@ -192,6 +192,7 @@ Shared scope is permission to maintain integration and verification, not a requi
 - `addons/goshade_turbo/ui/gst_inspector_column.gd`.
 - `addons/goshade_turbo/ui/gst_output_block.tscn`, `addons/goshade_turbo/ui/gst_output_block.gd`.
 - `tests/gst_editor_ui_picker_smoke.gd` (new, dispatched by `ui_picker`).
+- `addons/goshade_turbo/ui/gst_undo.gd`, `tests/gst_editor_ui_actions_smoke.gd`: extend atomic add-and-wire to coordinate distortion destinations, required by the Add new warp chooser.
 
 **Implementation:**
 

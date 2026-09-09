@@ -282,21 +282,35 @@ func _check_long_content(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	list.add_layer_by_entry_id("color/brightness_contrast")
 	var mix: GSTLayer = list.add_layer_by_entry_id("color/mix")
 	list.select_layer(mix.id)
-	panel._on_refused("A deliberately long refusal message verifies that layout errors wrap inside the assigned editor column without forcing the active main-screen panel beyond its host rectangle.")
+	var refusal_text: String = "A deliberately long refusal message verifies that layout errors wrap inside the assigned editor column without forcing the active main-screen panel beyond its host rectangle."
+	panel.get_inspector_column().set_refusal(mix.id, "a", "input", refusal_text)
 	for i: int in range(3):
 		await plugin.get_tree().process_frame
-	var message: Label = panel.get_message_label()
-	var preview_area: Control = panel.get_node("%PreviewArea") as Control
+	var inspector: GSTInspectorColumn = panel.get_inspector_column()
+	var refusal: Label = _find_label_with_text(inspector, refusal_text)
+	var layer_pane: Control = panel.get_node("%LayerPane") as Control
 	var settings_pane: Control = panel.get_node("%SettingsPane") as Control
-	var message_inside: bool = _rect_inside(message.get_global_rect(), preview_area.get_global_rect())
-	var long_option: OptionButton = null
-	for option_node: Node in settings_pane.find_children("*", "OptionButton", true, false):
-		var option: OptionButton = option_node as OptionButton
-		for i: int in range(option.item_count):
-			if option.get_item_text(i).contains("brightness_contrast"):
-				long_option = option
-	var option_inside: bool = long_option != null and _rect_inside(long_option.get_global_rect(), settings_pane.get_global_rect())
-	_check("long_content", message_inside and option_inside and message.autowrap_mode != TextServer.AUTOWRAP_OFF and not long_option.fit_to_longest_item, "message=%s preview_area=%s long_option=%s settings=%s autowrap=%d" % [message.get_global_rect(), preview_area.get_global_rect(), long_option.get_global_rect() if long_option != null else Rect2(), settings_pane.get_global_rect(), message.autowrap_mode])
+	var input_button: Button = inspector.get_input_button("a")
+	var refusal_inside: bool = refusal != null and _rect_inside(refusal.get_global_rect(), settings_pane.get_global_rect())
+	var button_inside: bool = input_button != null and input_button.text.contains("brightness_contrast") and _rect_inside(input_button.get_global_rect(), settings_pane.get_global_rect())
+	var stack_refusal_text: String = "A separate stack edit refusal stays beside the layer controls."
+	list.set_refusal(stack_refusal_text, "up", mix.id)
+	await plugin.get_tree().process_frame
+	var stack_refusal: Label = list.get_refusal_label()
+	var stack_refusal_inside: bool = stack_refusal.text == stack_refusal_text and _rect_inside(stack_refusal.get_global_rect(), layer_pane.get_global_rect())
+	_check("long_content", refusal_inside and button_inside and stack_refusal_inside and refusal.autowrap_mode != TextServer.AUTOWRAP_OFF and stack_refusal.autowrap_mode != TextServer.AUTOWRAP_OFF, "input_refusal=%s settings=%s input_button=%s stack_refusal=%s layer_pane=%s" % [refusal.get_global_rect() if refusal != null else Rect2(), settings_pane.get_global_rect(), input_button.get_global_rect() if input_button != null else Rect2(), stack_refusal.get_global_rect(), layer_pane.get_global_rect()])
+	var removed_id: StringName = mix.id
+	panel.get_undo().remove_layer(removed_id)
+	list.refresh()
+	_check("stack_refusal_pruned", list.get_refusal_label().text.is_empty(), "removed destination='%s' refusal='%s'" % [String(removed_id), list.get_refusal_label().text])
+
+
+func _find_label_with_text(root: Node, text: String) -> Label:
+	for node: Node in root.find_children("*", "Label", true, false):
+		var label: Label = node as Label
+		if label.text == text:
+			return label
+	return null
 
 
 func _rect_inside(inner: Rect2, outer: Rect2) -> bool:

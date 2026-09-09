@@ -2,88 +2,129 @@
 class_name GSTOutputBlock
 extends VBoxContainer
 
-## Fixed output block at the panel bottom (decision 12). output_color:
-## OptionButton over every layer (a field layer converts to grayscale).
-## output_alpha: OptionButton over "none", "texture", "color_alpha", plus
-## every field layer id. Changes route through GSTUndo.
-##
-## Row 0 of each OptionButton is a synthetic "default" row, metadata &"":
-## for color it shows "(default) l<id> <function>" for the top (highest
-## stack index) color layer, or "(none)" when no color layer exists; for
-## alpha it shows "(default) texture" when a "source/texture" layer exists
-## in the stack, else "(default) none". stack.output_color == &"" and
-## stack.output_alpha == &"" mean "unset" and select the default row. An
-## explicit pick of "none" is a real value (GSTStack defaults output_alpha
-## to &"") and selects the "none" row, so the UI and codegen agree on
-## decision 12. Selecting the default row writes &"" through GSTUndo like
-## any other pick, so it is undoable, except when the field is already &""
-## (docs/PLAN.md phase 4 fix pass 2, item 5): that no-op registers nothing.
+## Fixed output controls below the preview. Buttons open the shared chooser;
+## the main panel owns validation, mutation, undo, and chooser lifetime.
 
-@onready var _color_option: OptionButton = %ColorOption
-@onready var _alpha_option: OptionButton = %AlphaOption
+signal chooser_requested(purpose: String, layer_id: StringName, slot_name: String, initiator: Control)
+
+@onready var _color_button: Button = %ColorButton
+@onready var _alpha_button: Button = %AlphaButton
+@onready var _color_conversion: Label = %ColorConversion
+@onready var _color_refusal: Label = %ColorRefusal
+@onready var _alpha_refusal: Label = %AlphaRefusal
 
 var _stack: GSTStack = null
 var _library: GSTLibrary = null
 var _undo: GSTUndo = null
-## Guards refresh()'s own selection sync from re-triggering the undo call.
-var _syncing: bool = false
+var _picker: GSTPicker = null
+var _mutations_blocked: bool = false
+var _refusals: Dictionary = {}
 
 
 func _ready() -> void:
-	_color_option.item_selected.connect(_on_color_selected)
-	_alpha_option.item_selected.connect(_on_alpha_selected)
+	_color_button.pressed.connect(_on_color_pressed)
+	_alpha_button.pressed.connect(_on_alpha_pressed)
 
 
 func setup(stack: GSTStack, library: GSTLibrary, undo: GSTUndo) -> void:
 	_stack = stack
 	_library = library
 	_undo = undo
+	clear_refusals()
 	refresh()
+
+
+func set_shared_picker(picker: GSTPicker) -> void:
+	_picker = picker
+
+
+func get_picker() -> GSTPicker:
+	return _picker
+
+
+func set_mutations_blocked(blocked: bool) -> void:
+	_mutations_blocked = blocked
+	_color_button.disabled = blocked
+	_alpha_button.disabled = blocked
+
+
+func set_refusal(purpose: String, reason: String) -> void:
+	if reason.is_empty():
+		_refusals.erase(purpose)
+	else:
+		_refusals[purpose] = reason
+	_update_refusal_labels()
+
+
+func clear_refusals() -> void:
+	_refusals.clear()
+	_update_refusal_labels()
+
+
+func _update_refusal_labels() -> void:
+	if _color_refusal == null or _alpha_refusal == null:
+		return
+	_color_refusal.text = String(_refusals.get("output_color", ""))
+	_color_refusal.visible = not _color_refusal.text.is_empty()
+	_alpha_refusal.text = String(_refusals.get("output_alpha", ""))
+	_alpha_refusal.visible = not _alpha_refusal.text.is_empty()
 
 
 func refresh() -> void:
 	if _stack == null or _library == null:
 		return
-	_syncing = true
-	_color_option.clear()
-	_color_option.add_item(_default_color_text())
-	_color_option.set_item_metadata(0, &"")
-	var color_select_idx: int = 0
-	for layer: GSTLayer in _stack.layers:
-		var entry: GSTManifestEntry = _library.get_entry(layer.entry)
-		var function_name: String = entry.function if entry != null else layer.entry
-		_color_option.add_item("l%s %s" % [String(layer.id), function_name])
-		var idx: int = _color_option.item_count - 1
-		_color_option.set_item_metadata(idx, layer.id)
-		if layer.id == _stack.output_color and _stack.output_color != &"":
-			color_select_idx = idx
-	_color_option.select(color_select_idx)
+	_color_button.text = _selected_color_text()
+	_color_conversion.text = _selected_color_conversion()
+	_color_conversion.visible = not _color_conversion.text.is_empty()
+	_alpha_button.text = _selected_alpha_text()
 
-	_alpha_option.clear()
-	_alpha_option.add_item(_default_alpha_text())
-	_alpha_option.set_item_metadata(0, &"")
-	var alpha_labels: Array[StringName] = [&"none", &"texture", &"color_alpha"]
-	for label: StringName in alpha_labels:
-		_alpha_option.add_item(String(label))
-		_alpha_option.set_item_metadata(_alpha_option.item_count - 1, label)
-	var alpha_is_default: bool = _stack.output_alpha == &""
-	var alpha_select_idx: int = 0
-	if not alpha_is_default:
-		for i: int in range(alpha_labels.size()):
-			if alpha_labels[i] == _stack.output_alpha:
-				alpha_select_idx = i + 1
-	for layer: GSTLayer in _stack.layers:
-		if layer.kind_out != GSTLayer.Kind.FIELD:
-			continue
-		var entry: GSTManifestEntry = _library.get_entry(layer.entry)
-		var function_name: String = entry.function if entry != null else layer.entry
-		_alpha_option.add_item("l%s %s" % [String(layer.id), function_name])
-		var idx: int = _alpha_option.item_count - 1
-		_alpha_option.set_item_metadata(idx, layer.id)
-		if layer.id == _stack.output_alpha and not alpha_is_default:
-			alpha_select_idx = idx
-	_alpha_option.select(alpha_select_idx)
-	_syncing = false
+
+func _selected_color_text() -> String:
+	if _stack.output_color == &"":
+		return _automatic_color_text()
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, _stack.output_color)
+	return _layer_text(layer) if layer != null else "Unavailable layer"
+
+
+func _selected_alpha_text() -> String:
+	match _stack.output_alpha:
+		&"":
+			return get_automatic_alpha_text()
+		&"none":
+			return "Opaque"
+		&"texture":
+			return "Texture transparency"
+		&"color_alpha":
+			return "Output layer transparency"
+		_:
+			var layer: GSTLayer = GSTStackOps.find_layer(_stack, _stack.output_alpha)
+			return "%s grayscale value" % _layer_text(layer) if layer != null else "Unavailable layer"
+
+
+func _selected_color_conversion() -> String:
+	if _stack.output_color == &"":
+		return ""
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, _stack.output_color)
+	return "field -> color: grayscale" if layer != null and layer.kind_out == GSTLayer.Kind.FIELD else ""
+
+
+func _automatic_color_text() -> String:
+	var top_color: GSTLayer = _top_color_layer()
+	return "Automatic: %s" % _layer_text(top_color) if top_color != null else "Automatic: none"
+
+
+func get_automatic_color_text() -> String:
+	return _automatic_color_text()
+
+
+func get_automatic_alpha_text() -> String:
+	return "Automatic: Texture transparency" if _stack_has_texture_source() else "Automatic: Opaque"
+
+
+func _layer_text(layer: GSTLayer) -> String:
+	var entry: GSTManifestEntry = _library.get_entry(layer.entry)
+	var function_name: String = entry.function if entry != null else layer.entry
+	return "l%s %s" % [String(layer.id), function_name]
 
 
 func _top_color_layer() -> GSTLayer:
@@ -101,58 +142,29 @@ func _stack_has_texture_source() -> bool:
 	return false
 
 
-func _default_color_text() -> String:
-	var top_color: GSTLayer = _top_color_layer()
-	if top_color == null:
-		return "(none)"
-	var entry: GSTManifestEntry = _library.get_entry(top_color.entry)
-	var function_name: String = entry.function if entry != null else top_color.entry
-	return "(default) l%s %s" % [String(top_color.id), function_name]
-
-
-func _default_alpha_text() -> String:
-	return "(default) texture" if _stack_has_texture_source() else "(default) none"
-
-
-## Row 0 (metadata &"") is the synthetic default row: selecting it clears
-## output_color to &"" through undo, unless it is already &"" (no-op,
-## registers no undo action).
-func _on_color_selected(index: int) -> void:
-	if _syncing:
+func _on_color_pressed() -> void:
+	if _mutations_blocked:
 		return
-	var target_id: StringName = _color_option.get_item_metadata(index) as StringName
-	if target_id == &"":
-		if _stack.output_color == &"":
-			refresh()
-			return
-		_undo.set_output_color(&"")
-		refresh()
-		return
-	_undo.set_output_color(target_id)
-	refresh()
+	chooser_requested.emit("output_color", &"", "", _color_button)
 
 
-## Row 0 (metadata &"") is the synthetic default row: selecting it clears
-## output_alpha to &"" through undo, unless it is already &"" (no-op,
-## registers no undo action).
-func _on_alpha_selected(index: int) -> void:
-	if _syncing:
+func _on_alpha_pressed() -> void:
+	if _mutations_blocked:
 		return
-	var target: StringName = _alpha_option.get_item_metadata(index) as StringName
-	if target == &"":
-		if _stack.output_alpha == &"":
-			refresh()
-			return
-		_undo.set_output_alpha(&"")
-		refresh()
-		return
-	_undo.set_output_alpha(target)
-	refresh()
+	chooser_requested.emit("output_alpha", &"", "", _alpha_button)
+
+
+func get_color_button() -> Button:
+	return _color_button
+
+
+func get_alpha_button() -> Button:
+	return _alpha_button
 
 
 func get_selected_color_text() -> String:
-	return _color_option.get_item_text(_color_option.selected)
+	return _color_button.text
 
 
 func get_selected_alpha_text() -> String:
-	return _alpha_option.get_item_text(_alpha_option.selected)
+	return _alpha_button.text

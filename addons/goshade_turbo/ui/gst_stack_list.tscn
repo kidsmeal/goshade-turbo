@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://addons/goshade_turbo/ui/gst_stack_list.gd" id="1"]
-[ext_resource type="PackedScene" path="res://addons/goshade_turbo/ui/gst_picker.tscn" id="2"]
 
 [node name="GSTStackList" type="VBoxContainer"]
 script = ExtResource("1")
@@ -36,5 +35,8 @@ size_flags_vertical = 3
 max_columns = 1
 same_column_width = true
 
-[node name="Picker" parent="." instance=ExtResource("2")]
+[node name="RefusalLabel" type="Label" parent="."]
 unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 2

@@ -1,10 +1,14 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://addons/goshade_turbo/ui/gst_main_panel.gd" id="1"]
 [ext_resource type="PackedScene" path="res://addons/goshade_turbo/ui/gst_stack_list.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://addons/goshade_turbo/ui/gst_output_block.tscn" id="3"]
 [ext_resource type="Script" path="res://addons/goshade_turbo/ui/gst_inspector_column.gd" id="4"]
 [ext_resource type="PackedScene" path="res://addons/goshade_turbo/ui/gst_preview.tscn" id="5"]
+
+[ext_resource type="PackedScene" path="res://addons/goshade_turbo/ui/gst_picker.tscn" id="6"]
+
+[sub_resource type="StyleBoxEmpty" id="EditingStyle"]
 
 [node name="GSTMainPanel" type="VBoxContainer"]
 size_flags_horizontal = 3
@@ -24,7 +28,7 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Save"
 
-[node name="RecipesButton" type="MenuButton" parent="FileToolbar"]
+[node name="RecipesButton" type="Button" parent="FileToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Recipes"
@@ -52,73 +56,85 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="EditingArea" type="VBoxContainer" parent="MainSplit"]
+[node name="EditingArea" type="PanelContainer" parent="MainSplit"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.5
+theme_override_styles/panel = SubResource("EditingStyle")
 
-[node name="EditingSplit" type="HSplitContainer" parent="MainSplit/EditingArea"]
+[node name="EditingContent" type="VBoxContainer" parent="MainSplit/EditingArea"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="EditingSplit" type="HSplitContainer" parent="MainSplit/EditingArea/EditingContent"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="LayerPane" type="VBoxContainer" parent="MainSplit/EditingArea/EditingSplit"]
+[node name="LayerPane" type="VBoxContainer" parent="MainSplit/EditingArea/EditingContent/EditingSplit"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="LayersHeading" type="Label" parent="MainSplit/EditingArea/EditingSplit/LayerPane"]
+[node name="LayersHeading" type="Label" parent="MainSplit/EditingArea/EditingContent/EditingSplit/LayerPane"]
 layout_mode = 2
 text = "Layers"
 theme_type_variation = &"HeaderSmall"
 
-[node name="LayersSeparator" type="HSeparator" parent="MainSplit/EditingArea/EditingSplit/LayerPane"]
+[node name="LayersSeparator" type="HSeparator" parent="MainSplit/EditingArea/EditingContent/EditingSplit/LayerPane"]
 layout_mode = 2
 
-[node name="StackHeader" type="HBoxContainer" parent="MainSplit/EditingArea/EditingSplit/LayerPane"]
+[node name="StackHeader" type="HBoxContainer" parent="MainSplit/EditingArea/EditingContent/EditingSplit/LayerPane"]
 layout_mode = 2
 
-[node name="CoordSpaceLabel" type="Label" parent="MainSplit/EditingArea/EditingSplit/LayerPane/StackHeader"]
+[node name="CoordSpaceLabel" type="Label" parent="MainSplit/EditingArea/EditingContent/EditingSplit/LayerPane/StackHeader"]
 layout_mode = 2
 text = "Coord space"
 
-[node name="CoordSpaceOption" type="OptionButton" parent="MainSplit/EditingArea/EditingSplit/LayerPane/StackHeader"]
+[node name="CoordSpaceOption" type="OptionButton" parent="MainSplit/EditingArea/EditingContent/EditingSplit/LayerPane/StackHeader"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 fit_to_longest_item = false
 clip_text = true
 
-[node name="StackList" parent="MainSplit/EditingArea/EditingSplit/LayerPane" instance=ExtResource("2")]
+[node name="StackList" parent="MainSplit/EditingArea/EditingContent/EditingSplit/LayerPane" instance=ExtResource("2")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="SettingsPane" type="VBoxContainer" parent="MainSplit/EditingArea/EditingSplit"]
+[node name="SettingsPane" type="VBoxContainer" parent="MainSplit/EditingArea/EditingContent/EditingSplit"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="SettingsHeading" type="Label" parent="MainSplit/EditingArea/EditingSplit/SettingsPane"]
+[node name="SettingsHeading" type="Label" parent="MainSplit/EditingArea/EditingContent/EditingSplit/SettingsPane"]
 layout_mode = 2
 text = "Layer settings"
 theme_type_variation = &"HeaderSmall"
 
-[node name="SettingsSeparator" type="HSeparator" parent="MainSplit/EditingArea/EditingSplit/SettingsPane"]
+[node name="SettingsSeparator" type="HSeparator" parent="MainSplit/EditingArea/EditingContent/EditingSplit/SettingsPane"]
 layout_mode = 2
 
-[node name="InspectorColumn" type="VBoxContainer" parent="MainSplit/EditingArea/EditingSplit/SettingsPane"]
+[node name="InspectorColumn" type="VBoxContainer" parent="MainSplit/EditingArea/EditingContent/EditingSplit/SettingsPane"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 script = ExtResource("4")
 
-[node name="EditingTabs" type="TabContainer" parent="MainSplit/EditingArea"]
+[node name="EditingTabs" type="TabContainer" parent="MainSplit/EditingArea/EditingContent"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_vertical = 3
+
+[node name="EmbeddedPicker" parent="MainSplit/EditingArea" instance=ExtResource("6")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
 
 [node name="PreviewArea" type="VBoxContainer" parent="MainSplit"]
 unique_name_in_owner = true
@@ -154,6 +170,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Solo"
 
+[node name="CodegenMessage" type="Label" parent="MainSplit/PreviewArea"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+
 [node name="Preview" parent="MainSplit/PreviewArea" instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 2
@@ -171,7 +192,7 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="MessageLabel" type="Label" parent="MainSplit/PreviewArea"]
+[node name="MessageLabel" type="Label" parent="."]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
