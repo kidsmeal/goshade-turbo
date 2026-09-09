@@ -73,6 +73,41 @@ func add_layer(entry_id: String, kind_out: GSTLayer.Kind, is_generator: bool) ->
 	return layer
 
 
+## UI Add Layer operation (redesign decisions 17 and 19). The low-level
+## add_layer method above stays unchanged for fixtures and existing saved
+## stacks; this path initializes declared inputs and assigns output_color in
+## the same history action as creation.
+func add_layer_for_ui(entry_id: String) -> Dictionary:
+	var entry: GSTManifestEntry = _library.get_entry(entry_id)
+	if entry == null:
+		return {"ok": false, "reason": "entry %s not found in library" % entry_id, "layer": null}
+	var old_output_color: StringName = _stack.output_color
+	var layer: GSTLayer = GSTStackOps.add_layer(_stack, entry_id, entry.kind_out, entry.coord)
+	layer.manifest = entry
+	GSTStackOps.initialize_inputs_from_immediate_below(_stack, layer.id, _library)
+	_stack.output_color = layer.id
+	_create_action("GST: add %s" % entry_id)
+	_undo_redo.add_do_method(self, "_redo_add_for_ui", layer)
+	_undo_redo.add_undo_method(self, "_undo_add_for_ui", layer.id, old_output_color)
+	_undo_redo.add_do_method(self, "_notify")
+	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.commit_action(false)
+	_notify()
+	return {"ok": true, "reason": "", "layer": layer}
+
+
+func _redo_add_for_ui(layer: GSTLayer) -> void:
+	_stack.layers.append(layer)
+	_stack.output_color = layer.id
+
+
+func _undo_add_for_ui(layer_id: StringName, old_output_color: StringName) -> void:
+	var idx: int = GSTStackOps.find_index(_stack, layer_id)
+	if idx != -1:
+		_stack.layers.remove_at(idx)
+	_stack.output_color = old_output_color
+
+
 func _redo_add(layer: GSTLayer) -> void:
 	_stack.layers.append(layer)
 
@@ -229,11 +264,12 @@ func _raw_set_slot(layer_id: StringName, slot_name: String, target_id: StringNam
 		layer.slots[slot_name] = target_id
 
 
-## Assigns target_id to a generator's coord.warp_x or coord.warp_y
-## (decision 4: warp slots take fields only, no auto-conversion). No
+## Assigns target_id to a generator's coord.warp_x or coord.warp_y.
+## Warp slots expect fields, and color targets are legal through decision
+## 2's automatic luminance conversion. No
 ## GSTStackOps entry point exists for coord warp slots (they are not
-## GSTLayer.slots entries), so the no-forward-reference and field-kind rules
-## are checked here directly, scoped to this file.
+## GSTLayer.slots entries), so no-forward-reference eligibility is checked
+## here directly.
 func assign_warp(layer_id: StringName, axis: String, target_id: StringName) -> Dictionary:
 	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
 	if layer == null:
@@ -254,12 +290,6 @@ func assign_warp(layer_id: StringName, axis: String, target_id: StringName) -> D
 			return {
 				"ok": false,
 				"reason": "layer %s cannot warp from layer %s: not earlier in the stack" % [String(layer_id), String(target_id)],
-			}
-		var target_layer: GSTLayer = _stack.layers[target_idx]
-		if target_layer.kind_out != GSTLayer.Kind.FIELD:
-			return {
-				"ok": false,
-				"reason": "warp_%s on layer %s requires a field-kind layer; layer %s is color" % [axis, String(layer_id), String(target_id)],
 			}
 
 	_raw_set_warp(layer_id, axis, target_id)
@@ -366,22 +396,31 @@ func add_layer_below_and_wire(anchor_id: StringName, entry_id: String, slot_name
 	var entry: GSTManifestEntry = _library.get_entry(entry_id)
 	if entry == null:
 		return {"ok": false, "reason": "entry %s not found in library" % entry_id}
+	var anchor: GSTLayer = GSTStackOps.find_layer(_stack, anchor_id)
+	var anchor_entry: GSTManifestEntry = _library.get_entry(anchor.entry)
+	if anchor_entry == null:
+		return {"ok": false, "reason": "layer %s has unresolved entry %s" % [String(anchor_id), anchor.entry]}
+	var slot_declared: bool = false
+	for input: Dictionary in anchor_entry.inputs:
+		if String(input["name"]) == slot_name:
+			slot_declared = true
+			break
+	if not slot_declared:
+		return {"ok": false, "reason": "slot %s is not declared by layer %s entry %s" % [slot_name, String(anchor_id), anchor.entry]}
+	if anchor_entry.samples_source and entry.id != "source/texture" and entry.id != "source/screen":
+		return {"ok": false, "reason": "slot %s on layer %s requires a texture or screen source layer; entry %s is not a source" % [slot_name, String(anchor_id), entry_id]}
 
 	var layer: GSTLayer = GSTStackOps.add_layer(_stack, entry_id, entry.kind_out, entry.coord)
 	layer.manifest = entry
 	_raw_reorder(layer.id, anchor_index)
-	var anchor: GSTLayer = GSTStackOps.find_layer(_stack, anchor_id)
+	GSTStackOps.initialize_inputs_from_immediate_below(_stack, layer.id, _library)
+	var old_slot_present: bool = anchor.slots.has(slot_name)
 	var old_target: StringName = anchor.slots.get(slot_name, &"")
-	var slot_result: Dictionary = GSTStackOps.assign_slot(_stack, anchor_id, slot_name, layer.id, _library)
-	if not slot_result["ok"]:
-		var idx: int = GSTStackOps.find_index(_stack, layer.id)
-		if idx != -1:
-			_stack.layers.remove_at(idx)
-		return slot_result
+	_raw_set_slot(anchor_id, slot_name, layer.id)
 
 	_create_action("GST: add %s below %s" % [entry_id, String(anchor_id)])
 	_undo_redo.add_do_method(self, "_redo_add_below", layer, anchor_index, anchor_id, slot_name)
-	_undo_redo.add_undo_method(self, "_undo_add_below", layer.id, anchor_id, slot_name, old_target)
+	_undo_redo.add_undo_method(self, "_undo_add_below", layer.id, anchor_id, slot_name, old_slot_present, old_target)
 	_undo_redo.add_do_method(self, "_notify")
 	_undo_redo.add_undo_method(self, "_notify")
 	_undo_redo.commit_action(false)
@@ -395,8 +434,13 @@ func _redo_add_below(layer: GSTLayer, target_index: int, anchor_id: StringName, 
 	_raw_set_slot(anchor_id, slot_name, layer.id)
 
 
-func _undo_add_below(layer_id: StringName, anchor_id: StringName, slot_name: String, old_target: StringName) -> void:
-	_raw_set_slot(anchor_id, slot_name, old_target)
+func _undo_add_below(layer_id: StringName, anchor_id: StringName, slot_name: String, old_slot_present: bool, old_target: StringName) -> void:
+	var anchor: GSTLayer = GSTStackOps.find_layer(_stack, anchor_id)
+	if anchor != null:
+		if old_slot_present:
+			anchor.slots[slot_name] = old_target
+		else:
+			anchor.slots.erase(slot_name)
 	var idx: int = GSTStackOps.find_index(_stack, layer_id)
 	if idx != -1:
 		_stack.layers.remove_at(idx)

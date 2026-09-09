@@ -61,6 +61,24 @@ func test_assigning_a_screen_layer_to_a_samples_source_slot_succeeds() -> void:
 	assert_eq(filter.slots["source"], screen.id, "the slot stores the screen layer id")
 
 
+func test_filter_default_initializes_only_from_an_immediate_source() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var legal_stack: GSTStack = GSTStack.new()
+	var texture: GSTLayer = GSTStackOps.add_layer(legal_stack, "source/texture", GSTLayer.Kind.COLOR, false)
+	var legal_filter: GSTLayer = GSTStackOps.add_layer(legal_stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
+	var legal_result: Dictionary = GSTStackOps.initialize_inputs_from_immediate_below(legal_stack, legal_filter.id, lib)
+	assert_true(legal_result["ok"], "filter initialization succeeds with a legal immediate source")
+	assert_eq(legal_filter.slots.get("source", &""), texture.id, "filter source initializes from the immediate texture")
+
+	var illegal_stack: GSTStack = GSTStack.new()
+	GSTStackOps.add_layer(illegal_stack, "source/texture", GSTLayer.Kind.COLOR, false)
+	GSTStackOps.add_layer(illegal_stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	var illegal_filter: GSTLayer = GSTStackOps.add_layer(illegal_stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
+	var illegal_result: Dictionary = GSTStackOps.initialize_inputs_from_immediate_below(illegal_stack, illegal_filter.id, lib)
+	assert_true(illegal_result["ok"], "filter initialization remains valid when the immediate layer is not a source")
+	assert_false(illegal_filter.slots.has("source"), "a filter does not search past its illegal immediate layer for an older source")
+
+
 func test_assigning_a_slot_whose_own_entry_is_unresolved_in_the_library_is_refused() -> void:
 	# An entry id absent from the given library must never bypass the
 	# samples_source check: assign_slot refuses instead of silently treating

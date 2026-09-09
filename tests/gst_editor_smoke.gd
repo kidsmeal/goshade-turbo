@@ -25,6 +25,9 @@ func run(plugin: EditorPlugin) -> void:
 	if flag == "ui_layout":
 		var layout_smoke: RefCounted = load("res://tests/gst_editor_ui_layout_smoke.gd").new()
 		await layout_smoke.run(plugin)
+	elif flag == "ui_actions":
+		var actions_smoke: RefCounted = load("res://tests/gst_editor_ui_actions_smoke.gd").new()
+		await actions_smoke.run(plugin)
 	elif flag == "5":
 		await _run_phase5(plugin)
 	elif flag == "6":
@@ -62,9 +65,15 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	var invert: GSTLayer = stack_list.add_layer_by_entry_id("fieldops/invert")
 	var hash_layer: GSTLayer = stack_list.add_layer_by_entry_id("generative/hash")
 	_check("2", fbm != null and invert != null and hash_layer != null, "fbm=%s invert=%s hash=%s" % [fbm, invert, hash_layer])
+	_check("2b", stack.output_color == hash_layer.id and invert.slots.get("x", &"") == fbm.id, "UI adds assign top output='%s' (expect '%s') and initialize invert.x='%s' (expect '%s')" % [String(stack.output_color), String(hash_layer.id), String(invert.slots.get("x", &"")), String(fbm.id)])
 
 	await plugin.get_tree().process_frame
+	panel.get_output_block()._on_color_selected(0)
+	await plugin.get_tree().process_frame
 	_check_output_defaults("3", panel, "after the adds, before any output-block or color-layer state exists")
+	history.undo()
+	await plugin.get_tree().process_frame
+	_check("3b", stack.output_color == hash_layer.id, "undoing the explicit default-row excursion restores the top UI-added output '%s'" % String(hash_layer.id))
 
 	await _run_palette_inspector_check(plugin, panel, stack_list, history)
 	await _run_color_alpha_default_excursion(plugin, panel, stack_list, library, history)
@@ -193,10 +202,14 @@ func _run_palette_inspector_check(plugin: EditorPlugin, panel: GSTMainPanel, sta
 ## committed after it (the invert.x wire below) truncates them permanently
 ## from the redo tail, leaving the persistent action count unaffected (fix 6).
 func _run_color_alpha_default_excursion(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, library: GSTLibrary, history: UndoRedo) -> void:
+	var previous_output: StringName = panel.get_stack().output_color
 	var fill: GSTLayer = stack_list.add_layer_by_entry_id("color/fill")
 	await plugin.get_tree().process_frame
 	var fill_entry: GSTManifestEntry = library.get_entry("color/fill")
 	var expect_color: String = "(default) l%s %s" % [String(fill.id), fill_entry.function]
+	_check("4", panel.get_output_block().get_selected_color_text() == "l%s %s" % [String(fill.id), fill_entry.function], "UI add selects fill explicitly: '%s'" % panel.get_output_block().get_selected_color_text())
+	panel.get_output_block()._on_color_selected(0)
+	await plugin.get_tree().process_frame
 	_check("4a", panel.get_output_block().get_selected_color_text() == expect_color, "color default after adding fill: '%s' (expect '%s')" % [panel.get_output_block().get_selected_color_text(), expect_color])
 
 	stack_list.add_layer_by_entry_id("source/texture")
@@ -209,7 +222,11 @@ func _run_color_alpha_default_excursion(plugin: EditorPlugin, panel: GSTMainPane
 
 	history.undo()
 	await plugin.get_tree().process_frame
-	_check("4d", panel.get_output_block().get_selected_color_text() == "(none)", "color default after undoing fill add: '%s' (expect '(none)')" % [panel.get_output_block().get_selected_color_text()])
+	_check("4d", panel.get_stack().output_color == fill.id, "undoing the default-row selection restores the UI add output '%s'" % String(fill.id))
+
+	history.undo()
+	await plugin.get_tree().process_frame
+	_check("4e", panel.get_stack().output_color == previous_output, "undoing fill add restores the previous UI output '%s' (expect '%s')" % [String(panel.get_stack().output_color), String(previous_output)])
 
 
 ## Drives the inspector column's "Add for slot" button on invert's field
@@ -250,9 +267,9 @@ func _run_add_for_slot_excursion(plugin: EditorPlugin, panel: GSTMainPanel, stac
 
 	history.undo()
 	await plugin.get_tree().process_frame
-	var slot_cleared: bool = String(invert.slots.get("x", &"")).is_empty()
+	var slot_restored: bool = invert.slots.get("x", &"") == stack.layers[GSTStackOps.find_index(stack, invert.id) - 1].id
 	var count_after_undo: int = stack.layers.size()
-	_check("5d", slot_cleared and count_after_undo == count_before_pick, "undo add-for-slot: invert.slots['x']='%s' (expect empty), count=%d (expect %d)" % [String(invert.slots.get("x", &"")), count_after_undo, count_before_pick])
+	_check("5d", slot_restored and count_after_undo == count_before_pick, "undo add-for-slot: invert.slots['x']='%s' restored to immediate below, count=%d (expect %d)" % [String(invert.slots.get("x", &"")), count_after_undo, count_before_pick])
 
 	picker.hide()
 
@@ -277,7 +294,7 @@ func _run_undo_sequence(plugin: EditorPlugin, stack: GSTStack, stack_list: GSTSt
 
 	history.undo()
 	await plugin.get_tree().process_frame
-	_check("12b", stack.output_color == &"" and stack_list.get_item_count() == 3, "output_color after undo 2: '%s' (expect empty), row_count=%s (expect 3)" % [String(stack.output_color), stack_list.get_item_count()])
+	_check("12b", stack.output_color == hash_layer.id and stack_list.get_item_count() == 3, "output_color after undo 2: '%s' (expect top UI-added '%s'), row_count=%s (expect 3)" % [String(stack.output_color), String(hash_layer.id), stack_list.get_item_count()])
 
 	history.undo()
 	await plugin.get_tree().process_frame
@@ -287,8 +304,8 @@ func _run_undo_sequence(plugin: EditorPlugin, stack: GSTStack, stack_list: GSTSt
 	history.undo()
 	await plugin.get_tree().process_frame
 	var invert_after: GSTLayer = GSTStackOps.find_layer(stack, invert.id)
-	var slot_cleared: bool = invert_after != null and String(invert_after.slots.get("x", &"")).is_empty()
-	_check("12d", slot_cleared and stack_list.get_item_count() == 3, "invert.slots['x'] after undo 4: '%s' (expect empty), row_count=%s (expect 3)" % [String(invert_after.slots.get("x", &"")) if invert_after != null else "invert missing", stack_list.get_item_count()])
+	var slot_restored_to_add_default: bool = invert_after != null and invert_after.slots.get("x", &"") == fbm.id
+	_check("12d", slot_restored_to_add_default and stack_list.get_item_count() == 3, "invert.slots['x'] after undo 4: '%s' (expect UI-add default '%s'), row_count=%s (expect 3)" % [String(invert_after.slots.get("x", &"")) if invert_after != null else "invert missing", String(fbm.id), stack_list.get_item_count()])
 
 	history.undo()
 	await plugin.get_tree().process_frame
@@ -941,9 +958,9 @@ func _run_phase6_new(plugin: EditorPlugin, panel: GSTMainPanel, ids: Dictionary)
 	history.undo()
 	await plugin.get_tree().process_frame
 	var restored_3: GSTStack = panel.get_stack()
-	var output_color_reverted: bool = restored_3.output_color == &""
+	var output_color_reverted: bool = restored_3.output_color == ids["invert"]
 	var undo_twice_more_ok: bool = is_same(restored_3, old_stack) and restored_3.layers.size() == old_layer_count and output_color_reverted
-	_check("3d", undo_twice_more_ok, "undo twice more reaches the pre-New old stack with its own last action (set_output_color) undone: is_same=%s layers=%d (expect %d) output_color='%s' (expect '')" % [is_same(restored_3, old_stack), restored_3.layers.size(), old_layer_count, String(restored_3.output_color)])
+	_check("3d", undo_twice_more_ok, "undo twice more reaches the pre-New old stack with its own last action (set_output_color) undone: is_same=%s layers=%d (expect %d) output_color='%s' (expect '%s')" % [is_same(restored_3, old_stack), restored_3.layers.size(), old_layer_count, String(restored_3.output_color), String(ids["invert"])])
 
 	history.redo()
 	await plugin.get_tree().process_frame

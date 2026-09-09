@@ -53,7 +53,7 @@ Shared scope is permission to maintain integration and verification, not a requi
 
 ## Phase 1: Full-height layout and usable preview allocation
 
-**Status:** ready to commit
+**Status:** committed (2026-09-08)
 
 **Goal:** Make the active editor fill the main-screen rectangle with a measured default `60%` editing / `40%` preview split and fixed output controls beneath the preview.
 
@@ -101,7 +101,7 @@ Shared scope is permission to maintain integration and verification, not a requi
 
 ## Phase 2: Atomic layer additions and retained conversion behavior
 
-**Status:** pending
+**Status:** committed (2026-09-08)
 
 **Goal:** Establish add/input/output and conversion semantics before the new chooser exposes them.
 

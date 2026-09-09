@@ -168,7 +168,11 @@ func add_layer_by_entry_id(entry_id: String) -> GSTLayer:
 	var entry: GSTManifestEntry = _library.get_entry(entry_id)
 	if entry == null:
 		return null
-	var layer: GSTLayer = _undo.add_layer(entry_id, entry.kind_out, entry.coord)
+	var result: Dictionary = _undo.add_layer_for_ui(entry_id)
+	if not result["ok"]:
+		structural_edit_refused.emit(result["reason"])
+		return null
+	var layer: GSTLayer = result["layer"]
 	refresh()
 	select_layer(layer.id)
 	return layer

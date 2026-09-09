@@ -1,6 +1,6 @@
 # Editor smoke results
 
-Current UI redesign evidence is recorded in the final section, `Editor UI redesign, phase 1`. Earlier sections describe the original phase 4 through 8 implementation.
+Current UI redesign evidence is recorded in the final `Editor UI redesign` sections. Earlier sections describe the original phase 4 through 8 implementation.
 
 Per-phase record of `tests/gst_editor_smoke.gd` runs (docs/PLAN.md Phase 4
 Files). Method: `$env:GST_EDITOR_SMOKE="4"; godot --editor --path .`,
@@ -1929,3 +1929,46 @@ SMOKE SUMMARY pass=14 fail=0
 - Visible-tab restore: `different_start=true tab_persisted=true`; both pane visibility assertions passed.
 - Splitter persistence, responsive tabs, overflow, preview allocation, and native parameter edits passed.
 - Orchestrator restored `project.godot` to `4.4` after the review run. Phase 1 is ready for commit approval; phases 2 through 5 remain pending.
+
+## Editor UI redesign, phase 2 (2026-09-08)
+
+Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 2. Phase 1 was committed as `1c7ae37` before phase 2 began.
+
+### Test-first evidence and limits
+
+- Added unit cases for immediate-below input defaults, source restrictions, unknown slots, color warp conversion, and field-output transparency before production changes.
+- Added editor selector `ui_actions` for compound add/undo/redo, refusal state, stable IDs, and existing-resource input restoration.
+- Pre-change sandboxed engine runs crashed before test summaries; a redirected run exited `-1073741819` with signal `11`.
+- An elevated redirected run produced an engine banner but no assertions within `30` seconds; the implementer terminated only its own wrapper/child processes.
+- No pre-change assertion failure was observed. These attempts do not establish a passing or failing behavior result.
+- Final verification and independent review remain pending.
+
+### Initial verification
+
+- Sandbox import logs identify denied access to Godot's AppData directories. Elevated `4.6.2` import then passed with exit `0`.
+- Named unit suite: `21` files, `132` methods, `0` failures; wrapper reports child exit `0` and no error markers.
+- GPU render suite: `78` stacks checked, `PASS`, exit `0`.
+- New editor `ui_actions` initially passed `18/0` assertions but exited `-1073741819` after its summary on two runs. Assertion success alone does not satisfy its exit criterion.
+- Existing `ui_layout`: `14/0`, exit `0`.
+- Existing selector `4` initially reported `49/1`: one legacy undo assertion expected an empty input, although the new UI add explicitly assigned the immediately preceding layer. The assertion was updated to verify that assigned layer is restored.
+
+### Final implementation verification
+
+- Import: exit `0`. Final named unit suite: `21` files, `134` methods, `0` failures; wrapper exit `0` and no error markers.
+- GPU render suite: `78` stacks, `PASS`, exit `0`.
+- `ui_actions`: `20/0`, exit `0`, stderr empty. The final test waits for five process frames and reads the final preview before quitting.
+- The exact cause of the earlier shutdown access violations was not isolated. The final run exited normally; independent review must repeat the current action smoke.
+- An attempted `RenderingServer.frame_post_draw` wait did not complete in the hidden editor; it was removed. No passing result is claimed for that experiment.
+- A new warp-candidate check initially compared integer metadata to a `StringName`; the test now checks the metadata type before comparing it.
+- Existing editor selectors: `ui_layout` = `14/0`, `4` = `50/0`, `5` = `18/0`, `6` = `16/0`, `7` = `25/0`, `8` = `16/0`; each exited `0`.
+- `project.godot` restored to `4.4`; `git diff --check` passed. Independent review is pending.
+
+### Independent phase 2 review
+
+- Verdict: `PASS`; no required fixes, fix-now notes, deferred notes, or additional docs impact.
+- Named unit command: `21` files, `134` methods, `0` failures; exit `0`.
+- GPU rendered checks: `78` shipped recipe/sandbox stacks passed; exit `0`.
+- `ui_actions`: `20/0`, exit `0`, stderr empty. The earlier shutdown access violation did not recur in this independent run.
+- `ui_layout`: `14/0`; selectors `4` through `8`: `50/0`, `18/0`, `16/0`, `25/0`, `16/0`; every process exited `0`.
+- Reviewer confirmed compound undo, refusal atomicity, source restrictions, stable instances/IDs, retained fallback behavior, warp conversion, and field transparency.
+- Orchestrator restored the minimum feature version to `4.4` after review. Phase 2 is ready for commit approval; phases 3 through 5 remain pending.

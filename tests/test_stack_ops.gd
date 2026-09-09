@@ -16,6 +16,8 @@ func _test_library() -> GSTLibrary:
 		var entry: GSTManifestEntry = GSTManifestEntry.new()
 		entry.id = entry_id
 		entry.function = entry_id.replace("/", "_")
+		if entry_id == "fieldops/invert":
+			entry.inputs = [{"name": "a", "kind": GSTLayer.Kind.FIELD}]
 		lib.add_entry(entry)
 	return lib
 
@@ -45,6 +47,39 @@ func test_slot_assign_refuses_a_forward_reference() -> void:
 	assert_false(result["ok"], "assigning a later layer as an input is refused (decision 3, no forward references)")
 	assert_false(String(result["reason"]).is_empty(), "the refusal carries a reason string")
 	assert_false(dependent.slots.has("a"), "a refused assignment does not write the slot")
+
+
+func test_slot_assign_refuses_an_unknown_manifest_slot() -> void:
+	var stack: GSTStack = GSTStack.new()
+	var base: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	var dependent: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/invert", GSTLayer.Kind.FIELD, false)
+	var result: Dictionary = GSTStackOps.assign_slot(stack, dependent.id, "missing", base.id, _test_library())
+	assert_false(result["ok"], "a slot absent from the consumer manifest is refused")
+	assert_true(String(result["reason"]).contains("missing"), "the refusal names the unknown slot")
+	assert_false(dependent.slots.has("missing"), "a refused unknown slot does not mutate the layer")
+
+
+func test_initialize_inputs_uses_the_immediate_lower_layer_for_every_manifest_input() -> void:
+	var lib: GSTLibrary = GSTLibrary.new()
+	lib.scan()
+	var stack: GSTStack = GSTStack.new()
+	var lower: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	var mix: GSTLayer = GSTStackOps.add_layer(stack, "color/mix", GSTLayer.Kind.COLOR, false)
+	var result: Dictionary = GSTStackOps.initialize_inputs_from_immediate_below(stack, mix.id, lib)
+	assert_true(result["ok"], "manifest input initialization succeeds")
+	assert_eq(mix.slots.get("a", &""), lower.id, "color input a uses the immediate lower field through conversion")
+	assert_eq(mix.slots.get("b", &""), lower.id, "color input b uses the immediate lower field through conversion")
+	assert_eq(mix.slots.get("mask", &""), lower.id, "field input mask uses the immediate lower field exactly")
+
+
+func test_initialize_inputs_on_a_bottom_zero_input_entry_is_a_noop() -> void:
+	var lib: GSTLibrary = GSTLibrary.new()
+	lib.scan()
+	var stack: GSTStack = GSTStack.new()
+	var layer: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	var result: Dictionary = GSTStackOps.initialize_inputs_from_immediate_below(stack, layer.id, lib)
+	assert_true(result["ok"], "a zero-input bottom layer initializes successfully")
+	assert_true(layer.slots.is_empty(), "a zero-input bottom layer stays unwired")
 
 
 func test_reorder_above_a_referencer_is_refused() -> void:

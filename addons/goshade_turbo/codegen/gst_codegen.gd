@@ -7,11 +7,9 @@ extends RefCounted
 ##
 ## Phase 3 adds color slot conversion (decision 2), source/filter emission
 ## (decision 10, decision 21, docs/PLAN.md Blocker B6), and the full
-## four-mode output block (decision 12, docs/PLAN.md Blocker B7). A
-## field-kind stack.output_color (the only kind phase 2 ever produced) still
-## wraps as vec4(vec3(lN), 1.0), ignoring output_alpha entirely: that is the
-## phase 2 path, kept for a legacy/degenerate stack, not the normal color
-## path described in decision 12.
+## four-mode output block (decision 12, docs/PLAN.md Blocker B7). Field
+## outputs use grayscale with the selected alpha expression; color warp
+## inputs use luminance (docs/EDITOR_UI_DESIGN_reviewed.md).
 
 ## Fed into an unset field-kind operator input slot so a single operator
 ## compiles alone without an upstream layer wiring it (docs/PLAN.md Phase 2
@@ -136,13 +134,17 @@ static func _stack_has_texture_source(stack: GSTStack) -> bool:
 	return false
 
 
-## True when any slot assignment or the output alpha mode converts a color
+## True when any slot, warp assignment, or output alpha mode converts a color
 ## layer to a field through luminance (decision 2, decision 12), so
 ## _luma_function must be declared. Structural, not a text scan, so it does
 ## not depend on fragment() having been generated yet.
 static func _stack_needs_luma(stack: GSTStack, library: GSTLibrary) -> bool:
 	for layer: GSTLayer in stack.layers:
 		if layer.coord != null:
+			for target_id: StringName in [layer.coord.warp_x, layer.coord.warp_y]:
+				var target_layer: GSTLayer = GSTStackOps.find_layer(stack, target_id)
+				if target_layer != null and target_layer.kind_out == GSTLayer.Kind.COLOR:
+					return true
 			continue
 		var entry: GSTManifestEntry = library.get_entry(layer.entry)
 		if entry == null or entry.samples_source:
@@ -341,7 +343,7 @@ static func _layer_body_lines(layer: GSTLayer, library: GSTLibrary, stack: GSTSt
 	if entry == null:
 		return []
 	if layer.coord != null:
-		return _generator_body_lines(layer, entry)
+		return _generator_body_lines(layer, entry, stack)
 	if entry.is_source():
 		return _source_body_lines(entry, layer)
 	if entry.samples_source:
@@ -349,7 +351,7 @@ static func _layer_body_lines(layer: GSTLayer, library: GSTLibrary, stack: GSTSt
 	return _operator_body_lines(layer, entry, stack)
 
 
-static func _generator_body_lines(layer: GSTLayer, entry: GSTManifestEntry) -> Array[String]:
+static func _generator_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack) -> Array[String]:
 	var lines: Array[String] = []
 	var coord: GSTCoordBlock = layer.coord
 	var coord_var: String = GSTUniformNames.coord_var(layer.id)
@@ -362,8 +364,8 @@ static func _generator_body_lines(layer: GSTLayer, entry: GSTManifestEntry) -> A
 	if coord.scroll != Vector2.ZERO:
 		lines.append("\t%s += %s * TIME;" % [coord_var, GSTUniformNames.coord_scroll(layer.id)])
 	if coord.warp_x != &"" or coord.warp_y != &"":
-		var wx: String = GSTUniformNames.local_var(coord.warp_x) if coord.warp_x != &"" else "0.0"
-		var wy: String = GSTUniformNames.local_var(coord.warp_y) if coord.warp_y != &"" else "0.0"
+		var wx: String = _warp_arg(stack, coord.warp_x)
+		var wy: String = _warp_arg(stack, coord.warp_y)
 		lines.append("\t%s += vec2(%s, %s) * %s;" % [coord_var, wx, wy, GSTUniformNames.coord_warp_strength(layer.id)])
 	var args: Array[String] = [coord_var]
 	for param: Dictionary in entry.params:
@@ -371,6 +373,14 @@ static func _generator_body_lines(layer: GSTLayer, entry: GSTManifestEntry) -> A
 	var glsl_type: String = "vec4" if entry.kind_out == GSTLayer.Kind.COLOR else "float"
 	lines.append("\t%s %s = %s(%s);" % [glsl_type, GSTUniformNames.local_var(layer.id), entry.function, ", ".join(args)])
 	return lines
+
+
+static func _warp_arg(stack: GSTStack, target_id: StringName) -> String:
+	if target_id == &"":
+		return "0.0"
+	var local: String = GSTUniformNames.local_var(target_id)
+	var target: GSTLayer = GSTStackOps.find_layer(stack, target_id)
+	return "luma(%s)" % local if target != null and target.kind_out == GSTLayer.Kind.COLOR else local
 
 
 ## Sources have no function body: codegen reads the built-in directly
@@ -519,9 +529,7 @@ static func _slot_arg(stack: GSTStack, layer: GSTLayer, input: Dictionary) -> St
 	return "luma(%s)" % local
 
 
-## Output block (decision 12, docs/PLAN.md Blocker B7). A field-kind
-## output_color is the phase 2 path and keeps its full hardcoded form,
-## ignoring output_alpha (see file header comment).
+## Output block (decision 12, docs/PLAN.md Blocker B7).
 static func _output_line(stack: GSTStack, solo_layer_id: StringName) -> String:
 	if solo_layer_id != &"":
 		return _solo_output_line(stack, solo_layer_id)
@@ -549,7 +557,7 @@ static func _main_output_line(stack: GSTStack) -> String:
 	var layer: GSTLayer = GSTStackOps.find_layer(stack, output_id)
 	var local: String = GSTUniformNames.local_var(output_id)
 	if layer != null and layer.kind_out == GSTLayer.Kind.FIELD:
-		return "COLOR = vec4(vec3(%s), 1.0);" % local
+		return "COLOR = vec4(vec3(%s), %s);" % [local, _alpha_expr(stack)]
 	return "COLOR = vec4(%s.rgb, %s);" % [local, _alpha_expr(stack)]
 
 
@@ -578,6 +586,9 @@ static func _alpha_expr(stack: GSTStack) -> String:
 		return "texture(TEXTURE, UV).a"
 	if mode == &"color_alpha":
 		var color_id: StringName = stack.output_color if stack.output_color != &"" else _default_color_layer_id(stack)
+		var color_layer: GSTLayer = GSTStackOps.find_layer(stack, color_id)
+		if color_layer != null and color_layer.kind_out == GSTLayer.Kind.FIELD:
+			return "1.0"
 		return "%s.a" % GSTUniformNames.local_var(color_id)
 	var layer: GSTLayer = GSTStackOps.find_layer(stack, mode)
 	var local: String = GSTUniformNames.local_var(mode)

@@ -83,3 +83,18 @@ func test_no_conversion_omits_luma_helper() -> void:
 
 	assert_false(code.contains("luma("), "no color-to-field conversion occurred, so luma is never declared or called")
 	assert_true(GSTShaderCompile.compiles(code), "no-conversion shader compiles")
+
+
+func test_color_warp_converts_through_luma() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var color_layer: GSTLayer = GSTStackOps.add_layer(stack, "color/fill", GSTLayer.Kind.COLOR, false)
+	var generator: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	generator.coord.warp_x = color_layer.id
+	stack.output_color = generator.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("vec2(luma(l%s), 0.0)" % color_layer.id), "a color warp input converts through luminance")
+	assert_eq(code.count("float luma(vec4 c)"), 1, "color warp emits one luma helper")
+	assert_true(GSTShaderCompile.compiles(code), "color-warp shader compiles")

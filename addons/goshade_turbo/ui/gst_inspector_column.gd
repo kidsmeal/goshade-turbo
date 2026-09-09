@@ -201,8 +201,6 @@ func _add_warp_row(axis: String, current: StringName, layer_idx: int) -> void:
 	var select_idx: int = 0
 	for i: int in range(layer_idx):
 		var candidate: GSTLayer = _stack.layers[i]
-		if candidate.kind_out != GSTLayer.Kind.FIELD:
-			continue
 		var candidate_entry: GSTManifestEntry = _library.get_entry(candidate.entry)
 		var function_name: String = candidate_entry.function if candidate_entry != null else candidate.entry
 		option.add_item("l%s %s" % [String(candidate.id), function_name])

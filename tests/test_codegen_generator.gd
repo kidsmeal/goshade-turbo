@@ -70,6 +70,22 @@ func test_warp_term_emits_missing_axis_as_zero() -> void:
 	assert_true(GSTShaderCompile.compiles(code), "a generator with one warp axis set compiles")
 
 
+func test_color_warp_term_emits_a_luminance_expression() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var warp_source: GSTLayer = GSTStackOps.add_layer(stack, "color/fill", GSTLayer.Kind.COLOR, false)
+	var generator: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	generator.coord.warp_y = warp_source.id
+	stack.output_color = generator.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	var expected_warp_term: String = "coord%s += vec2(0.0, luma(l%s)) * l%s_warp_strength;" % [generator.id, warp_source.id, generator.id]
+	assert_true(code.contains(expected_warp_term), "a color warp local is converted to luminance")
+	assert_true(code.contains("float luma(vec4 c)"), "a color warp emits the luma helper")
+	assert_true(GSTShaderCompile.compiles(code), "a generator with a color warp compiles")
+
+
 func test_no_warp_axes_emits_neither_warp_term_nor_warp_strength_uniform() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()

@@ -193,9 +193,7 @@ func test_output_color_defaults_to_black_when_no_color_layer_exists() -> void:
 	assert_true(GSTShaderCompile.compiles(code), "no-color-layer shader compiles")
 
 
-func test_field_output_color_still_wraps_as_before() -> void:
-	# A field-kind output_color (phase 2 legacy path) keeps the phase 2
-	# vec4(vec3(lN), 1.0) form, ignoring output_alpha entirely.
+func test_field_output_color_uses_texture_alpha() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
 	var field_layer: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
@@ -204,5 +202,70 @@ func test_field_output_color_still_wraps_as_before() -> void:
 
 	var code: String = GSTCodegen.generate(stack, lib)
 
-	assert_true(code.contains("COLOR = vec4(vec3(l%s), 1.0);" % field_layer.id), "a field-kind output_color still wraps as vec4(vec3(lN), 1.0)")
-	assert_true(GSTShaderCompile.compiles(code), "field-output shader compiles")
+	assert_true(code.contains("COLOR = vec4(vec3(l%s), texture(TEXTURE, UV).a);" % field_layer.id), "a field output applies texture transparency")
+	assert_true(GSTShaderCompile.compiles(code), "field-output texture-alpha shader compiles")
+
+
+func test_field_output_color_alpha_is_one() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var field_layer: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	stack.output_color = field_layer.id
+	stack.output_alpha = &"color_alpha"
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("COLOR = vec4(vec3(l%s), 1.0);" % field_layer.id), "field-to-color conversion supplies color_alpha 1.0")
+	assert_true(GSTShaderCompile.compiles(code), "field-output color-alpha shader compiles")
+
+
+func test_field_output_explicit_none_is_one() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var field_layer: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	stack.output_color = field_layer.id
+	stack.output_alpha = &"none"
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("COLOR = vec4(vec3(l%s), 1.0);" % field_layer.id), "a field output applies explicit opaque transparency")
+	assert_true(GSTShaderCompile.compiles(code), "field-output explicit-none shader compiles")
+
+
+func test_field_output_uses_a_selected_field_alpha() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var alpha_field: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	var output_field: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	stack.output_color = output_field.id
+	stack.output_alpha = alpha_field.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("COLOR = vec4(vec3(l%s), l%s);" % [output_field.id, alpha_field.id]), "a field output applies a selected field alpha")
+	assert_true(GSTShaderCompile.compiles(code), "field-output selected-alpha shader compiles")
+
+
+func test_field_output_unset_alpha_keeps_automatic_fallback() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
+	var output_field: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	stack.output_color = output_field.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("COLOR = vec4(vec3(l%s), texture(TEXTURE, UV).a);" % output_field.id), "unset alpha retains the texture fallback for field output")
+	assert_true(GSTShaderCompile.compiles(code), "field-output automatic-alpha shader compiles")
+
+
+func test_field_output_unset_alpha_without_texture_is_one() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var output_field: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	stack.output_color = output_field.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("COLOR = vec4(vec3(l%s), 1.0);" % output_field.id), "unset alpha without texture retains the opaque fallback for field output")
+	assert_true(GSTShaderCompile.compiles(code), "field-output automatic-none shader compiles")
