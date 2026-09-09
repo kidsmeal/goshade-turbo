@@ -1,0 +1,52 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_wto6f"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_y0vtv"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_4yg7o"]
+
+[sub_resource type="Resource" id="Resource_fchb0"]
+script = ExtResource("1_wto6f")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_w3sdl"]
+script = ExtResource("2_y0vtv")
+scale = Vector2(6, 6)
+scroll = Vector2(0.1, 0.05)
+
+[sub_resource type="Resource" id="Resource_6np2e"]
+script = ExtResource("1_wto6f")
+id = &"1"
+entry = "generative/voronoi"
+coord = SubResource("Resource_w3sdl")
+
+[sub_resource type="Resource" id="Resource_6iow7"]
+script = ExtResource("1_wto6f")
+id = &"2"
+entry = "color/hue_shift"
+kind_out = 1
+slots = {
+"color": &"0"
+}
+params = {
+"shift": 0.35
+}
+
+[sub_resource type="Resource" id="Resource_4vl37"]
+script = ExtResource("1_wto6f")
+id = &"3"
+entry = "color/mix"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"2",
+"mask": &"1"
+}
+
+[resource]
+script = ExtResource("3_4yg7o")
+layers = Array[ExtResource("1_wto6f")]([SubResource("Resource_fchb0"), SubResource("Resource_6np2e"), SubResource("Resource_6iow7"), SubResource("Resource_4vl37")])
+output_color = &"3"
+output_alpha = &"texture"
+next_id = 4

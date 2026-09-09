@@ -6,18 +6,24 @@
 script = ExtResource("1")
 id = "generative/checker"
 function = "checker"
-description = "two-value checkerboard, 1.0 or 0.0 by cell parity"
+description = "checkerboard, 1.0 or 0.0 by cell parity; cells sets how many cells cross the coord at scale 1"
 source_math = "standard floor-parity checkerboard construction, common technique, no single canonical source."
 source_code_url = ""
 source_code_license = ""
 kind_out = 0
 inputs = Array[Dictionary]([])
-params = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 8,
+"max": 32,
+"min": 1,
+"name": "cells",
+"type": "int"
+}])
 coord = true
 samples_source = false
 depends = Array[String]([])
-code = "float checker(vec2 p) {
-	vec2 cell = floor(p);
+code = "float checker(vec2 p, int cells) {
+	vec2 cell = floor(p * float(cells));
 	return mod(cell.x + cell.y, 2.0);
 }
 "

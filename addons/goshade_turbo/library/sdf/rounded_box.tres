@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "sdf/rounded_box"
+function = "sdf_rounded_box"
+description = "signed distance to a box with rounded corners, positive outside, negative inside; corner_radius softens the corners"
+source_math = "sdRoundBox(p, b, r): q = abs(p) - b + r; min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r. Inigo Quilez, \"2D distance functions\", https://iquilezles.org/articles/distfunctions2d/, entry \"Box - exact (rounded)\". b split into half_width/half_height (no vec2 param type in the manifest schema)."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.3,
+"max": 1.0,
+"min": 0.05,
+"name": "half_width",
+"type": "float"
+}, {
+"default": 0.3,
+"max": 1.0,
+"min": 0.05,
+"name": "half_height",
+"type": "float"
+}, {
+"default": 0.08,
+"max": 0.4,
+"min": 0.0,
+"name": "corner_radius",
+"type": "float"
+}])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float sdf_rounded_box(vec2 p, float half_width, float half_height, float corner_radius) {
+	vec2 q = abs(p) - vec2(half_width, half_height) + corner_radius;
+	return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - corner_radius;
+}
+"

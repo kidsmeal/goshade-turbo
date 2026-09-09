@@ -1,0 +1,60 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_o8ui8"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_soel3"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_oyx05"]
+
+[sub_resource type="Resource" id="Resource_l7sr7"]
+script = ExtResource("2_soel3")
+scale = Vector2(3, 3)
+
+[sub_resource type="Resource" id="Resource_pjd0e"]
+script = ExtResource("1_o8ui8")
+id = &"0"
+entry = "generative/snoise"
+coord = SubResource("Resource_l7sr7")
+
+[sub_resource type="Resource" id="Resource_da6pv"]
+script = ExtResource("2_soel3")
+scale = Vector2(3, 3)
+offset = Vector2(5.2, 1.7)
+
+[sub_resource type="Resource" id="Resource_550rj"]
+script = ExtResource("1_o8ui8")
+id = &"1"
+entry = "generative/snoise"
+coord = SubResource("Resource_da6pv")
+
+[sub_resource type="Resource" id="Resource_837kg"]
+script = ExtResource("2_soel3")
+scale = Vector2(2, 2)
+scroll = Vector2(0.03, 0.015)
+warp_x = &"0"
+warp_y = &"1"
+warp_strength = 0.4
+
+[sub_resource type="Resource" id="Resource_tnlux"]
+script = ExtResource("1_o8ui8")
+id = &"2"
+entry = "generative/fbm"
+coord = SubResource("Resource_837kg")
+
+[sub_resource type="Resource" id="Resource_j3uvy"]
+script = ExtResource("1_o8ui8")
+id = &"3"
+entry = "color/gradient_map"
+kind_out = 1
+slots = {
+"t": &"2"
+}
+params = {
+"color_a": Color(0.04, 0.12, 0.3, 1),
+"color_b": Color(0.85, 0.95, 1, 1)
+}
+
+[resource]
+script = ExtResource("3_oyx05")
+layers = Array[ExtResource("1_o8ui8")]([SubResource("Resource_pjd0e"), SubResource("Resource_550rj"), SubResource("Resource_tnlux"), SubResource("Resource_j3uvy")])
+output_color = &"3"
+output_alpha = &"none"
+next_id = 4

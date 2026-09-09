@@ -1,0 +1,69 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_pblsj"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_xbwyn"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_s4sot"]
+
+[sub_resource type="Resource" id="Resource_nlu8y"]
+script = ExtResource("1_pblsj")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_qslvy"]
+script = ExtResource("2_xbwyn")
+
+[sub_resource type="Resource" id="Resource_0y20k"]
+script = ExtResource("1_pblsj")
+id = &"1"
+entry = "sdf/circle"
+params = {
+"radius": 0.3
+}
+coord = SubResource("Resource_qslvy")
+
+[sub_resource type="Resource" id="Resource_jic2n"]
+script = ExtResource("1_pblsj")
+id = &"2"
+entry = "fieldops/smoothstep"
+slots = {
+"x": &"1"
+}
+params = {
+"edge0": -0.1,
+"edge1": 0.25
+}
+
+[sub_resource type="Resource" id="Resource_u7htu"]
+script = ExtResource("1_pblsj")
+id = &"3"
+entry = "fieldops/invert"
+slots = {
+"x": &"2"
+}
+
+[sub_resource type="Resource" id="Resource_i3u3s"]
+script = ExtResource("1_pblsj")
+id = &"4"
+entry = "color/fill"
+kind_out = 1
+params = {
+"color": Color(1, 0.85, 0.4, 1)
+}
+
+[sub_resource type="Resource" id="Resource_v6t5g"]
+script = ExtResource("1_pblsj")
+id = &"5"
+entry = "color/add"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"4"
+}
+
+[resource]
+script = ExtResource("3_s4sot")
+layers = Array[ExtResource("1_pblsj")]([SubResource("Resource_nlu8y"), SubResource("Resource_0y20k"), SubResource("Resource_jic2n"), SubResource("Resource_u7htu"), SubResource("Resource_i3u3s"), SubResource("Resource_v6t5g")])
+output_color = &"5"
+output_alpha = &"3"
+next_id = 6

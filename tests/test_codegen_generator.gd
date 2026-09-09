@@ -126,3 +126,26 @@ func test_every_generative_manifest_compiles_alone_with_default_params() -> void
 		stack.output_color = layer.id
 		var code: String = GSTCodegen.generate(stack, lib)
 		assert_true(GSTShaderCompile.compiles(code), "%s compiles alone with default params (a generator always carries at least the scale/offset/rotation uniforms)" % id)
+
+
+## Phase 8: the 7 sdf generators (circle, box, rounded_box, polygon, star,
+## line, ring) are library/sdf/*.tres entries with coord == true, same shape
+## as the generative roster above; the 4 sdf operators (union, subtract,
+## intersect, smooth_union) share the "sdf/" id prefix but coord == false, so
+## this loop filters on entry.coord to reach only the generators. The
+## operators are covered by tests/test_codegen_fieldop.gd's own sdf loop,
+## alongside the rest of the field-op roster.
+func test_every_sdf_generator_manifest_compiles_alone_with_default_params() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var sdf_generator_ids: Array[String] = []
+	for id: String in lib.entries.keys():
+		if id.begins_with("sdf/") and lib.get_entry(id).coord:
+			sdf_generator_ids.append(id)
+	assert_eq(sdf_generator_ids.size(), 7, "the full v0.1 sdf generator roster is present (7 entries)")
+
+	for id: String in sdf_generator_ids:
+		var stack: GSTStack = GSTStack.new()
+		var layer: GSTLayer = GSTStackOps.add_layer(stack, id, GSTLayer.Kind.FIELD, true)
+		stack.output_color = layer.id
+		var code: String = GSTCodegen.generate(stack, lib)
+		assert_true(GSTShaderCompile.compiles(code), "%s compiles alone with default params (a generator always carries at least the scale/offset/rotation uniforms)" % id)

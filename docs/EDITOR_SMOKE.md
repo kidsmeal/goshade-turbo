@@ -1423,3 +1423,444 @@ run_render_checks: PASS, 6 stack(s) checked
 ```
 
 The phase-reviewer's sandbox has no GPU; its run of the same command crashed with signal 11 before any `RENDER` line. That crash is environmental, not a code defect.
+
+## Phase 8 (2026-09-08, `Godot_v4.6.2-stable_win64.exe`)
+
+Method: `$env:GST_EDITOR_SMOKE = "8"` then `godot --editor --path .`, via the
+same `Start-Process -RedirectStandardOutput/-RedirectStandardError` wrapper
+as phases 4-7, 180s timeout, `config/features` reset to `"4.4"` afterward.
+
+### Regression found while building the recipes: `generative/checker.tres` gained a `cells` param
+
+docs/PLAN.md Phase 8 Build item 1 added a `cells` int param (default 8) to
+`generative/checker.tres`, multiplying the coord inside the function so a
+checker at pure default coord (scale 1) renders 8 cells across instead of one
+uniform cell. Re-running the phase 5 smoke as a regression check (any file
+under `tests/gst_editor_smoke.gd` is touched by every later phase's own
+`_run_phase8` addition, so a full re-run of 4-7 was done before trusting the
+phase 8 result) found `SMOKE 7d3 FAIL`: the negative control that bumps
+`coord.scale` to `(2, 2)` under `local` to prove the four-corner comparison
+in items 7d1/7d2 can actually fail now lands on a parity that coincidentally
+still matches the `uv` reference at exactly those four corner points, once
+`cells = 8` changes the sampled grid density. Root cause: the negative
+control's specific numbers (`scale = (2, 2)`, corners at `0.125`/`0.875`)
+were tuned against the pre-`cells` checker math; a scale bump alone can now
+land back on a matching parity by coincidence at that finer density.
+
+Fix: item 7d3 bumps `coord.rotation` (`0.4` radians) instead of `coord.scale`
+under `local` only. A rotation shears the cell grid rather than merely
+resampling it at a different density, so it reliably moves the corner
+samples off the reference's parity regardless of the `cells` value. Comments
+in items 1, 2, and the 7d block that claimed "`generative/checker.tres`
+carries no manifest params" were corrected to describe the new `cells`
+param.
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE 1 PASS checker layer renders non-uniform pixels after 3 frames (img_null=false)
+SMOKE 2 PASS checker scale via real EditorProperty widget found=true coord.scale=(6.0, 6.0) uniform=(6.0, 6.0) (expect (6.0, 6.0)) image_changed=true
+SMOKE 3a PASS preset=text material_same=true message='text preset: coord space is uv; screen_uv reads more consistently on text (decision 11)' text_nonuniform=true differs_from_sprite=true
+SMOKE 3b PASS full_rect_nonuniform=true sprite_nonuniform=true material_still_same=true
+SMOKE 4a PASS solo on: has_solo_line=true stack_unchanged=true
+SMOKE 4b PASS solo off: code equals pre-solo code byte for byte=true
+SMOKE 5 PASS texture source center pixel got=(0.9137, 0.5451, 0.1843, 1.0) want=(0.9176, 0.549, 0.1765, 1.0)
+SMOKE 6 PASS screen source center pixel got=(0.898, 0.5373, 0.1804, 1.0) want=(0.9176, 0.549, 0.1765, 1.0)
+SMOKE 7a PASS gst_rect_size=(488.0, 74.0) target=(488.0, 74.0) has_varying=true
+SMOKE 7b PASS undo restores coord_space to uv: true (actual 0)
+SMOKE 7c PASS resized=true before=(488.0, 74.0) after=(584.0, 138.0) gst_rect_size=(584.0, 138.0)
+SMOKE 7d1 PASS uv checker corner samples=[(0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0)] (expect not all equal)
+SMOKE 7d2 PASS local corner samples=[(0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0)] match uv corner samples=[(0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0)] (tolerance 0.05)
+SMOKE 7d3 PASS local rotation=0.4 corner samples=[(1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0)] vs uv reference=[(0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0)] (expect at least one differs)
+SMOKE 8a PASS forced codegen error: message='filter layer 5 (entry filter/pixelate) has no resolved texture or screen source wired to its source slot' code_unchanged=true
+SMOKE 8b PASS recovery after removing the filter: message=''
+SMOKE SUMMARY pass=18 fail=0
+```
+
+Regression re-runs, same session, unaffected by the checker/randomize changes:
+phase 4 `SMOKE SUMMARY pass=46 fail=0`, phase 6 `SMOKE SUMMARY pass=16
+fail=0`, phase 7 `SMOKE SUMMARY pass=25 fail=0` -- all identical to their
+previously recorded counts.
+
+### Randomize (`GST_EDITOR_SMOKE=8`)
+
+`open_recipe("fire")`, the Randomize button's own `_on_randomize_pressed()`
+handler, one undo, one redo, `New`. `stderr` empty on every run below.
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE 1 PASS open_recipe(fire) + Randomize: button_enabled=true at_least_one_param_changed=true
+SMOKE 2 PASS every param on the randomized stack stays inside its manifest range: true
+SMOKE 3 PASS preview renders non-uniform pixels after randomize (img_null=false)
+SMOKE 4 PASS undo restores every param to the recipe values: body matches post-open body byte for byte=true
+SMOKE 5 PASS redo re-applies the randomized values: body matches post-randomize body byte for byte=true
+SMOKE 6 PASS Randomize disabled after New: disabled=true
+SMOKE SUMMARY pass=8 fail=0
+```
+
+`project.godot`'s `config/features` was rewritten to `PackedStringArray("4.6")`
+by every editor run in this section and reset to `PackedStringArray("4.4")`
+after each; confirmed clean via `git diff project.godot` (empty) after the
+last reset.
+
+### Fix pass: reviewer findings 2, 3, 4, 5 (2026-09-08, `Godot_v4.6.2-stable_win64.exe`)
+
+Reviewer required: (2) `GSTRandomize.apply` had no live caller --
+`_on_randomize_pressed` now registers `GSTRandomize.apply` itself as the
+"Randomize sliders" action's do and undo method (`add_do_method`/
+`add_undo_method` on `GSTRandomize`, a static-method Callable target,
+confirmed valid via a throwaway headless probe before wiring it in), instead
+of a per-property `add_do_property`/`add_undo_property` loop. (3)
+`replace_stack` did not carry `_recipe_open` through its own undo/redo --
+`replace_stack` gained a `new_recipe_open` parameter and now records/replays
+`_recipe_open` (and the Randomize button's `disabled` state) the same way it
+already does `_stack`/`_current_path`, via `add_do_method`/`add_undo_method`
+on `_set_recipe_open`. (4) `run_render_checks.gd` did not propagate a failed
+screenshot directory create or a failed `Image.save_png` to `all_passed`/exit
+1 -- both now do, the directory failure via one `RENDER ... FAIL` line naming
+`sandbox/screenshots` and the per-stack save failure appended to that stack's
+own `reasons` list. (5) `test_combinations.gd`'s color-op loop omitted
+`filter/*` entries as color-kind inputs -- `color_entry_ids` now includes
+every `filter/*` entry, each built as a `source/texture` layer feeding the
+filter's own `source` slot before being wired into the color op under test
+(20 color-kind entries total: 13 color + 2 source + 5 filter).
+
+`godot --headless --path . -s res://tests/run_codegen_tests.gd`:
+
+```
+test_combinations: color-op x color-entry combinations checked: 200 (10 color ops x 20 color-kind entries, filters included per fix pass 3 item 5)
+GST tests: 21 file(s), 122 test method(s), 0 failure(s)
+
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+```
+
+`godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd -- --write-screenshots` (`Start-Process`, 300s timeout): all 78 stacks
+`PASS`, `run_render_checks: PASS, 78 stack(s) checked`, exit 0. No `screenshot
+dir` or `screenshot save` FAIL lines (the directory already existed and every
+`save_png` succeeded), so the new failure paths were not exercised by a real
+failure on this run; the propagation logic itself was read against
+`GSTRenderAssert.check`'s existing `reasons` plumbing rather than forced
+end-to-end, since forcing an actual directory-create or PNG-save failure
+would mean sabotaging the sandbox in a way this fix pass had no reason to do.
+
+Smoke (`GST_EDITOR_SMOKE=8`), extending the existing Randomize run with items
+7-9 for finding 3 (recipe-open state through New's own undo/redo, then two
+more undos past it):
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE 1 PASS open_recipe(fire) + Randomize: button_enabled=true at_least_one_param_changed=true
+SMOKE 2 PASS every param on the randomized stack stays inside its manifest range: true
+SMOKE 3 PASS preview renders non-uniform pixels after randomize (img_null=false)
+SMOKE 4 PASS undo restores every param to the recipe values: body matches post-open body byte for byte=true
+SMOKE 5 PASS redo re-applies the randomized values: body matches post-randomize body byte for byte=true
+SMOKE 6 PASS Randomize disabled after New: disabled=true
+SMOKE 7 PASS undo New: Randomize re-enabled=true
+SMOKE 8 PASS redo New: Randomize disabled again=true
+SMOKE 9 PASS undo twice more (past New, past randomize): Randomize still enabled=true body matches post-open body=true
+SMOKE SUMMARY pass=11 fail=0
+```
+
+stderr: empty. `project.godot`'s `config/features` was rewritten to
+`PackedStringArray("4.6")` by this run and reset to `PackedStringArray("4.4")`
+afterward; confirmed via `git diff project.godot` (empty) after the reset.
+
+### Headless suite and render checks, 4.6.2 baseline
+
+`godot --headless --path . -s res://tests/run_codegen_tests.gd`:
+
+```
+GST tests: 21 file(s), 122 test method(s), 0 failure(s)
+
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+```
+
+`godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd -- --write-screenshots`:
+every reference stack (54), every recipe (12, twice -- once under
+`addons/goshade_turbo/recipes/`, once under `sandbox/stacks/`) checked, all
+`PASS`, `run_render_checks: PASS, 78 stack(s) checked`. Full per-stack output
+recorded above under "Rendered check" is representative; the final run after
+the 9 new recipes landed printed the same shape with 12 additional recipe
+lines (`fire`, `glow`, `hologram`, `metaball_portal`, `sprite_foil`,
+`sprite_oil_slick`, `sprite_opal`, `sprite_pearl`, `water`, each twice) and
+`run_render_checks: PASS, 78 stack(s) checked` (previously 60). Screenshots
+written to `sandbox/screenshots/*.png` (66 files: 78 stacks collapse to 66
+distinct file stems, since a recipe's `addons/.../recipes/<name>.tres` copy
+and its `sandbox/stacks/<name>.tres` copy share one screenshot filename --
+pre-existing behavior from phase 7, not new here).
+
+## Version matrix
+
+Run for docs/PLAN.md Phase 8 Build item 5 and Blocker B2: the same two named
+verification commands against 4.4 and 4.7 by absolute path, plus the 4.6.2
+baseline above recorded again here for one-place comparison. Every summary
+line below is the runner's own verbatim output.
+
+### `Godot_v4.6.2-stable_win64.exe` (`C:\Users\atk67\Desktop\Godot_v4.6.2-stable_win64.exe`, resolved via the `godot` PATH shim)
+
+`--version`: `4.6.2.stable.official.71f334935`
+
+`godot --headless --path . --import`: exit 0, no errors.
+
+`godot --headless --path . -s res://tests/run_codegen_tests.gd`:
+```
+GST tests: 21 file(s), 122 test method(s), 0 failure(s)
+
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+```
+
+`godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd`:
+```
+run_render_checks: PASS, 78 stack(s) checked
+```
+
+### `C:\Users\atk67\Downloads\Godot_v4.4-stable_win64.exe\Godot_v4.4-stable_win64.exe`
+
+`--version`: `4.4.stable.official.4c311cbee`
+
+`godot --headless --path . --import`: exit 0. Stderr printed seven
+`ERROR: Do not use progress dialog (task) while flushing the message queue
+or using call_deferred()!` / `ERROR: Condition "!tasks.has(p_task)" is true.`
+lines from the editor's own progress-dialog internals during the import
+scan; `.godot/global_script_class_cache.cfg` was still created and every
+later command ran clean. Environmental (a 4.4-editor-internal progress
+dialog race during first-scan import), not a project defect: the plan's
+prerequisite step is not the named verification command itself, and the
+named commands below printed no such lines.
+
+`godot --headless --path . -s res://tests/run_codegen_tests.gd`:
+```
+GST tests: 21 file(s), 122 test method(s), 0 failure(s)
+
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+```
+
+`godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd`:
+```
+run_render_checks: PASS, 78 stack(s) checked
+```
+
+No manifest/recipe churn: `git status --porcelain -- addons/goshade_turbo/library addons/goshade_turbo/recipes`
+showed only this implementer's own intentional edits/adds (`checker.tres`,
+`cellular_edges.tres` modified in earlier phase 8 work, `sdf/` and the nine
+new recipes newly added) both before and after this run; `git diff
+project.godot` was empty (headless `-s`/`--import` runs never touch
+`config/features`, only `--editor`/windowed sessions do).
+
+### `C:\Users\atk67\Documents\godot\Godot_v4.7-stable_win64.exe`
+
+`--version`: `4.7.stable.official.5b4e0cb0f`
+
+`godot --headless --path . --import`: exit 0, no errors.
+
+`godot --headless --path . -s res://tests/run_codegen_tests.gd`:
+```
+GST tests: 21 file(s), 122 test method(s), 0 failure(s)
+
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+```
+
+`godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd`:
+```
+run_render_checks: PASS, 78 stack(s) checked
+```
+
+No manifest/recipe churn (B2, plan decision "Manifests are never re-saved"):
+`git status --porcelain -- addons/goshade_turbo/library addons/goshade_turbo/recipes`
+identical before and after this run; `git diff project.godot` empty. Every
+command here was `-s`/`--import`, never `--editor`, so no `.tres` was ever
+opened by the 4.7 editor's own save path.
+
+### Summary
+
+All three engine versions: `--import` exit 0, headless suite
+`122 test method(s), 0 failure(s)`, rendered checks `PASS, 78 stack(s)
+checked`. No failure on 4.4 or 4.7 versus the 4.6.2 baseline; no code change
+was needed against decision 17's Godot-4.4-minimum API surface.
+
+### Fix pass 2: reviewer finding 1 (2026-09-08, `Godot_v4.6.2-stable_win64.exe`)
+
+Reviewer required: keep `GSTRandomize.apply` as the live undo/redo writer,
+refresh the selected layer's `EditorInspector` after apply/undo/redo, and
+extend `tests/gst_editor_smoke.gd`'s Randomize section to verify an actual
+parameter `EditorProperty` after randomize, undo, and redo -- not only the
+`GSTLayer` model and the shader body.
+
+`GSTRandomize.apply` now writes each param through `layer.set(param, value)`
+(so `GSTLayer._set` runs, matching a real inspector edit's own write path)
+and calls `layer.emit_changed()` once per touched layer. `gst_main_panel.gd`
+registers a new `_refresh_inspector` method (relaying to a new
+`GSTInspectorColumn.refresh()`) as both the do and undo method of the
+"Randomize sliders" action, alongside `GSTRandomize.apply` itself, so apply,
+undo, and redo all force the inspector to re-read. `EditorInspector` exposes
+no `refresh()` method on 4.6.2 (checked against a `--doctool` class-doc
+dump: only `edit()`, `get_edited_object()`, `get_selected_path()`, and
+`instantiate_property_editor()` are bound), so `GSTInspectorColumn.refresh()`
+clears the edited object first (`edit(null)`) and re-points it (`edit(_layer)`),
+rather than re-calling `edit()` on the object it already has open.
+
+`tests/gst_editor_smoke.gd`'s Randomize section (`_run_phase8`) now selects
+`fire.tres`'s `generative/fbm` layer (id `"0"`, param `gain`, float, manifest
+range `[0.2, 0.8]`) before randomizing, finds its real `EditorProperty` via
+`GSTInspectorColumn.find_editor_property`, and reads the displayed value off
+the widget's own `Range` descendant control (a `SpinBox`/`EditorSpinSlider`),
+not the `GSTLayer` model, at four points: before randomize (must equal the
+model), after randomize (must equal the new model value and differ from the
+pre-randomize display), after one undo (must equal the original), after one
+redo (must equal the randomized value again). `gain` was chosen over
+`fieldops/smoothstep`'s `edge0`/`edge1` (fire.tres's other float params on a
+selectable layer): at the time of this run, `fire.tres`'s `edge0 = -0.3` sat
+outside `edge0`'s manifest range, then `[0.0, 1.0]` (widened later in phase 8
+to `[-1.0, 2.0]`, which now contains `-0.3`), and a `PROPERTY_HINT_RANGE`
+widget clamps its displayed value to the hint's min/max, so the display
+could never equal that out-of-range model value regardless of whether the
+refresh fix worked -- confirmed by a first run against `edge0` that failed
+items "1b" and "4b" on exactly that clamp, with "3b" (post-randomize, back
+inside range) passing. `gain`'s shipped value (`0.5`, the manifest default)
+stays inside its own range, avoiding the clamp confound entirely.
+
+`godot --headless --path . -s res://tests/run_codegen_tests.gd` (after
+switching `GSTRandomize.apply` to `layer.set()`, `tests/test_randomize_range.gd`'s
+`test_apply_writes_every_changed_value_onto_the_layer` needed its own layer's
+`manifest` resolved before calling `apply()`, matching what every real caller
+already guarantees; `GSTRandomize.randomize` itself is unaffected, since it
+never calls `Object.set()`):
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+test_combinations: color-op x color-entry combinations checked: 200 (10 color ops x 20 color-kind entries, filters included per fix pass 3 item 5)
+GST tests: 21 file(s), 122 test method(s), 0 failure(s)
+
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+```
+
+Smoke (`GST_EDITOR_SMOKE=8`), the Randomize section with the new
+`EditorProperty` checks "1b", "3b", "4b", "5b" interleaved:
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE 1b PASS pre-randomize gain EditorProperty found=true displayed=0.5 layer=0.5
+SMOKE 1 PASS open_recipe(fire) + Randomize: button_enabled=true at_least_one_param_changed=true
+SMOKE 2 PASS every param on the randomized stack stays inside its manifest range: true
+SMOKE 3 PASS preview renders non-uniform pixels after randomize (img_null=false)
+SMOKE 3b PASS post-randomize gain EditorProperty found=true displayed=0.231 layer=0.23148301243782 changed_from_pre=true
+SMOKE 4 PASS undo restores every param to the recipe values: body matches post-open body byte for byte=true
+SMOKE 4b PASS undo gain EditorProperty found=true displayed=0.5 expected=0.5
+SMOKE 5 PASS redo re-applies the randomized values: body matches post-randomize body byte for byte=true
+SMOKE 5b PASS redo gain EditorProperty found=true displayed=0.231 expected=0.23148301243782
+SMOKE 6 PASS Randomize disabled after New: disabled=true
+SMOKE 7 PASS undo New: Randomize re-enabled=true
+SMOKE 8 PASS redo New: Randomize disabled again=true
+SMOKE 9 PASS undo twice more (past New, past randomize): Randomize still enabled=true body matches post-open body=true
+SMOKE SUMMARY pass=15 fail=0
+```
+
+stderr: empty. `project.godot`'s `config/features` was rewritten to
+`PackedStringArray("4.6")` by this run and reset to `PackedStringArray("4.4")`
+afterward; confirmed via `git diff project.godot` (empty) after the reset.
+
+### Fix-now pass: reviewer findings 2, 3, 4 (2026-09-08, `Godot_v4.6.2-stable_win64.exe`)
+
+Reviewer required: (2) make the selected `gain` randomization deterministic
+so `_run_phase8`'s "3b" check cannot fail by chance -- `GSTMainPanel` gained
+`set_randomize_rng(rng: RandomNumberGenerator)` (`Wired-by: none (editor
+smoke seam)`), read by `_on_randomize_pressed` in place of a fresh
+OS-seeded RNG when set. `_run_phase8` now seeds two
+`RandomNumberGenerator`s with the same value (`424242`): one runs
+`GSTRandomize.randomize` against an independently-loaded copy of
+`fire.tres` to compute `expected_gain`, the other is handed to the panel via
+`set_randomize_rng` before pressing the real button, so "3b" asserts the
+displayed value equals `expected_gain` instead of merely differing from the
+pre-randomize value. New check "1c" confirms the expectation stack itself
+loaded. (3) `_on_randomize_pressed`'s `_resync_material()`/
+`_refresh_inspector()` calls after `commit_action()` were a duplicate of
+work `commit_action` already does (its do methods run `GSTRandomize.apply`
+and `_refresh_inspector` once, and `_history_context`'s `version_changed`
+signal, watched by `_on_history_version_changed`, already calls
+`_resync_material()`) -- both duplicate calls removed. (4) the stale `[0.0,
+1.0]`/`[0, 1]` smoothstep range explanation, obsolete after `smoothstep.tres`
+was widened to `[-1.0, 2.0]` earlier in phase 8, corrected in
+`tests/test_recipe_roundtrip.gd`'s `test_every_stored_param_stays_inside_its_manifest_range`
+doc comment and in this file's phase 8 "Fix pass 2" narrative.
+
+`godot --headless --path . --import`: exit 0, no errors.
+
+`godot --headless --path . -s res://tests/run_codegen_tests.gd`:
+
+```
+test_combinations: color-op x color-entry combinations checked: 200 (10 color ops x 20 color-kind entries, filters included per fix pass 3 item 5)
+GST tests: 21 file(s), 123 test method(s), 0 failure(s)
+
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+```
+
+`godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd`:
+`run_render_checks: PASS, 78 stack(s) checked`.
+
+Smoke (`GST_EDITOR_SMOKE=8`), the Randomize section with the new seeded
+"1c"/"3b":
+
+```
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+
+SMOKE setup1 PASS panel present
+SMOKE setup2 PASS panel.visible after set_main_screen_editor=true
+SMOKE 1b PASS pre-randomize gain EditorProperty found=true displayed=0.5 layer=0.5
+SMOKE 1c PASS expectation stack for the randomize seed loads: ok=true
+SMOKE 1 PASS open_recipe(fire) + Randomize: button_enabled=true at_least_one_param_changed=true
+SMOKE 2 PASS every param on the randomized stack stays inside its manifest range: true
+SMOKE 3 PASS preview renders non-uniform pixels after randomize (img_null=false)
+SMOKE 3b PASS post-randomize gain EditorProperty found=true displayed=0.344 layer=0.34438347816467 expected(seed=424242)=0.34438347816467 matches_expected=true
+SMOKE 4 PASS undo restores every param to the recipe values: body matches post-open body byte for byte=true
+SMOKE 4b PASS undo gain EditorProperty found=true displayed=0.5 expected=0.5
+SMOKE 5 PASS redo re-applies the randomized values: body matches post-randomize body byte for byte=true
+SMOKE 5b PASS redo gain EditorProperty found=true displayed=0.344 expected=0.34438347816467
+SMOKE 6 PASS Randomize disabled after New: disabled=true
+SMOKE 7 PASS undo New: Randomize re-enabled=true
+SMOKE 8 PASS redo New: Randomize disabled again=true
+SMOKE 9 PASS undo twice more (past New, past randomize): Randomize still enabled=true body matches post-open body=true
+SMOKE SUMMARY pass=16 fail=0
+```
+
+stderr: empty, exit 0. `project.godot`'s `config/features` was rewritten to
+`PackedStringArray("4.6")` by this run and reset to `PackedStringArray("4.4")`
+afterward; confirmed via `git diff project.godot` (empty) after the reset.
+
+## Version matrix, final phase 8 tree (2026-09-09, orchestrator run)
+
+Commands per binary: `--headless --path . --import`, then `--headless --path . -s res://tests/run_codegen_tests.gd`, then `--path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd`. `project.godot` `config/features` reset to `"4.4"` after each binary. `git status` under `addons/goshade_turbo/library` and `addons/goshade_turbo/recipes` after the 4.7 run showed only the phase 8 edits already in the tree; no manifest or recipe was re-saved by 4.4 or 4.7.
+
+```
+=== 4.4 : C:/Users/atk67/Downloads/Godot_v4.4-stable_win64.exe/Godot_v4.4-stable_win64.exe
+4.4.stable.official.4c311cbee
+GST tests: 21 file(s), 123 test method(s), 0 failure(s)
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+run_render_checks: PASS, 78 stack(s) checked
+=== 4.6.2 : godot (PATH wrapper)
+GST tests: 21 file(s), 123 test method(s), 0 failure(s)
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+run_render_checks: PASS, 78 stack(s) checked
+=== 4.7 : C:/Users/atk67/Documents/godot/Godot_v4.7-stable_win64.exe
+4.7.stable.official.5b4e0cb0f
+GST tests: 21 file(s), 123 test method(s), 0 failure(s)
+run_codegen_tests: PASS, child exit 0 and no error markers in output
+run_render_checks: PASS, 78 stack(s) checked
+```

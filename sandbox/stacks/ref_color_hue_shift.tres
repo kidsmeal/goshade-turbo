@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_mgfex"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="2_qrma6"]
+
+[sub_resource type="Resource" id="Resource_07cge"]
+script = ExtResource("1_mgfex")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_jop3n"]
+script = ExtResource("1_mgfex")
+id = &"1"
+entry = "color/hue_shift"
+kind_out = 1
+slots = {
+"color": &"0"
+}
+
+[resource]
+script = ExtResource("2_qrma6")
+layers = Array[ExtResource("1_mgfex")]([SubResource("Resource_07cge"), SubResource("Resource_jop3n")])
+output_color = &"1"
+next_id = 2

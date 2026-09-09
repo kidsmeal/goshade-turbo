@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "sdf/intersect"
+function = "sdf_intersect"
+description = "boolean intersection of two signed distance fields, the greater of the two"
+source_math = "opIntersection(d1, d2) = max(d1, d2). Inigo Quilez, \"2D distance functions\", https://iquilezles.org/articles/distfunctions2d/, section \"Combinations\"."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "a"
+}, {
+"kind": 0,
+"name": "b"
+}])
+params = Array[Dictionary]([])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float sdf_intersect(float a, float b) {
+	return max(a, b);
+}
+"

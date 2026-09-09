@@ -144,15 +144,15 @@ Randomize (v0.1): a button on an open recipe that sets every slider to a random 
 
 ## Release checklist (v0.1)
 
-- [ ] Every roster entry above exists as a manifest file and compiles alone in the preview.
-- [ ] Every entry has a reference stack with default sliders and a committed screenshot.
-- [ ] Headless codegen tests pass: entry to shader text, include walk dedupe, slot conversion insertion, filter input refusal, id stability across reorder, delete of a referenced layer, header roundtrip, overwrite check, `TIME` emitted only with nonzero scroll.
-- [ ] Combination tests: every field op with every generator as input compiles; every color op with every color entry as input compiles.
-- [ ] Rendered checks on every reference stack and every recipe: no NaN or inf pixels, alpha channel within `[0, 1]`, output not uniformly one value.
-- [ ] All eight recipes build from the roster only and pass the rendered checks.
-- [ ] Tuning pass by the user: every slider produces a visible change across its whole range.
-- [ ] Undo covers add, remove, reorder, slot change, output change.
-- [ ] Runs on 4.4, 4.6, 4.7.
+- [x] Every roster entry above exists as a manifest file and compiles alone in the preview. (evidence: tests/test_codegen_generator.gd, tests/test_codegen_fieldop.gd, tests/test_codegen_color.gd, tests/test_library_index.gd's `test_scan_indexes_the_full_library_roster` (54 entries) plus the sdf compile-alone loops)
+- [x] Every entry has a reference stack with default sliders and a committed screenshot. (evidence: sandbox/stacks/*.tres, sandbox/screenshots/*.png, docs/EDITOR_SMOKE.md Phase 8 section "Headless suite and render checks, 4.6.2 baseline")
+- [x] Headless codegen tests pass: entry to shader text, include walk dedupe, slot conversion insertion, filter input refusal, id stability across reorder, delete of a referenced layer, header roundtrip, overwrite check, `TIME` emitted only with nonzero scroll. (evidence: docs/EDITOR_SMOKE.md "Version matrix, final phase 8 tree", `GST tests: 21 file(s), 123 test method(s), 0 failure(s)` on 4.4, 4.6.2, 4.7)
+- [x] Combination tests: every field op with every generator as input compiles; every color op with every color entry as input compiles. (evidence: tests/test_combinations.gd)
+- [x] Rendered checks on every reference stack and every recipe: no NaN or inf pixels, alpha channel within `[0, 1]`, output not uniformly one value. (evidence: tests/gst_render_assert.gd via tests/run_render_checks.gd, docs/EDITOR_SMOKE.md Phase 8 section, `run_render_checks: PASS, 78 stack(s) checked`)
+- [x] All eight recipes build from the roster only and pass the rendered checks. (evidence: addons/goshade_turbo/recipes/*.tres (12 files: dissolve, outline, sprite_holographic from phase 7; water, fire, glow, hologram, metaball_portal, sprite_pearl, sprite_foil, sprite_oil_slick, sprite_opal from phase 8), docs/EDITOR_SMOKE.md Phase 8 render check section)
+- [ ] Tuning pass by the user: every slider produces a visible change across its whole range. (pending user sign-off)
+- [x] Undo covers add, remove, reorder, slot change, output change. (evidence: docs/EDITOR_SMOKE.md Phase 4 section, the 7-action undo sequence and the compound add-for-slot/output-change excursions)
+- [x] Runs on 4.4, 4.6, 4.7. (evidence: docs/EDITOR_SMOKE.md "Version matrix, final phase 8 tree": 123 headless tests and 78 render checks pass on 4.4, 4.6.2, 4.7)
 
 ## Expansions (out of v0.1, named so they are not relitigated)
 

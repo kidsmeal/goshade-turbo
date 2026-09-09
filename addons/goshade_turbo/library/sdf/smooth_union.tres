@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "sdf/smooth_union"
+function = "sdf_smooth_union"
+description = "boolean union of two signed distance fields with a smoothly blended seam; k controls the blend width"
+source_math = "opSmoothUnion(d1, d2, k): h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0); mix(d2, d1, h) - k * h * (1.0 - h). Inigo Quilez, \"2D distance functions\", https://iquilezles.org/articles/distfunctions2d/, section \"Combinations\"."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "a"
+}, {
+"kind": 0,
+"name": "b"
+}])
+params = Array[Dictionary]([{
+"default": 0.1,
+"max": 0.5,
+"min": 0.01,
+"name": "k",
+"type": "float"
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float sdf_smooth_union(float a, float b, float k) {
+	float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+	return mix(b, a, h) - k * h * (1.0 - h);
+}
+"

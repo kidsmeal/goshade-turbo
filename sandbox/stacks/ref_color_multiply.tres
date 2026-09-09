@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_j3w7h"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="2_l7ub1"]
+
+[sub_resource type="Resource" id="Resource_eoucw"]
+script = ExtResource("1_j3w7h")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_fgygy"]
+script = ExtResource("1_j3w7h")
+id = &"1"
+entry = "color/fill"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_8kdf8"]
+script = ExtResource("1_j3w7h")
+id = &"2"
+entry = "color/multiply"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"1"
+}
+
+[resource]
+script = ExtResource("2_l7ub1")
+layers = Array[ExtResource("1_j3w7h")]([SubResource("Resource_eoucw"), SubResource("Resource_fgygy"), SubResource("Resource_8kdf8")])
+output_color = &"2"
+next_id = 3

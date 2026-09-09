@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "sdf/polygon"
+function = "sdf_polygon"
+description = "distance-like field for a regular polygon of the given side count, positive outside, negative inside; angular sector folding against the apothem, not an exact Euclidean distance"
+source_math = "own construction: fold the angle around p into one sector of the regular polygon (mod against the sector angle), then compare the radial projection length(p) * cos(a) against the polygon's apothem (radius * cos(half sector angle)). In the spirit of the polar-coordinate constructions in Inigo Quilez's \"2D distance functions\", https://iquilezles.org/articles/distfunctions2d/, entry \"Regular Polygon\" (which this does not reproduce verbatim)."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.3,
+"max": 1.0,
+"min": 0.05,
+"name": "radius",
+"type": "float"
+}, {
+"default": 6,
+"max": 12,
+"min": 3,
+"name": "sides",
+"type": "int"
+}])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float sdf_polygon(vec2 p, float radius, int sides) {
+	float angle = atan(p.y, p.x);
+	float sector_angle = 6.28318530718 / float(sides);
+	float a = mod(angle, sector_angle) - sector_angle * 0.5;
+	float apothem = radius * cos(sector_angle * 0.5);
+	return length(p) * cos(a) - apothem;
+}
+"

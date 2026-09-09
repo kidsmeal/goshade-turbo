@@ -14,22 +14,48 @@ extends SceneTree
 ## GSTRenderAssert.check on it. Prints one "RENDER <path> PASS|FAIL <reasons>"
 ## line per stack, plus whether its generated shader contains TIME. Exits 1
 ## if any stack fails to load, fails codegen, or fails the render assert.
+##
+## --write-screenshots (docs/PLAN.md Phase 8 Files): when passed as a user
+## arg (`-- --write-screenshots`, read via OS.get_cmdline_user_args() so it
+## survives Godot's own `--` argument split), every stack's rendered image is
+## additionally saved to sandbox/screenshots/<stack file stem>.png, so the
+## committed screenshots are this harness's own output rather than a
+## hand-exported copy. A failed sandbox/screenshots directory create prints
+## one RENDER FAIL line naming the directory and fails the run (fix pass 3,
+## item 4); a per-stack Image.save_png failure is appended to that stack's
+## own reasons list, so the stack's RENDER line reports FAIL and the run
+## exits 1 the same as a failed render assert.
 
 const RECIPE_DIR: String = "res://addons/goshade_turbo/recipes"
 const SANDBOX_DIR: String = "res://sandbox/stacks"
+const SCREENSHOT_DIR: String = "res://sandbox/screenshots"
 const PREVIEW_IMAGE_PATH: String = "res://addons/goshade_turbo/assets/preview_default.png"
 const VIEWPORT_SIZE: Vector2i = Vector2i(128, 128)
 const SETTLE_FRAMES: int = 3
+const WRITE_SCREENSHOTS_ARG: String = "--write-screenshots"
 
 
 func _initialize() -> void:
 	var library: GSTLibrary = GSTLibrary.new()
 	library.scan()
 
-	var paths: Array[String] = _collect_stack_paths()
+	var write_screenshots: bool = OS.get_cmdline_user_args().has(WRITE_SCREENSHOTS_ARG)
 	var all_passed: bool = true
+	# A failed screenshot-directory create disables screenshot writing for
+	# every stack below (the directory will not exist for any of them
+	# either), but does not skip the render/codegen checks themselves.
+	var screenshot_dir_ok: bool = true
+	if write_screenshots:
+		var screenshot_dir_absolute: String = ProjectSettings.globalize_path(SCREENSHOT_DIR)
+		var make_dir_err: Error = DirAccess.make_dir_recursive_absolute(screenshot_dir_absolute)
+		if make_dir_err != OK:
+			print("RENDER %s FAIL [\"screenshot dir: %s\"] has_TIME=false" % [SCREENSHOT_DIR, error_string(make_dir_err)])
+			all_passed = false
+			screenshot_dir_ok = false
+
+	var paths: Array[String] = _collect_stack_paths()
 	for path: String in paths:
-		var passed: bool = await _check_one(path, library)
+		var passed: bool = await _check_one(path, library, write_screenshots and screenshot_dir_ok)
 		if not passed:
 			all_passed = false
 
@@ -66,8 +92,11 @@ func _tres_paths_in(dir_path: String) -> Array[String]:
 ## TextureRect), syncs the material's uniforms through GSTMaterialSync, waits
 ## SETTLE_FRAMES frames, reads back, and runs GSTRenderAssert.check. Returns
 ## whether `path` passed. Every failure path still prints one RENDER line so a
-## load or codegen failure is as visible as a render failure.
-func _check_one(path: String, library: GSTLibrary) -> bool:
+## load or codegen failure is as visible as a render failure. When
+## `write_screenshots` is true and a real image was read back, it is saved to
+## SCREENSHOT_DIR before the assert result is decided, so a failing stack's
+## image is still on disk to inspect.
+func _check_one(path: String, library: GSTLibrary, write_screenshots: bool) -> bool:
 	var load_result: Dictionary = GSTStackIO.load(path, library)
 	if not load_result["ok"]:
 		print("RENDER %s FAIL [\"load: %s\"] has_TIME=false" % [path, load_result["reason"]])
@@ -119,6 +148,12 @@ func _check_one(path: String, library: GSTLibrary) -> bool:
 
 	var image: Image = viewport.get_texture().get_image()
 	var reasons: Array[String] = GSTRenderAssert.check(image)
+	if write_screenshots and image != null:
+		var screenshot_path: String = "%s/%s.png" % [SCREENSHOT_DIR, path.get_file().get_basename()]
+		var save_err: Error = image.save_png(screenshot_path)
+		if save_err != OK:
+			reasons.append("screenshot save %s: %s" % [screenshot_path, error_string(save_err)])
+
 	var status: String = "PASS" if reasons.is_empty() else "FAIL"
 	print("RENDER %s %s %s has_TIME=%s" % [path, status, reasons, has_time])
 

@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_i0gog"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="2_jqs6p"]
+
+[sub_resource type="Resource" id="Resource_ml4rv"]
+script = ExtResource("1_i0gog")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_8ifn3"]
+script = ExtResource("1_i0gog")
+id = &"1"
+entry = "fieldops/alpha"
+slots = {
+"color": &"0"
+}
+
+[resource]
+script = ExtResource("2_jqs6p")
+layers = Array[ExtResource("1_i0gog")]([SubResource("Resource_ml4rv"), SubResource("Resource_8ifn3")])
+output_color = &"1"
+next_id = 2

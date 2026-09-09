@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_pot0e"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_6uglv"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_4v1bb"]
+
+[sub_resource type="Resource" id="Resource_lfs7n"]
+script = ExtResource("1_pot0e")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_dmd1i"]
+script = ExtResource("2_6uglv")
+scale = Vector2(60, 60)
+rotation = 1.5707963
+scroll = Vector2(0.15, 0)
+
+[sub_resource type="Resource" id="Resource_a01df"]
+script = ExtResource("1_pot0e")
+id = &"1"
+entry = "generative/stripes"
+coord = SubResource("Resource_dmd1i")
+
+[sub_resource type="Resource" id="Resource_16yde"]
+script = ExtResource("1_pot0e")
+id = &"2"
+entry = "color/hue_shift"
+kind_out = 1
+slots = {
+"color": &"0"
+}
+params = {
+"shift": 0.08
+}
+
+[sub_resource type="Resource" id="Resource_3si6l"]
+script = ExtResource("1_pot0e")
+id = &"3"
+entry = "color/screen"
+kind_out = 1
+slots = {
+"a": &"2",
+"b": &"1"
+}
+params = {
+"t": 0.4
+}
+
+[resource]
+script = ExtResource("3_4v1bb")
+layers = Array[ExtResource("1_pot0e")]([SubResource("Resource_lfs7n"), SubResource("Resource_a01df"), SubResource("Resource_16yde"), SubResource("Resource_3si6l")])
+output_color = &"3"
+output_alpha = &"texture"
+next_id = 4

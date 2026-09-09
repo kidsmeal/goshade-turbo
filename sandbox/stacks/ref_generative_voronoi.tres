@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_co0qd"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_suske"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_h7vke"]
+
+[sub_resource type="Resource" id="Resource_v3ykb"]
+script = ExtResource("2_suske")
+
+[sub_resource type="Resource" id="Resource_ii3gr"]
+script = ExtResource("1_co0qd")
+id = &"0"
+entry = "generative/voronoi"
+coord = SubResource("Resource_v3ykb")
+
+[resource]
+script = ExtResource("3_h7vke")
+layers = Array[ExtResource("1_co0qd")]([SubResource("Resource_ii3gr")])
+output_color = &"0"
+next_id = 1

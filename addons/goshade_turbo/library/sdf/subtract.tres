@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "sdf/subtract"
+function = "sdf_subtract"
+description = "boolean subtraction: shape b carved out of shape a"
+source_math = "opSubtraction(d1, d2) = max(-d1, d2), applied here as subtract(a, b) = max(a, -b) so b is the shape removed from a. Inigo Quilez, \"2D distance functions\", https://iquilezles.org/articles/distfunctions2d/, section \"Combinations\"."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "a"
+}, {
+"kind": 0,
+"name": "b"
+}])
+params = Array[Dictionary]([])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float sdf_subtract(float a, float b) {
+	return max(a, -b);
+}
+"

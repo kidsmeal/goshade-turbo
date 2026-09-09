@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_k5jht"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_ey0s7"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_n3pc2"]
+
+[sub_resource type="Resource" id="Resource_l30fq"]
+script = ExtResource("2_ey0s7")
+
+[sub_resource type="Resource" id="Resource_ltpei"]
+script = ExtResource("1_k5jht")
+id = &"0"
+entry = "sdf/circle"
+coord = SubResource("Resource_l30fq")
+
+[sub_resource type="Resource" id="Resource_pmqqu"]
+script = ExtResource("2_ey0s7")
+offset = Vector2(0.18, 0)
+
+[sub_resource type="Resource" id="Resource_0pye6"]
+script = ExtResource("1_k5jht")
+id = &"1"
+entry = "sdf/box"
+coord = SubResource("Resource_pmqqu")
+
+[sub_resource type="Resource" id="Resource_cpxte"]
+script = ExtResource("1_k5jht")
+id = &"2"
+entry = "sdf/union"
+slots = {
+"a": &"0",
+"b": &"1"
+}
+
+[resource]
+script = ExtResource("3_n3pc2")
+layers = Array[ExtResource("1_k5jht")]([SubResource("Resource_ltpei"), SubResource("Resource_0pye6"), SubResource("Resource_cpxte")])
+output_color = &"2"
+next_id = 3

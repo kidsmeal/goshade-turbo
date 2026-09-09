@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_ng1bm"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_dtmvo"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_c0vju"]
+
+[sub_resource type="Resource" id="Resource_63waf"]
+script = ExtResource("2_dtmvo")
+
+[sub_resource type="Resource" id="Resource_yohyw"]
+script = ExtResource("1_ng1bm")
+id = &"0"
+entry = "generative/fbm"
+coord = SubResource("Resource_63waf")
+
+[sub_resource type="Resource" id="Resource_pkiqq"]
+script = ExtResource("1_ng1bm")
+id = &"1"
+entry = "fieldops/pow"
+slots = {
+"x": &"0"
+}
+
+[resource]
+script = ExtResource("3_c0vju")
+layers = Array[ExtResource("1_ng1bm")]([SubResource("Resource_yohyw"), SubResource("Resource_pkiqq")])
+output_color = &"1"
+next_id = 2

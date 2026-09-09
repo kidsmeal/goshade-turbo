@@ -200,6 +200,26 @@ func get_slot_picker() -> GSTPicker:
 	return _slot_picker
 
 
+## Forces the underlying EditorInspector to re-read every displayed value
+## for the currently edited layer (docs/PLAN.md Phase 8 fix pass 2, item 1):
+## an external write to a layer's params -- GSTRandomize.apply, not a real
+## slider drag through this column's own _inspector -- does not by itself
+## reach the already-built EditorProperty widgets. EditorInspector exposes
+## no refresh() method on 4.6.2 (verified against the class doc dump: only
+## edit(), get_edited_object(), get_selected_path(), and
+## instantiate_property_editor() are bound), so this clears the edited
+## object first (edit(null)) rather than re-calling edit() on the object it
+## already has open, in case that path is a no-op. A no-op when nothing is
+## selected.
+## Wired-by: gst_main_panel.gd's _refresh_inspector (registered as a do/undo
+## method on the randomize action, bracketing GSTRandomize.apply).
+func refresh() -> void:
+	if _layer == null:
+		return
+	_inspector.edit(null)
+	_inspector.edit(_layer)
+
+
 ## The object the underlying EditorInspector currently edits, so callers can
 ## confirm it still points at a specific GSTLayer instance after an undo
 ## restores that layer (phase 4 fix pass 3, item 2).

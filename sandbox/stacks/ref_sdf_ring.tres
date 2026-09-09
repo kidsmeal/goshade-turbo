@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_6i8hl"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_alhur"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_ja33q"]
+
+[sub_resource type="Resource" id="Resource_ctmd6"]
+script = ExtResource("2_alhur")
+
+[sub_resource type="Resource" id="Resource_solxa"]
+script = ExtResource("1_6i8hl")
+id = &"0"
+entry = "sdf/ring"
+coord = SubResource("Resource_ctmd6")
+
+[resource]
+script = ExtResource("3_ja33q")
+layers = Array[ExtResource("1_6i8hl")]([SubResource("Resource_solxa")])
+output_color = &"0"
+next_id = 1

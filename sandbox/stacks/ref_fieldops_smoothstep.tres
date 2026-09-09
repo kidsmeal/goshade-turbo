@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_cymyr"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_2ic6y"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_cg522"]
+
+[sub_resource type="Resource" id="Resource_yq4s2"]
+script = ExtResource("2_2ic6y")
+
+[sub_resource type="Resource" id="Resource_fi5xj"]
+script = ExtResource("1_cymyr")
+id = &"0"
+entry = "generative/fbm"
+coord = SubResource("Resource_yq4s2")
+
+[sub_resource type="Resource" id="Resource_ka1eq"]
+script = ExtResource("1_cymyr")
+id = &"1"
+entry = "fieldops/smoothstep"
+slots = {
+"x": &"0"
+}
+
+[resource]
+script = ExtResource("3_cg522")
+layers = Array[ExtResource("1_cymyr")]([SubResource("Resource_fi5xj"), SubResource("Resource_ka1eq")])
+output_color = &"1"
+next_id = 2

@@ -1,0 +1,57 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_f7uwn"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_5w5kg"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_j7m6a"]
+
+[sub_resource type="Resource" id="Resource_x4rcc"]
+script = ExtResource("1_f7uwn")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_48yeo"]
+script = ExtResource("2_5w5kg")
+scale = Vector2(3, 3)
+scroll = Vector2(0.2, 0.1)
+
+[sub_resource type="Resource" id="Resource_hap4j"]
+script = ExtResource("1_f7uwn")
+id = &"1"
+entry = "generative/stripes"
+coord = SubResource("Resource_48yeo")
+
+[sub_resource type="Resource" id="Resource_50j65"]
+script = ExtResource("1_f7uwn")
+id = &"2"
+entry = "color/palette"
+kind_out = 1
+slots = {
+"t": &"1"
+}
+params = {
+"a": Vector3(0.85, 0.85, 0.85),
+"b": Vector3(0.15, 0.15, 0.15),
+"c": Vector3(1, 1, 1),
+"d": Vector3(0, 0.1, 0.2)
+}
+
+[sub_resource type="Resource" id="Resource_4ip5i"]
+script = ExtResource("1_f7uwn")
+id = &"3"
+entry = "color/screen"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"2"
+}
+params = {
+"t": 0.5
+}
+
+[resource]
+script = ExtResource("3_j7m6a")
+layers = Array[ExtResource("1_f7uwn")]([SubResource("Resource_x4rcc"), SubResource("Resource_hap4j"), SubResource("Resource_50j65"), SubResource("Resource_4ip5i")])
+output_color = &"3"
+output_alpha = &"texture"
+next_id = 4

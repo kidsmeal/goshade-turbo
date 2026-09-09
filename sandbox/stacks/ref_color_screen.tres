@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_dhwik"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="2_kfevr"]
+
+[sub_resource type="Resource" id="Resource_mno41"]
+script = ExtResource("1_dhwik")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_uafq7"]
+script = ExtResource("1_dhwik")
+id = &"1"
+entry = "color/fill"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_l3o4m"]
+script = ExtResource("1_dhwik")
+id = &"2"
+entry = "color/screen"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"1"
+}
+
+[resource]
+script = ExtResource("2_kfevr")
+layers = Array[ExtResource("1_dhwik")]([SubResource("Resource_mno41"), SubResource("Resource_uafq7"), SubResource("Resource_l3o4m")])
+output_color = &"2"
+next_id = 3

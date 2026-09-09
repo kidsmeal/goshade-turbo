@@ -1,0 +1,43 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_jmatm"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_bdogr"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_2t6k3"]
+
+[sub_resource type="Resource" id="Resource_mbbxm"]
+script = ExtResource("1_jmatm")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_bhgyd"]
+script = ExtResource("1_jmatm")
+id = &"1"
+entry = "color/fill"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_i284u"]
+script = ExtResource("2_bdogr")
+
+[sub_resource type="Resource" id="Resource_ak2sd"]
+script = ExtResource("1_jmatm")
+id = &"2"
+entry = "generative/fbm"
+coord = SubResource("Resource_i284u")
+
+[sub_resource type="Resource" id="Resource_ee7dp"]
+script = ExtResource("1_jmatm")
+id = &"3"
+entry = "color/mix"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"1",
+"mask": &"2"
+}
+
+[resource]
+script = ExtResource("3_2t6k3")
+layers = Array[ExtResource("1_jmatm")]([SubResource("Resource_mbbxm"), SubResource("Resource_bhgyd"), SubResource("Resource_ak2sd"), SubResource("Resource_ee7dp")])
+output_color = &"3"
+next_id = 4

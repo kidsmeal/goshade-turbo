@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_wwe1o"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_ckpbu"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_r2681"]
+
+[sub_resource type="Resource" id="Resource_hpcus"]
+script = ExtResource("2_ckpbu")
+
+[sub_resource type="Resource" id="Resource_10peq"]
+script = ExtResource("1_wwe1o")
+id = &"0"
+entry = "generative/radial_gradient"
+coord = SubResource("Resource_hpcus")
+
+[resource]
+script = ExtResource("3_r2681")
+layers = Array[ExtResource("1_wwe1o")]([SubResource("Resource_10peq")])
+output_color = &"0"
+next_id = 1

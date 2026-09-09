@@ -57,6 +57,7 @@ signal stack_changed
 @onready var _export_button: Button = %ExportButton
 @onready var _reopen_shader_button: Button = %ReopenShaderButton
 @onready var _recipes_button: MenuButton = %RecipesButton
+@onready var _randomize_button: Button = %RandomizeButton
 
 const COORD_SPACE_NAMES: Array[String] = ["uv", "screen_uv", "local"]
 ## docs/PLAN.md Phase 7 Files: the Recipes MenuButton lists every .tres here.
@@ -101,6 +102,22 @@ var _reopen_shader_dialog: EditorFileDialog = null
 var _overwrite_dialog: ConfirmationDialog = null
 ## The export target awaiting the overwrite confirmation dialog's answer.
 var _pending_export_path: String = ""
+
+## True only right after open_recipe() installs a shipped recipe (docs/PLAN.md
+## Phase 8 Build item 3, design decision 16): gates the Randomize button.
+## New, Open, and Reopen Shader each clear it, since a from-scratch or
+## reopened-from-.gdshader stack is not "an open recipe" even if its layers
+## happen to match one.
+var _recipe_open: bool = false
+
+## Overrides the RandomNumberGenerator _on_randomize_pressed draws from
+## (docs/PLAN.md Phase 8 fix pass 4, item 2). null (the default) keeps the
+## shipped behavior: a fresh RandomNumberGenerator seeded from the OS on
+## every press. tests/gst_editor_smoke.gd seeds a duplicate stack's RNG with
+## the same seed before pressing the real button and computes the expected
+## change set from that duplicate, so GST_EDITOR_SMOKE=8's post-randomize
+## checks compare against an exact expectation instead of merely "changed".
+var _randomize_rng: RandomNumberGenerator = null
 
 
 func _ready() -> void:
@@ -158,6 +175,8 @@ func _ready() -> void:
 
 	_refresh_recipes_menu()
 	_recipes_button.get_popup().index_pressed.connect(_on_recipe_index_pressed)
+	_randomize_button.pressed.connect(_on_randomize_pressed)
+	_set_recipe_open(false)
 
 	_open_dialog = EditorFileDialog.new()
 	_open_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
@@ -241,30 +260,39 @@ func get_stack() -> GSTStack:
 	return _stack
 
 
-## Installs new_stack (and new_path as the new _current_path) as an undoable
-## "Replace stack" action in the shared editor history, rather than mutating
-## _stack/_current_path directly: a structural edit made before New, Open, or
-## Reopen Shader now stays undoable afterward instead of being discarded
-## along with the replaced GSTStack (docs/PLAN.md Cross-cutting
-## "EditorUndoRedoManager integration", phase 6 fix pass 2 item 1).
-## custom_context is _history_context, the panel's path-less anchor Resource:
-## on 4.6.2, get_object_history_id routes a Resource with a res:// path to a
-## different history than a path-less one (verified: tests/gst_editor_smoke.gd
-## phase 7 run 2), so the stack instance is never used as context.
-## _on_new_pressed, open_path, and reopen_shader_path call this instead of
-## mutating _stack/_current_path directly.
-func replace_stack(new_stack: GSTStack, new_path: String) -> void:
+## Installs new_stack (and new_path as the new _current_path, and
+## new_recipe_open as the new _recipe_open) as an undoable "Replace stack"
+## action in the shared editor history, rather than mutating
+## _stack/_current_path/_recipe_open directly: a structural edit made before
+## New, Open, or Reopen Shader now stays undoable afterward instead of being
+## discarded along with the replaced GSTStack (docs/PLAN.md Cross-cutting
+## "EditorUndoRedoManager integration", phase 6 fix pass 2 item 1). The
+## recipe-open flag (decision 16's Randomize gate) is recorded and replayed
+## the same way: undoing a New/Open/Reopen that closed an open recipe
+## re-enables Randomize, and redoing it disables it again (fix pass 3, item
+## 3). custom_context is _history_context, the panel's path-less anchor
+## Resource: on 4.6.2, get_object_history_id routes a Resource with a res://
+## path to a different history than a path-less one (verified:
+## tests/gst_editor_smoke.gd phase 7 run 2), so the stack instance is never
+## used as context. _on_new_pressed, open_path, open_recipe, and
+## reopen_shader_path call this instead of mutating
+## _stack/_current_path/_recipe_open directly.
+func replace_stack(new_stack: GSTStack, new_path: String, new_recipe_open: bool) -> void:
 	var old_stack: GSTStack = _stack
 	var old_undo: GSTUndo = _undo
 	var old_path: String = _current_path
+	var old_recipe_open: bool = _recipe_open
 	var new_undo: GSTUndo = GSTUndo.new(_undo_redo, new_stack, _library, _on_stack_changed, _history_context)
 	_install_stack(new_stack, new_undo)
 	_raw_set_current_path(new_path)
+	_set_recipe_open(new_recipe_open)
 	_undo_redo.create_action("GST: Replace stack", UndoRedo.MERGE_DISABLE, _history_context)
 	_undo_redo.add_do_method(self, "_install_stack", new_stack, new_undo)
 	_undo_redo.add_undo_method(self, "_install_stack", old_stack, old_undo)
 	_undo_redo.add_do_method(self, "_raw_set_current_path", new_path)
 	_undo_redo.add_undo_method(self, "_raw_set_current_path", old_path)
+	_undo_redo.add_do_method(self, "_set_recipe_open", new_recipe_open)
+	_undo_redo.add_undo_method(self, "_set_recipe_open", old_recipe_open)
 	_undo_redo.add_do_method(self, "_notify_replace")
 	_undo_redo.add_undo_method(self, "_notify_replace")
 	_undo_redo.commit_action(false)
@@ -320,6 +348,11 @@ func get_message_label() -> Label:
 	return _message_label
 
 
+## Wired-by: none (editor smoke seam)
+func get_randomize_button() -> Button:
+	return _randomize_button
+
+
 ## The UndoRedo bucket _watched_history currently points at (the same one
 ## _get_history()/_history_context resolve to). Lets the phase 7 smoke drive
 ## undo()/redo() directly against the exact history this panel watches,
@@ -355,7 +388,7 @@ func hide_export_dialog() -> void:
 
 
 func _on_new_pressed() -> void:
-	replace_stack(GSTStack.new(), "")
+	replace_stack(GSTStack.new(), "", false)
 	_message_label.text = ""
 
 
@@ -380,7 +413,7 @@ func open_path(path: String) -> void:
 	if not result["ok"]:
 		_message_label.text = result["reason"]
 		return
-	replace_stack(result["stack"], path)
+	replace_stack(result["stack"], path, false)
 	_message_label.text = ""
 
 
@@ -435,7 +468,7 @@ func open_recipe(name: String) -> void:
 	if not result["ok"]:
 		_message_label.text = result["reason"]
 		return
-	replace_stack(result["stack"], "")
+	replace_stack(result["stack"], "", true)
 	_message_label.text = ""
 
 
@@ -529,7 +562,7 @@ func reopen_shader_path(path: String) -> void:
 	if not result["ok"]:
 		_message_label.text = result["reason"]
 		return
-	replace_stack(result["stack"], "")
+	replace_stack(result["stack"], "", false)
 	if result["body_differs"]:
 		_message_label.text = "%s reopened: its body differs from a fresh codegen of the header (hand edits detected, decision 8)" % path
 	else:
@@ -597,6 +630,85 @@ func _on_coord_space_selected(index: int) -> void:
 	if _syncing_coord_space:
 		return
 	_undo.set_coord_space(index as GSTStack.CoordSpace)
+
+
+func _set_recipe_open(value: bool) -> void:
+	_recipe_open = value
+	_randomize_button.disabled = not value
+
+
+## Registered as both the do and undo method of the randomize action,
+## alongside GSTRandomize.apply itself (docs/PLAN.md Phase 8 fix pass 2,
+## item 1): relays to GSTInspectorColumn.refresh() so the selected layer's
+## EditorProperty widgets re-read after apply, undo, and redo alike. Every
+## other structural edit already gets this for free from
+## _on_stack_changed's own _inspector_column.edit() call; the randomize
+## action bypasses GSTUndo/_on_stack_changed entirely, so it needs this
+## explicit pair.
+func _refresh_inspector() -> void:
+	_inspector_column.refresh()
+
+
+## Injects the RNG _on_randomize_pressed draws from (docs/PLAN.md Phase 8 fix
+## pass 4, item 2): tests/gst_editor_smoke.gd's GST_EDITOR_SMOKE=8 seeds a
+## seeded RandomNumberGenerator here so the handler's change set is
+## deterministic and comparable against an independently-computed
+## expectation, instead of merely differing from the pre-randomize values by
+## chance.
+## Wired-by: none (editor smoke seam)
+func set_randomize_rng(rng: RandomNumberGenerator) -> void:
+	_randomize_rng = rng
+
+
+## Randomizes every slider on the open recipe (decision 16, docs/PLAN.md
+## Phase 8 Build item 3): computes the change set with GSTRandomize.randomize,
+## then registers it as one undoable "Randomize sliders" EditorUndoRedoManager
+## action whose do/undo methods both call GSTRandomize.apply (fix pass 3,
+## item 2: apply is the live change-set writer, not add_do_property/
+## add_undo_property directly), each paired with a call to
+## _refresh_inspector (fix pass 2, item 1: GSTRandomize.apply's writes are
+## external to whatever EditorProperty widgets the inspector column already
+## built, so undo and redo of this action must force it to re-read, not only
+## the initial apply), with custom_context = _history_context, the
+## same anchor every other GST action uses so it lands in the one shared
+## watched history. `old_changes` mirrors `changes`' shape with each layer's
+## pre-randomize values, captured before GSTRandomize.apply(_stack, changes)
+## runs, so the undo method's GSTRandomize.apply(_stack, old_changes) call
+## restores them. A stack with nothing to randomize (GSTRandomize.randomize
+## returns an empty Dictionary) registers no action, matching every other
+## no-op guard in this file. commit_action() (execute = true, the default)
+## applies the do method immediately, which runs GSTRandomize.apply and
+## _refresh_inspector once, and fires the watched history's version_changed,
+## which resyncs the material (_on_history_version_changed) -- no further
+## call is needed here (fix pass 4, item 3: the prior explicit
+## _resync_material() and _refresh_inspector() calls after commit_action were
+## a duplicate of that do-method/signal path, not an additional step).
+## _randomize_rng, when set via set_randomize_rng, replaces the fresh
+## OS-seeded RandomNumberGenerator this handler otherwise draws from.
+func _on_randomize_pressed() -> void:
+	var rng: RandomNumberGenerator = _randomize_rng
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+	var changes: Dictionary = GSTRandomize.randomize(_stack, _library, rng)
+	if changes.is_empty():
+		return
+	var old_changes: Dictionary = {}
+	for layer_id: Variant in changes.keys():
+		var layer: GSTLayer = GSTStackOps.find_layer(_stack, StringName(layer_id))
+		if layer == null:
+			continue
+		var layer_changes: Dictionary = changes[layer_id]
+		var old_layer_changes: Dictionary = {}
+		for param_name: Variant in layer_changes.keys():
+			old_layer_changes[param_name] = layer.get(StringName(param_name))
+		old_changes[layer_id] = old_layer_changes
+	_undo_redo.create_action("GST: randomize sliders", UndoRedo.MERGE_DISABLE, _history_context)
+	_undo_redo.add_do_method(GSTRandomize, "apply", _stack, changes)
+	_undo_redo.add_do_method(self, "_refresh_inspector")
+	_undo_redo.add_undo_method(GSTRandomize, "apply", _stack, old_changes)
+	_undo_redo.add_undo_method(self, "_refresh_inspector")
+	_undo_redo.commit_action()
 
 
 ## The shared EditorUndoRedoManager history for _stack (same one GSTUndo's

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_5ggen"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_ecm8j"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_eccph"]
+
+[sub_resource type="Resource" id="Resource_sgrb6"]
+script = ExtResource("2_ecm8j")
+
+[sub_resource type="Resource" id="Resource_1buaa"]
+script = ExtResource("1_5ggen")
+id = &"0"
+entry = "sdf/star"
+coord = SubResource("Resource_sgrb6")
+
+[resource]
+script = ExtResource("3_eccph")
+layers = Array[ExtResource("1_5ggen")]([SubResource("Resource_1buaa")])
+output_color = &"0"
+next_id = 1

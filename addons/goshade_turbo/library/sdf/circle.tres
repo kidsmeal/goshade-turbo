@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "sdf/circle"
+function = "sdf_circle"
+description = "signed distance to a circle, positive outside, negative inside"
+source_math = "sdCircle(p, r) = length(p) - r. Inigo Quilez, \"2D distance functions\", https://iquilezles.org/articles/distfunctions2d/, entry \"Circle\"."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.3,
+"max": 1.0,
+"min": 0.05,
+"name": "radius",
+"type": "float"
+}])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float sdf_circle(vec2 p, float radius) {
+	return length(p) - radius;
+}
+"

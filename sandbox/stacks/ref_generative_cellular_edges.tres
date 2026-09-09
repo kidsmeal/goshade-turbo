@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_pt6rj"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_efx8f"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_jbnd0"]
+
+[sub_resource type="Resource" id="Resource_232fh"]
+script = ExtResource("2_efx8f")
+
+[sub_resource type="Resource" id="Resource_gw5oe"]
+script = ExtResource("1_pt6rj")
+id = &"0"
+entry = "generative/cellular_edges"
+coord = SubResource("Resource_232fh")
+
+[resource]
+script = ExtResource("3_jbnd0")
+layers = Array[ExtResource("1_pt6rj")]([SubResource("Resource_gw5oe")])
+output_color = &"0"
+next_id = 1

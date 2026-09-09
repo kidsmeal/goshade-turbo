@@ -9,9 +9,9 @@ func test_scan_indexes_the_full_library_roster() -> void:
 	lib.scan()
 	# Phase 1 shipped 3 seed manifests. Phase 2 filled out the v0.1 generative
 	# (11) and fieldops (11) rosters. Phase 3 adds source (2), filter (5),
-	# color (13), and fieldops/alpha (1): 22 + 21 = 43. This count grows again
-	# in phase 8 (sdf).
-	assert_eq(lib.size(), 43, "phase 2's 22 plus phase 3's source/filter/color/alpha roster (21)")
+	# color (13), and fieldops/alpha (1): 22 + 21 = 43. Phase 8 adds the sdf
+	# roster (7 generators, 4 operators): 43 + 11 = 54.
+	assert_eq(lib.size(), 54, "phase 2's 22 plus phase 3's 21 plus phase 8's sdf roster (11)")
 	assert_not_null(lib.get_entry("generative/hash"), "hash manifest is indexed")
 	assert_not_null(lib.get_entry("generative/snoise"), "snoise manifest is indexed")
 	assert_not_null(lib.get_entry("generative/fbm"), "fbm manifest is indexed")

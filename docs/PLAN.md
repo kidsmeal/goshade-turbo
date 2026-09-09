@@ -276,20 +276,32 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the u
 
 ## Phase 8: Roster completion, remaining recipes, release checklist
 
-**Status:** pending
+**Status:** committed (086747d), release gate pending user tuning pass
 **Goal:** Every roster entry and all eight recipes exist, pass the combination and rendered checks, and the release checklist is green.
 **Files:**
 - `addons/goshade_turbo/library/sdf/*.tres` (create: circle, box, rounded box, polygon, star, line, ring, union, subtract, intersect, smooth union)
 - `addons/goshade_turbo/library/**` (modify: any entry retuned by the tuning pass)
 - `addons/goshade_turbo/recipes/water.tres`, `fire.tres`, `glow.tres`, `hologram.tres`, `metaball_portal.tres` (create; the remaining sprite finishes as additional `.tres`)
 - `addons/goshade_turbo/ui/gst_randomize.gd` (create, sets every slider on the open recipe to a random value inside its manifest range)
-- `addons/goshade_turbo/ui/gst_main_panel.gd` (modify: randomize button)
+- `addons/goshade_turbo/ui/gst_main_panel.gd` / `.tscn` (modify: randomize button)
 - `sandbox/stacks/*.tres` (create, one reference stack per roster entry at default sliders)
 - `sandbox/screenshots/*.png` (create, one committed screenshot per reference stack)
-- `tests/test_combinations.gd` (create: every field op with every generator as input compiles; every color op with every color entry as input compiles)
+- `tests/test_combinations.gd` (create: every field op with every generator as input compiles; every color op with every color-kind entry as input compiles, where color-kind entries are the `color/*` roster, `source/*`, and every `filter/*` fed by a texture source)
 - `tests/test_randomize_range.gd` (create: randomized values stay inside the manifest min/max)
 - `README.md` (create, MIT license notice, install, the `godot --headless --path . --import` prerequisite before the test command, the per-entry `source_math` / `source_code` citations required by decision 15)
 - `LICENSE` (create, MIT)
+- `tests/run_render_checks.gd` (modify: writes each rendered image to `sandbox/screenshots/<stack>.png` when run with `--write-screenshots`, so the committed screenshots are the harness output)
+- `addons/goshade_turbo/library/generative/cellular_edges.tres` (modify: polarity and description aligned, deferred note from phase 2)
+- `tests/gst_editor_smoke.gd` (modify: `GST_EDITOR_SMOKE=8` section: randomize on an open recipe changes at least one slider, every value stays inside its manifest range, the preview renders non-uniform, undo restores every slider)
+- `docs/EDITOR_SMOKE.md` (append: phase 8 runs, the version matrix runs on 4.4 and 4.7)
+- `docs/DESIGN.md` (modify: release checklist boxes ticked with the evidence per line)
+- `docs/CURRENTNESS_AUDIT.md` (modify: the two deferred notes retired)
+- `tests/test_library_index.gd`, `tests/test_codegen_generator.gd`, `tests/test_codegen_fieldop.gd` (modify: roster count 54, sdf compile-alone loops)
+- `tests/test_recipe_roundtrip.gd` (modify: every stored recipe and reference-stack param lies inside its manifest range)
+- `addons/goshade_turbo/library/fieldops/smoothstep.tres` (modify: edge range widened to `[-1, 2]` because inputs such as fbm and sdf are unclamped)
+- `addons/goshade_turbo/ui/gst_inspector_column.gd` (modify: `refresh()` for external writes such as randomize)
+- `addons/goshade_turbo/library/generative/checker.tres` (modify: `cells` param so the default render is not one cell; a generator whose default render is uniform is a defaults defect)
+- `NOW.md`, `docs/PLAN.md` (orchestrator state), `**/*.gd.uid`, `**/*.import` sidecars
 
 **Verification:**
 - `godot --headless --path . -s res://tests/run_codegen_tests.gd` exits 0 including `test_combinations.gd` and `test_randomize_range.gd`.
@@ -297,8 +309,8 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the u
 - The same two commands run against a 4.4 binary and a 4.7 binary (B2).
 - Manual tuning pass by the user: every slider produces a visible change across its whole range. This is the user's sign-off, not the implementer's.
 
-**Exit criteria:** Every box in the design's Release checklist is ticked, including the user's tuning sign-off and the three-version run.
-**Blockers:** B2 (4.4 and 4.7 binaries not installed).
+**Exit criteria (code gate, reviewed):** Every box in the design's Release checklist is ticked with evidence except "Tuning pass by the user", plus the three-version run. **Release gate (owner: user, not reviewed):** the user's tuning pass ticks the last box; until then the roadmap item stays in Now, not Shipped. The implementer and reviewer cannot grant a user sign-off.
+**Blockers:** none (B2 resolved, binaries by absolute path).
 **Wires:** randomize button on the open recipe.
 
 ## Cross-cutting concerns

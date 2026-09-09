@@ -3,13 +3,14 @@ extends RefCounted
 
 ## Runs inside a real editor session (godot --editor --path .) when
 ## GST_EDITOR_SMOKE is set, driven by plugin.gd's _enter_tree. Performs the
-## phase 4, 5, 6, or 7 verification steps programmatically depending on the
+## phase 4, 5, 6, 7, or 8 verification steps programmatically depending on the
 ## env var's value ("5" selects phase 5, "6" selects phase 6, "7" selects
-## phase 7, anything else keeps running phase 4), prints one "SMOKE <item>
-## PASS|FAIL <detail>" line per item, then quits the editor. Never fabricates
-## a pass: every assertion below is a real check against the running panel.
-## Design: docs/PLAN.md Phase 4 Verification (amended), Phase 5 Verification,
-## Phase 6 Verification, Phase 7 Verification.
+## phase 7, "8" selects phase 8, anything else keeps running phase 4), prints
+## one "SMOKE <item> PASS|FAIL <detail>" line per item, then quits the editor.
+## Never fabricates a pass: every assertion below is a real check against the
+## running panel. Design: docs/PLAN.md Phase 4 Verification (amended), Phase 5
+## Verification, Phase 6 Verification, Phase 7 Verification, Phase 8
+## Verification's editor smoke item.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -27,6 +28,8 @@ func run(plugin: EditorPlugin) -> void:
 		await _run_phase6(plugin)
 	elif flag == "7":
 		await _run_phase7(plugin)
+	elif flag == "8":
+		await _run_phase8(plugin)
 	else:
 		await _run_phase4(plugin)
 
@@ -461,11 +464,11 @@ func _run_phase5(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-## Item 1: a generative/checker layer (its own manifest carries no params;
-## the hard 0.0/1.0 checkerboard is inherently maximal-contrast, no param
-## needed to call it "high contrast") renders non-uniform pixels.
-## Item 2 (fix pass 2, item 1): editing checker's only adjustable numeric
-## field -- coord.scale, since checker.params is empty -- through a real
+## Item 1: a generative/checker layer (the hard 0.0/1.0 checkerboard is
+## inherently maximal-contrast at its default cells = 8, docs/PLAN.md Phase 8:
+## a "cells" int param was added so the default render is not one uniform
+## cell) renders non-uniform pixels.
+## Item 2 (fix pass 2, item 1): editing checker's coord.scale through a real
 ## EditorProperty widget's own emit_changed(), the way a real slider drag
 ## would, exercising gst_inspector_column.gd's GSTCoordBlock.changed relay
 ## end to end. Not driven through gst_inspector_column.gd's own
@@ -710,16 +713,18 @@ func _run_phase5_local_resize(plugin: EditorPlugin, panel: GSTMainPanel, stack_l
 ## uv", docs/PLAN.md:44) with real per-pixel evidence, at the resized rect
 ## 7c just produced.
 ##
-## generative/checker.tres carries no manifest params (verified: params =
-## Array[Dictionary]([])); cell density is entirely the per-layer
-## coord.scale (gst_codegen.gd::_generator_body_lines feeds gst_transform(p,
-## scale, rotation, offset) into checker(p) = mod(floor(p.x)+floor(p.y),
-## 2.0)). A scale-1 checker with no offset is exactly one cell across the
-## whole [0,1) rect (floor(p) == (0,0) everywhere), so it renders uniformly
-## and can never distinguish local from uv -- the bug this rewrite fixes.
-## Offsetting the single scale-1 cell boundary into view instead produces a
-## real four-quadrant pattern without touching scale at all, honoring the
-## literal "keep the coord block scale at 1.0" B5 test.
+## Before docs/PLAN.md Phase 8 added generative/checker.tres's "cells" int
+## param (default 8), cell density was entirely the per-layer coord.scale
+## (gst_codegen.gd::_generator_body_lines feeds gst_transform(p, scale,
+## rotation, offset) into checker(p, cells) = mod(floor(p.x*cells)+
+## floor(p.y*cells), 2.0)), and a scale-1 checker with no offset was exactly
+## one cell across the whole [0,1) rect (floor(p) == (0,0) everywhere), so it
+## rendered uniformly and could never distinguish local from uv -- the bug
+## this rewrite originally fixed. cells = 8 now makes even a bare scale-1,
+## offset-0 checker non-uniform on its own, but the (0.5, 0.5) offset below is
+## kept anyway: it still honors the literal "keep the coord block scale at
+## 1.0" B5 test and keeps the four corner parities deterministic rather than
+## dependent on exactly where the finer 8-cell grid's boundaries fall.
 ##
 ## Samples are the rect's four corners, not the x == y diagonal the fix
 ## request suggested: mod(floor(x)+floor(y), 2) is provably constant along
@@ -762,16 +767,25 @@ func _run_phase5_checker_grid_evidence(plugin: EditorPlugin, panel: GSTMainPanel
 	var matches_uv: bool = _colors_all_close(local_samples, uv_samples, 0.05)
 	_check("7d2", uv_nonuniform and matches_uv, "local corner samples=%s match uv corner samples=%s (tolerance 0.05)" % [local_samples, uv_samples])
 
-	# Negative control: bumping scale under local only (the uv reference
-	# above stays captured at scale 1) proves the four-point comparison can
-	# actually fail, not pass regardless of input.
-	_set_coord_property(grid.coord, stack, &"scale", Vector2(2.0, 2.0))
+	# Negative control: bumping rotation under local only (the uv reference
+	# above stays captured at scale 1, rotation 0) proves the four-point
+	# comparison can actually fail, not pass regardless of input. Rotation
+	# rather than scale (docs/PLAN.md Phase 8: generative/checker.tres gained
+	# a "cells" int param, default 8, multiplying the coord inside the
+	# function): a scale bump alone can land back on a parity that
+	# coincidentally still matches the uv reference at these four exact
+	# corner points once cells multiplies the density (verified empirically:
+	# scale=(2,2) with cells=8 produced all four corners identical to the uv
+	# reference here). A rotation shears the cell grid instead of merely
+	# resampling it at a different density, so it reliably moves the corner
+	# samples off the reference's parity regardless of the cells value.
+	_set_coord_property(grid.coord, stack, &"rotation", 0.4)
 	for i: int in range(2):
 		await plugin.get_tree().process_frame
 
-	var local_scaled_samples: Array[Color] = _sample_points(preview.get_viewport_image(), fracs)
-	var differs_from_uv: bool = not _colors_all_close(local_scaled_samples, uv_samples, 0.05)
-	_check("7d3", differs_from_uv, "local scale=2.0 corner samples=%s vs uv reference=%s (expect at least one differs)" % [local_scaled_samples, uv_samples])
+	var local_rotated_samples: Array[Color] = _sample_points(preview.get_viewport_image(), fracs)
+	var differs_from_uv: bool = not _colors_all_close(local_rotated_samples, uv_samples, 0.05)
+	_check("7d3", differs_from_uv, "local rotation=0.4 corner samples=%s vs uv reference=%s (expect at least one differs)" % [local_rotated_samples, uv_samples])
 
 
 ## Item 8: mutating the stack directly through GSTStackOps (bypassing
@@ -1066,6 +1080,279 @@ func _run_phase7(plugin: EditorPlugin) -> void:
 	await _run_phase7_history_anchor(plugin, panel)
 
 	_finish(plugin)
+
+
+## Phase 8: randomize (docs/PLAN.md Phase 8 Verification, design decision 16).
+## Opens the shipped "fire" recipe (open_recipe puts a path-bearing GSTStack
+## on the panel with no New in between, same shape as the phase 7 history
+## anchor case, so undo/redo below drive panel.get_watched_history() rather
+## than a freshly recomputed history bucket), presses the Randomize button's
+## own handler, and checks: at least one param actually changed, every
+## param -- not only the ones that happened to change -- stays inside its
+## manifest range, the preview renders non-uniform, one undo restores the
+## shader body to byte-for-byte the same as right after open_recipe (decision
+## 22's next_id never reverts on undo, so the comparison is scoped below the
+## "// stack:" header line via _codegen_body, same as the phase 7 history
+## anchor checks), one redo re-applies the randomized body, and the
+## Randomize button is disabled again after New (docs/PLAN.md Phase 8 Build
+## item 3: "New/Open/Reopen clear it"). Then checks the recipe-open flag
+## itself round-trips through the same "Replace stack" undo history as the
+## rest of the panel state (fix pass 3, item 3): undoing New re-enables
+## Randomize, redoing it disables it again, and undoing twice more (past New,
+## back through the randomize action, stopping short of undoing the
+## open_recipe action itself) leaves Randomize enabled with the stack back at
+## its post-open values.
+##
+## Items "1b"/"3b"/"4b"/"5b" (fix pass 2, item 1): the fbm layer's "gain"
+## param, checked not off the GSTLayer model but off the real EditorProperty
+## widget's own displayed value (its Range-typed editing control -- a
+## SpinBox/EditorSpinSlider on 4.6.2), before randomize, after randomize,
+## after undo, and after redo, proving GSTMainPanel._refresh_inspector
+## actually forces the already-built inspector column to re-read a param
+## GSTRandomize.apply wrote from outside any real slider drag.
+##
+## Item "1c" and "3b"'s expected(seed=...) value (fix pass 4, item 2):
+## GSTMainPanel.set_randomize_rng seeds _on_randomize_pressed's RNG, and an
+## independently-loaded copy of the same recipe run through
+## GSTRandomize.randomize with an identically seeded RNG produces the exact
+## gain value "3b" asserts against, so a correct build cannot fail "3b" by
+## chance the way a "differs from pre-randomize value" threshold check could.
+func _run_phase8(plugin: EditorPlugin) -> void:
+	for i: int in range(5):
+		await plugin.get_tree().process_frame
+
+	var panel: GSTMainPanel = plugin.get_panel() as GSTMainPanel
+	_check("setup1", panel != null, "panel is null" if panel == null else "panel present")
+	if panel == null:
+		_finish(plugin)
+		return
+
+	EditorInterface.set_main_screen_editor("GoShade Turbo")
+	await plugin.get_tree().process_frame
+	_check("setup2", panel.visible, "panel.visible after set_main_screen_editor=%s" % [panel.visible])
+
+	var library: GSTLibrary = panel.get_library()
+
+	panel.open_recipe("fire")
+	for i: int in range(3):
+		await plugin.get_tree().process_frame
+	var post_open_body: String = _codegen_body(panel.get_shader_material().shader.code)
+	var pre_params: Dictionary = _snapshot_params(panel.get_stack(), library)
+	var history: UndoRedo = panel.get_watched_history()
+	var randomize_enabled_after_open: bool = not panel.get_randomize_button().disabled
+
+	# Fix pass 2, item 1: select fire's generative/fbm layer (id "0", param
+	# "gain", float, manifest range [0.2, 0.8]; fire.tres leaves it at the
+	# manifest default 0.5, inside range -- gain avoids the PROPERTY_HINT_RANGE
+	# clamp confound a layer sitting outside its own manifest range would
+	# cause) so the inspector column's real EditorProperty widget
+	# for it is built, then check the widget's own displayed value -- not
+	# just the GSTLayer model -- refreshes after apply, undo, and redo of
+	# the randomize action.
+	var stack_list: GSTStackList = panel.get_stack_list()
+	var inspector: GSTInspectorColumn = panel.get_inspector_column()
+	var gain_layer: GSTLayer = GSTStackOps.find_layer(panel.get_stack(), &"0")
+	stack_list.select_layer(&"0")
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var pre_ep: EditorProperty = inspector.find_editor_property(&"gain", gain_layer)
+	var pre_displayed: float = _range_control_value(pre_ep)
+	var pre_layer_value: float = float(gain_layer.get("gain"))
+	_check("1b", pre_ep != null and absf(pre_displayed - pre_layer_value) < 0.01, "pre-randomize gain EditorProperty found=%s displayed=%s layer=%s" % [pre_ep != null, pre_displayed, pre_layer_value])
+
+	# Fix pass 4, item 2: seed the handler's RNG so "3b" below asserts gain
+	# equals an exact expected value instead of only "differs from pre",
+	# which a correct build could still fail by chance if the draw landed
+	# within the 0.002 threshold of pre_displayed. Expectation computed by
+	# running GSTRandomize.randomize with an identically seeded
+	# RandomNumberGenerator on a fresh, independent load of the same recipe
+	# (same pattern as tests/test_randomize_range.gd's
+	# test_same_seed_reproduces_same_values), then the live handler is fed a
+	# RandomNumberGenerator seeded the same way via panel.set_randomize_rng,
+	# so its draw sequence for "0"'s params -- including gain -- matches the
+	# expectation exactly.
+	var randomize_seed: int = 424242
+	var expect_load: Dictionary = GSTStackIO.load("res://addons/goshade_turbo/recipes/fire.tres", library)
+	_check("1c", expect_load["ok"], "expectation stack for the randomize seed loads: ok=%s" % [expect_load["ok"]])
+	var expect_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	expect_rng.seed = randomize_seed
+	var expected_changes: Dictionary = GSTRandomize.randomize(expect_load["stack"], library, expect_rng)
+	var expected_gain: float = float(expected_changes.get(&"0", {}).get("gain", NAN))
+	var apply_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	apply_rng.seed = randomize_seed
+	panel.set_randomize_rng(apply_rng)
+
+	panel._on_randomize_pressed()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+
+	var post_params: Dictionary = _snapshot_params(panel.get_stack(), library)
+	var any_changed: bool = _any_param_changed(pre_params, post_params)
+	_check("1", randomize_enabled_after_open and any_changed, "open_recipe(fire) + Randomize: button_enabled=%s at_least_one_param_changed=%s" % [randomize_enabled_after_open, any_changed])
+
+	var in_range: bool = _every_param_in_range(panel.get_stack(), library)
+	_check("2", in_range, "every param on the randomized stack stays inside its manifest range: %s" % [in_range])
+
+	var img: Image = panel.get_preview().get_viewport_image()
+	var nonuniform: bool = img != null and not _image_is_uniform(img)
+	_check("3", nonuniform, "preview renders non-uniform pixels after randomize (img_null=%s)" % [img == null])
+
+	var post_ep: EditorProperty = inspector.find_editor_property(&"gain", gain_layer)
+	var post_displayed: float = _range_control_value(post_ep)
+	var post_layer_value: float = float(gain_layer.get("gain"))
+	var post_matches: bool = post_ep != null and absf(post_displayed - post_layer_value) < 0.01
+	var post_matches_expected: bool = absf(post_displayed - expected_gain) < 0.01
+	_check("3b", post_matches and post_matches_expected, "post-randomize gain EditorProperty found=%s displayed=%s layer=%s expected(seed=%s)=%s matches_expected=%s" % [post_ep != null, post_displayed, post_layer_value, randomize_seed, expected_gain, post_matches_expected])
+
+	var randomized_body: String = _codegen_body(panel.get_shader_material().shader.code)
+
+	history.undo()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var body_after_undo: String = _codegen_body(panel.get_shader_material().shader.code)
+	_check("4", body_after_undo == post_open_body, "undo restores every param to the recipe values: body matches post-open body byte for byte=%s" % [body_after_undo == post_open_body])
+
+	var undo_ep: EditorProperty = inspector.find_editor_property(&"gain", gain_layer)
+	var undo_displayed: float = _range_control_value(undo_ep)
+	_check("4b", undo_ep != null and absf(undo_displayed - pre_layer_value) < 0.01, "undo gain EditorProperty found=%s displayed=%s expected=%s" % [undo_ep != null, undo_displayed, pre_layer_value])
+
+	history.redo()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var body_after_redo: String = _codegen_body(panel.get_shader_material().shader.code)
+	_check("5", body_after_redo == randomized_body, "redo re-applies the randomized values: body matches post-randomize body byte for byte=%s" % [body_after_redo == randomized_body])
+
+	var redo_ep: EditorProperty = inspector.find_editor_property(&"gain", gain_layer)
+	var redo_displayed: float = _range_control_value(redo_ep)
+	_check("5b", redo_ep != null and absf(redo_displayed - post_layer_value) < 0.01, "redo gain EditorProperty found=%s displayed=%s expected=%s" % [redo_ep != null, redo_displayed, post_layer_value])
+
+	panel._on_new_pressed()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	_check("6", panel.get_randomize_button().disabled, "Randomize disabled after New: disabled=%s" % [panel.get_randomize_button().disabled])
+
+	# Recipe-open state is now part of the "Replace stack" action's own
+	# do/undo pair (fix pass 3, item 3, gst_main_panel.gd's replace_stack):
+	# undoing New must re-enable Randomize, redoing it must disable it again,
+	# and undoing past the New (back through the randomize action, without
+	# undoing the recipe-open action itself) must leave the button enabled
+	# with the stack back at its post-open (pre-randomize) values.
+	history.undo()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	_check("7", not panel.get_randomize_button().disabled, "undo New: Randomize re-enabled=%s" % [not panel.get_randomize_button().disabled])
+
+	history.redo()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	_check("8", panel.get_randomize_button().disabled, "redo New: Randomize disabled again=%s" % [panel.get_randomize_button().disabled])
+
+	history.undo()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	history.undo()
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	var body_after_two_more_undos: String = _codegen_body(panel.get_shader_material().shader.code)
+	_check("9", not panel.get_randomize_button().disabled and body_after_two_more_undos == post_open_body, "undo twice more (past New, past randomize): Randomize still enabled=%s body matches post-open body=%s" % [not panel.get_randomize_button().disabled, body_after_two_more_undos == post_open_body])
+
+	_finish(plugin)
+
+
+## The value displayed by property_widget's own editing control (a SpinBox
+## or EditorSpinSlider -- both Range subclasses on 4.6.2, verified against
+## the class doc dump -- for a float param under PROPERTY_HINT_RANGE), read
+## straight off that control rather than off the GSTLayer model, so a check
+## against it proves the widget itself refreshed and not only the
+## underlying data (docs/PLAN.md Phase 8 fix pass 2, item 1). 0.0 when
+## property_widget is null or holds no Range descendant.
+func _range_control_value(property_widget: EditorProperty) -> float:
+	if property_widget == null:
+		return 0.0
+	var control: Range = _find_range_control(property_widget)
+	if control == null:
+		return 0.0
+	return control.value
+
+
+func _find_range_control(node: Node) -> Range:
+	if node is Range:
+		return node as Range
+	for child: Node in node.get_children():
+		var found: Range = _find_range_control(child)
+		if found != null:
+			return found
+	return null
+
+
+## Every param, on every layer of `stack`, resolved against `library`:
+## {layer_id: {param_name: current_value}}. A layer whose entry does not
+## resolve or declares no params contributes nothing (same shape
+## GSTRandomize.randomize's own change set uses).
+func _snapshot_params(stack: GSTStack, library: GSTLibrary) -> Dictionary:
+	var snapshot: Dictionary = {}
+	for layer: GSTLayer in stack.layers:
+		var entry: GSTManifestEntry = library.get_entry(layer.entry)
+		if entry == null or entry.params.is_empty():
+			continue
+		var layer_params: Dictionary = {}
+		for param: Dictionary in entry.params:
+			var param_name: String = String(param["name"])
+			layer_params[param_name] = layer.get(StringName(param_name))
+		snapshot[layer.id] = layer_params
+	return snapshot
+
+
+func _any_param_changed(before: Dictionary, after: Dictionary) -> bool:
+	for layer_id: Variant in before.keys():
+		var before_params: Dictionary = before[layer_id]
+		var after_params: Dictionary = after.get(layer_id, {})
+		for param_name: Variant in before_params.keys():
+			if after_params.get(param_name) != before_params[param_name]:
+				return true
+	return false
+
+
+func _every_param_in_range(stack: GSTStack, library: GSTLibrary) -> bool:
+	for layer: GSTLayer in stack.layers:
+		var entry: GSTManifestEntry = library.get_entry(layer.entry)
+		if entry == null:
+			continue
+		for param: Dictionary in entry.params:
+			var value: Variant = layer.get(StringName(param["name"]))
+			if not _value_in_range(param, value):
+				return false
+	return true
+
+
+func _value_in_range(param: Dictionary, value: Variant) -> bool:
+	var param_type: String = String(param["type"])
+	match param_type:
+		"int":
+			return typeof(value) == TYPE_INT and int(value) >= int(param["min"]) and int(value) <= int(param["max"])
+		"float":
+			return typeof(value) == TYPE_FLOAT and float(value) >= float(param["min"]) and float(value) <= float(param["max"])
+		"color":
+			if typeof(value) != TYPE_COLOR:
+				return false
+			var c: Color = value
+			return c.r >= 0.0 and c.r <= 1.0 and c.g >= 0.0 and c.g <= 1.0 and c.b >= 0.0 and c.b <= 1.0 and is_equal_approx(c.a, 1.0)
+		"vec2":
+			if typeof(value) != TYPE_VECTOR2:
+				return false
+			var v2: Vector2 = value
+			var min2: float = float(param.get("min", 0.0))
+			var max2: float = float(param.get("max", 1.0))
+			return v2.x >= min2 and v2.x <= max2 and v2.y >= min2 and v2.y <= max2
+		"vec3":
+			if typeof(value) != TYPE_VECTOR3:
+				return false
+			var v3: Vector3 = value
+			var min3: float = float(param.get("min", 0.0))
+			var max3: float = float(param.get("max", 1.0))
+			return v3.x >= min3 and v3.x <= max3 and v3.y >= min3 and v3.y <= max3 and v3.z >= min3 and v3.z <= max3
+		_:
+			return false
 
 
 ## Alpha path proof (docs/PLAN.md Phase 7 Build): source/texture; fbm; a

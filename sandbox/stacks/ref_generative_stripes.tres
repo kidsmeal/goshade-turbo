@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_dwupm"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_57gtn"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_raarp"]
+
+[sub_resource type="Resource" id="Resource_ld06a"]
+script = ExtResource("2_57gtn")
+
+[sub_resource type="Resource" id="Resource_w2kr5"]
+script = ExtResource("1_dwupm")
+id = &"0"
+entry = "generative/stripes"
+coord = SubResource("Resource_ld06a")
+
+[resource]
+script = ExtResource("3_raarp")
+layers = Array[ExtResource("1_dwupm")]([SubResource("Resource_w2kr5")])
+output_color = &"0"
+next_id = 1

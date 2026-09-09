@@ -1,0 +1,69 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_hchhx"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_7qnus"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_lgl88"]
+
+[sub_resource type="Resource" id="Resource_h5v86"]
+script = ExtResource("2_7qnus")
+scale = Vector2(3, 3)
+scroll = Vector2(0, -0.4)
+
+[sub_resource type="Resource" id="Resource_8ywff"]
+script = ExtResource("1_hchhx")
+id = &"0"
+entry = "generative/fbm"
+coord = SubResource("Resource_h5v86")
+
+[sub_resource type="Resource" id="Resource_ibqqs"]
+script = ExtResource("1_hchhx")
+id = &"1"
+entry = "color/palette"
+kind_out = 1
+slots = {
+"t": &"0"
+}
+params = {
+"a": Vector3(0.55, 0.25, 0.15),
+"b": Vector3(0.45, 0.35, 0.25),
+"c": Vector3(1, 0.9, 0.6),
+"d": Vector3(0, 0.1, 0.25)
+}
+
+[sub_resource type="Resource" id="Resource_0k5a1"]
+script = ExtResource("1_hchhx")
+id = &"2"
+entry = "fieldops/smoothstep"
+slots = {
+"x": &"0"
+}
+params = {
+"edge0": -0.3,
+"edge1": 0.3
+}
+
+[sub_resource type="Resource" id="Resource_bq11a"]
+script = ExtResource("2_7qnus")
+rotation = -1.5707963
+
+[sub_resource type="Resource" id="Resource_2l11f"]
+script = ExtResource("1_hchhx")
+id = &"3"
+entry = "generative/linear_gradient"
+coord = SubResource("Resource_bq11a")
+
+[sub_resource type="Resource" id="Resource_xddjq"]
+script = ExtResource("1_hchhx")
+id = &"4"
+entry = "fieldops/multiply"
+slots = {
+"a": &"2",
+"b": &"3"
+}
+
+[resource]
+script = ExtResource("3_lgl88")
+layers = Array[ExtResource("1_hchhx")]([SubResource("Resource_8ywff"), SubResource("Resource_ibqqs"), SubResource("Resource_0k5a1"), SubResource("Resource_2l11f"), SubResource("Resource_xddjq")])
+output_color = &"1"
+output_alpha = &"4"
+next_id = 5

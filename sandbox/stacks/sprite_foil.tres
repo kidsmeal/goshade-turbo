@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_kbl3n"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_fd54i"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_7y7c2"]
+
+[sub_resource type="Resource" id="Resource_3i2lo"]
+script = ExtResource("1_kbl3n")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+
+[sub_resource type="Resource" id="Resource_7c63t"]
+script = ExtResource("2_fd54i")
+scale = Vector2(2, 2)
+rotation = 0.7853982
+scroll = Vector2(0.3, 0.15)
+
+[sub_resource type="Resource" id="Resource_it427"]
+script = ExtResource("1_kbl3n")
+id = &"1"
+entry = "generative/linear_gradient"
+coord = SubResource("Resource_7c63t")
+
+[sub_resource type="Resource" id="Resource_77fjp"]
+script = ExtResource("1_kbl3n")
+id = &"2"
+entry = "color/palette"
+kind_out = 1
+slots = {
+"t": &"1"
+}
+params = {
+"a": Vector3(0.6, 0.5, 0.2),
+"b": Vector3(0.4, 0.3, 0.1),
+"c": Vector3(1, 1, 0.5),
+"d": Vector3(0, 0.05, 0.15)
+}
+
+[sub_resource type="Resource" id="Resource_d26as"]
+script = ExtResource("1_kbl3n")
+id = &"3"
+entry = "color/overlay"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"2"
+}
+params = {
+"t": 0.6
+}
+
+[resource]
+script = ExtResource("3_7y7c2")
+layers = Array[ExtResource("1_kbl3n")]([SubResource("Resource_3i2lo"), SubResource("Resource_it427"), SubResource("Resource_77fjp"), SubResource("Resource_d26as")])
+output_color = &"3"
+output_alpha = &"texture"
+next_id = 4

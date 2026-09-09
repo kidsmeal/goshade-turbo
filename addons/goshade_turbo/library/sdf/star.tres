@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "sdf/star"
+function = "sdf_star"
+description = "distance-like field for a fixed 5-point star, positive outside, negative inside; inner_ratio softens the points toward a circle as it approaches 1.0"
+source_math = "own construction: fold the angle into one of 5 sectors, linearly interpolate the local radius between the outer radius and radius * inner_ratio across the sector, then subtract from length(p). In the spirit of the polar-coordinate constructions in Inigo Quilez's \"2D distance functions\", https://iquilezles.org/articles/distfunctions2d/, entry \"Star 5\" (which this does not reproduce verbatim)."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.3,
+"max": 1.0,
+"min": 0.05,
+"name": "radius",
+"type": "float"
+}, {
+"default": 0.5,
+"max": 0.9,
+"min": 0.1,
+"name": "inner_ratio",
+"type": "float"
+}])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float sdf_star(vec2 p, float radius, float inner_ratio) {
+	float points = 5.0;
+	float sector_angle = 6.28318530718 / points;
+	float angle = atan(p.y, p.x);
+	float a = mod(angle, sector_angle) - sector_angle * 0.5;
+	float half_sector = sector_angle * 0.5;
+	float t = abs(a) / half_sector;
+	float local_radius = mix(radius, radius * inner_ratio, t);
+	return length(p) - local_radius;
+}
+"

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_frl5k"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_u6eje"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_boxtl"]
+
+[sub_resource type="Resource" id="Resource_y4g8k"]
+script = ExtResource("2_u6eje")
+
+[sub_resource type="Resource" id="Resource_jfren"]
+script = ExtResource("1_frl5k")
+id = &"0"
+entry = "generative/hash"
+coord = SubResource("Resource_y4g8k")
+
+[resource]
+script = ExtResource("3_boxtl")
+layers = Array[ExtResource("1_frl5k")]([SubResource("Resource_jfren")])
+output_color = &"0"
+next_id = 1

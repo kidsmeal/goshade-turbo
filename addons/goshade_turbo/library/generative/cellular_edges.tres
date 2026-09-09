@@ -6,17 +6,23 @@
 script = ExtResource("1")
 id = "generative/cellular_edges"
 function = "cellular_edges"
-description = "F2 minus F1 distance, bright at cell boundaries, dark at cell centers"
-source_math = "F2 - F1 cellular edge construction over a jittered grid, per Inigo Quilez, \"Voronoi Edges\", https://iquilezles.org/articles/voronoilines/"
+description = "cellular edges, bright at cell boundaries and dark toward each cell center; width controls the falloff distance"
+source_math = "F2 - F1 cellular edge construction over a jittered grid, per Inigo Quilez, \"Voronoi Edges\", https://iquilezles.org/articles/voronoilines/. The bright-boundary remap (1.0 - smoothstep(0.0, width, F2 - F1)) is our own addition on top of that construction."
 source_code_url = ""
 source_code_license = ""
 kind_out = 0
 inputs = Array[Dictionary]([])
-params = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.08,
+"max": 0.5,
+"min": 0.01,
+"name": "width",
+"type": "float"
+}])
 coord = true
 samples_source = false
 depends = Array[String](["generative/hash"])
-code = "float cellular_edges(vec2 p) {
+code = "float cellular_edges(vec2 p, float width) {
 	vec2 cell = floor(p);
 	vec2 local_f = fract(p);
 	float f1 = 8.0;
@@ -35,6 +41,9 @@ code = "float cellular_edges(vec2 p) {
 			}
 		}
 	}
-	return f2 - f1;
+	// Equal-or-reversed edges guard, matching fieldops/smoothstep's own
+	// gst_smoothstep: GLSL smoothstep is undefined for edge0 >= edge1.
+	float w = max(width, 0.0001);
+	return 1.0 - smoothstep(0.0, w, f2 - f1);
 }
 "

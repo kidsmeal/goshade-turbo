@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "sdf/line"
+function = "sdf_line"
+description = "signed distance to a straight segment centered on the coord origin along the x axis, positive outside, negative inside; thickness rounds it into a capsule"
+source_math = "sdSegment(p, a, b): pa = p - a, ba = b - a, h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0), length(pa - ba * h). Inigo Quilez, \"2D distance functions\", https://iquilezles.org/articles/distfunctions2d/, entry \"Segment\", with a = (-half_length, 0), b = (half_length, 0) and thickness subtracted (capsule combinator, same article)."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.3,
+"max": 1.0,
+"min": 0.05,
+"name": "half_length",
+"type": "float"
+}, {
+"default": 0.03,
+"max": 0.3,
+"min": 0.005,
+"name": "thickness",
+"type": "float"
+}])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = "float sdf_line(vec2 p, float half_length, float thickness) {
+	vec2 a = vec2(-half_length, 0.0);
+	vec2 b = vec2(half_length, 0.0);
+	vec2 pa = p - a;
+	vec2 ba = b - a;
+	float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+	return length(pa - ba * h) - thickness;
+}
+"

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_58ibr"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_bkdyx"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_a0ylt"]
+
+[sub_resource type="Resource" id="Resource_t4kai"]
+script = ExtResource("2_bkdyx")
+
+[sub_resource type="Resource" id="Resource_uc6l5"]
+script = ExtResource("1_58ibr")
+id = &"0"
+entry = "generative/snoise"
+coord = SubResource("Resource_t4kai")
+
+[resource]
+script = ExtResource("3_a0ylt")
+layers = Array[ExtResource("1_58ibr")]([SubResource("Resource_uc6l5")])
+output_color = &"0"
+next_id = 1

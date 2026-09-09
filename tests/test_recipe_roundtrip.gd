@@ -15,6 +15,7 @@ extends GSTTestBase
 
 const RECIPE_NAMES: Array[String] = ["dissolve", "sprite_holographic", "outline"]
 const RECIPE_DIR: String = "res://addons/goshade_turbo/recipes"
+const STACKS_DIR: String = "res://sandbox/stacks"
 
 
 func _scanned_library() -> GSTLibrary:
@@ -110,6 +111,78 @@ func test_every_recipe_compiles_and_time_emission_matches_scroll() -> void:
 
 		var has_time: bool = result.code.contains("TIME")
 		assert_eq(has_time, expect_time[name], "%s: TIME emission (expect %s)" % [name, expect_time[name]])
+
+
+func _tres_paths(dir_path: String) -> Array[String]:
+	var paths: Array[String] = []
+	var dir: DirAccess = DirAccess.open(dir_path)
+	if dir == null:
+		return paths
+	dir.list_dir_begin()
+	var entry_name: String = dir.get_next()
+	while entry_name != "":
+		if not dir.current_is_dir() and entry_name.ends_with(".tres"):
+			paths.append(dir_path.path_join(entry_name))
+		entry_name = dir.get_next()
+	dir.list_dir_end()
+	paths.sort()
+	return paths
+
+
+func _find_param_schema(entry: GSTManifestEntry, param_name: String) -> Variant:
+	for param: Dictionary in entry.params:
+		if String(param["name"]) == param_name:
+			return param
+	return null
+
+
+## Every param stored in a recipe or reference stack lies inside its manifest
+## [min, max] (fieldops/smoothstep's edge0/edge1 range was widened to
+## [-1.0, 2.0] in phase 8 because inputs such as fbm and sdf are unclamped;
+## addons/goshade_turbo/recipes/fire.tres's stored edge0 = -0.3 lies inside
+## that range). PROPERTY_HINT_RANGE clamps the inspector slider to the
+## manifest range, so a stored value outside it disagrees with the displayed
+## slider and snaps the recipe on first touch. Checks every .tres under
+## addons/goshade_turbo/recipes/ and sandbox/stacks/: every float and int
+## param value lies within its manifest min/max inclusive, and every stored
+## param name exists in the manifest's own param schema. Reports every
+## violation in one assertion message so a single run surfaces the whole
+## defect list at once.
+func test_every_stored_param_stays_inside_its_manifest_range() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var paths: Array[String] = _tres_paths(RECIPE_DIR)
+	paths.append_array(_tres_paths(STACKS_DIR))
+	assert_true(paths.size() > 0, "at least one recipe or reference stack to check")
+
+	var violations: Array[String] = []
+	for path: String in paths:
+		var load_result: Dictionary = GSTStackIO.load(path, lib)
+		if not load_result["ok"]:
+			violations.append("%s: failed to load: %s" % [path, load_result.get("reason", "")])
+			continue
+		var stack: GSTStack = load_result["stack"]
+		for layer: GSTLayer in stack.layers:
+			var entry: GSTManifestEntry = lib.get_entry(layer.entry)
+			if entry == null:
+				violations.append("%s layer %s: entry '%s' not found in library" % [path, String(layer.id), layer.entry])
+				continue
+			for param_name: Variant in layer.params.keys():
+				var schema: Variant = _find_param_schema(entry, String(param_name))
+				if schema == null:
+					violations.append("%s layer %s (%s): param '%s' not in manifest %s" % [path, String(layer.id), layer.entry, param_name, entry.id])
+					continue
+				var param: Dictionary = schema
+				var param_type: String = String(param.get("type", ""))
+				if param_type != "float" and param_type != "int":
+					continue
+				var value: Variant = layer.params[param_name]
+				var min_v: float = float(param["min"])
+				var max_v: float = float(param["max"])
+				var value_f: float = float(value)
+				if value_f < min_v or value_f > max_v:
+					violations.append("%s layer %s (%s) param '%s' = %s outside manifest [%s, %s]" % [path, String(layer.id), layer.entry, param_name, value, min_v, max_v])
+
+	assert_true(violations.is_empty(), "every stored param inside its manifest range and every param name known (%d violations): %s" % [violations.size(), violations])
 
 
 func _read_text(path: String) -> String:

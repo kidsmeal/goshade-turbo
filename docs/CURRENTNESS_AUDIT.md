@@ -48,8 +48,9 @@ A deferred note is not a dropped note - it lives here until someone clears it. R
 the work lands or the reason expires; `/claudhd:audit` prunes stale ones.
 Format: `- [ ] <note, with file:line>: <why deferred> (phase N, <feature or plan name>)`.
 
-- [ ] README.md must state the `godot --headless --path . --import` prerequisite before the test command (docs/PLAN.md phase 8 README entry): README is a phase 8 deliverable, does not exist yet (phase 1, GoShade Turbo v0.1)
-- [ ] cellular_edges.tres description says bright boundaries, code returns F2 - F1 which is dark at boundaries (addons/goshade_turbo/library/generative/cellular_edges.tres:9 and :38): phase 8 tuning pass picks the polarity and aligns description or code (phase 2, GoShade Turbo v0.1)
+- [x] README.md must state the `godot --headless --path . --import` prerequisite before the test command (docs/PLAN.md phase 8 README entry): resolved phase 8, `README.md` Tests section states the import prerequisite before every test command (phase 1, GoShade Turbo v0.1)
+- [x] cellular_edges.tres description says bright boundaries, code returns F2 - F1 which is dark at boundaries (addons/goshade_turbo/library/generative/cellular_edges.tres:9 and :38): resolved phase 8, code now returns `1.0 - smoothstep(0.0, width, F2 - F1)` with a new `width` param, so the field reads 1.0 at boundaries and falls off inside, matching the description (phase 2, GoShade Turbo v0.1)
+- [ ] tests/run_render_checks.gd:38: the codex phase-reviewer sandbox has no GPU and crashes the rendered command with signal 11; the orchestrator's GPU runs on 4.4, 4.6.2, 4.7 are the evidence (docs/EDITOR_SMOKE.md "Version matrix, final phase 8 tree"). Clears when a GPU-capable reviewer environment exists (phase 8, GoShade Turbo v0.1)
 
 ## Rule of thumb
 - Roadmap says what to do next.

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_84vf4"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="2_588sb"]
+
+[sub_resource type="Resource" id="Resource_vmdbt"]
+script = ExtResource("1_84vf4")
+id = &"0"
+entry = "source/screen"
+kind_out = 1
+
+[resource]
+script = ExtResource("2_588sb")
+layers = Array[ExtResource("1_84vf4")]([SubResource("Resource_vmdbt")])
+output_color = &"0"
+next_id = 1

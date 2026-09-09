@@ -21,8 +21,8 @@ func test_operator_call_args_are_slots_then_params_in_manifest_order() -> void:
 
 	var code: String = GSTCodegen.generate(stack, lib)
 
-	assert_true(code.contains("uniform float l%s_gst_smoothstep_edge0 : hint_range(0.0, 1.0) = 0.0;" % op.id), "edge0 param uniform, B4 naming")
-	assert_true(code.contains("uniform float l%s_gst_smoothstep_edge1 : hint_range(0.0, 1.0) = 1.0;" % op.id), "edge1 param uniform, B4 naming")
+	assert_true(code.contains("uniform float l%s_gst_smoothstep_edge0 : hint_range(-1.0, 2.0) = 0.0;" % op.id), "edge0 param uniform, B4 naming")
+	assert_true(code.contains("uniform float l%s_gst_smoothstep_edge1 : hint_range(-1.0, 2.0) = 1.0;" % op.id), "edge1 param uniform, B4 naming")
 	var expected_line: String = "float l%s = gst_smoothstep(l%s, l%s_gst_smoothstep_edge0, l%s_gst_smoothstep_edge1);" % [op.id, base.id, op.id, op.id]
 	assert_true(code.contains(expected_line), "call args are the wired input local first, then params in manifest declaration order")
 	assert_true(GSTShaderCompile.compiles(code), "a generator feeding a field op with params compiles")
@@ -64,6 +64,28 @@ func test_every_fieldop_manifest_compiles_alone_fed_constants() -> void:
 	assert_true(fieldop_ids.size() >= 11, "the full v0.1 field-op roster is present (11 entries)")
 
 	for id: String in fieldop_ids:
+		var stack: GSTStack = GSTStack.new()
+		var layer: GSTLayer = GSTStackOps.add_layer(stack, id, GSTLayer.Kind.FIELD, false)
+		stack.output_color = layer.id
+		var code: String = GSTCodegen.generate(stack, lib)
+		assert_true(GSTShaderCompile.compiles(code, true), "%s compiles alone with every input slot fed the fallback constant" % id)
+
+
+## Phase 8: the 4 sdf operators (union, subtract, intersect, smooth_union)
+## are library/sdf/*.tres entries with coord == false and two field inputs
+## (a, b), the same shape as the field-op roster above. The 7 sdf generators
+## share the "sdf/" id prefix but coord == true; they are covered by
+## tests/test_codegen_generator.gd's own sdf loop, alongside the rest of the
+## generative roster.
+func test_every_sdf_operator_manifest_compiles_alone_fed_constants() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var sdf_operator_ids: Array[String] = []
+	for id: String in lib.entries.keys():
+		if id.begins_with("sdf/") and not lib.get_entry(id).coord:
+			sdf_operator_ids.append(id)
+	assert_eq(sdf_operator_ids.size(), 4, "the full v0.1 sdf operator roster is present (4 entries)")
+
+	for id: String in sdf_operator_ids:
 		var stack: GSTStack = GSTStack.new()
 		var layer: GSTLayer = GSTStackOps.add_layer(stack, id, GSTLayer.Kind.FIELD, false)
 		stack.output_color = layer.id

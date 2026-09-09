@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_bclt5"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_cnvts"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_njepg"]
+
+[sub_resource type="Resource" id="Resource_sbu7a"]
+script = ExtResource("2_cnvts")
+
+[sub_resource type="Resource" id="Resource_fj15a"]
+script = ExtResource("1_bclt5")
+id = &"0"
+entry = "generative/fbm"
+coord = SubResource("Resource_sbu7a")
+
+[sub_resource type="Resource" id="Resource_7cpim"]
+script = ExtResource("2_cnvts")
+
+[sub_resource type="Resource" id="Resource_3pa1y"]
+script = ExtResource("1_bclt5")
+id = &"1"
+entry = "generative/checker"
+coord = SubResource("Resource_7cpim")
+
+[sub_resource type="Resource" id="Resource_g7yck"]
+script = ExtResource("1_bclt5")
+id = &"2"
+entry = "fieldops/add"
+slots = {
+"a": &"0",
+"b": &"1"
+}
+
+[resource]
+script = ExtResource("3_njepg")
+layers = Array[ExtResource("1_bclt5")]([SubResource("Resource_fj15a"), SubResource("Resource_3pa1y"), SubResource("Resource_g7yck")])
+output_color = &"2"
+next_id = 3
