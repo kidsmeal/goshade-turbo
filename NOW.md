@@ -11,7 +11,7 @@ This file is generated (design section 4): the facts below (Mode, Position, from
 Mode: build
 Position: phase 1 of docs/SHADER_TABS_reviewed-plan.md
 from: (unplanned work)
-Counts: queue 0 · quick fixes 0 · ideas untriaged 0
+Counts: queue 0 · quick fixes 0 · ideas untriaged 9
 
 Last touched: 2026-09-10
 
