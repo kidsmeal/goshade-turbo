@@ -15,12 +15,12 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "a",
 "label": "Base color",
-"description": "The starting color that determines where overlay darkens or lightens."
+"description": "Base; decides where overlay darkens or lightens."
 }, {
 "kind": 1,
 "name": "b",
 "label": "Overlay color",
-"description": "The color applied with the overlay blend calculation."
+"description": "Overlay color."
 }])
 params = Array[Dictionary]([{
 "default": 1.0,
@@ -29,7 +29,7 @@ params = Array[Dictionary]([{
 "name": "t",
 "type": "float",
 "label": "Overlay strength",
-"description": "Blends from the unchanged base at zero to the full overlay result at one."
+"description": "0 keeps the base, 1 applies the full overlay."
 }])
 coord = false
 samples_source = false

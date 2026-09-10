@@ -19,7 +19,7 @@ params = Array[Dictionary]([{
 "name": "radius",
 "type": "float",
 "label": "Polygon radius",
-"description": "The distance from the polygon center to each corner."
+"description": "Center to each corner."
 }, {
 "default": 6,
 "max": 12,
@@ -27,7 +27,7 @@ params = Array[Dictionary]([{
 "name": "sides",
 "type": "int",
 "label": "Side count",
-"description": "The number of equal sides and corners in the polygon."
+"description": "3 triangle, 4 square, up to 12."
 }])
 coord = true
 samples_source = false

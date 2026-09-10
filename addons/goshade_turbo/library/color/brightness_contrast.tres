@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "color",
 "label": "Color to adjust",
-"description": "The color whose brightness and contrast will be changed."
+"description": ""
 }])
 params = Array[Dictionary]([{
 "default": 0.0,
@@ -24,7 +24,7 @@ params = Array[Dictionary]([{
 "name": "brightness",
 "type": "float",
 "label": "Brightness",
-"description": "Moves every color channel darker or lighter by the same amount."
+"description": "Negative darkens, positive lightens, 0 unchanged."
 }, {
 "default": 1.0,
 "max": 2.0,
@@ -32,7 +32,7 @@ params = Array[Dictionary]([{
 "name": "contrast",
 "type": "float",
 "label": "Contrast",
-"description": "Controls the difference between dark and light colors around middle gray."
+"description": "0 flat gray, 1 unchanged, 2 doubled around middle gray."
 }])
 coord = false
 samples_source = false

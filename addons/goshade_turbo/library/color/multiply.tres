@@ -15,12 +15,12 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "a",
 "label": "Base color",
-"description": "The starting color whose channels will be multiplied."
+"description": "Base."
 }, {
 "kind": 1,
 "name": "b",
 "label": "Multiply color",
-"description": "The color multiplied into the base; darker channels darken the result."
+"description": "Multiplied into the base; darker channels darken more."
 }])
 params = Array[Dictionary]([{
 "default": 1.0,
@@ -29,7 +29,7 @@ params = Array[Dictionary]([{
 "name": "t",
 "type": "float",
 "label": "Multiply strength",
-"description": "Blends from the unchanged base at zero to the full multiply result at one."
+"description": "0 keeps the base, 1 applies the full multiply."
 }])
 coord = false
 samples_source = false

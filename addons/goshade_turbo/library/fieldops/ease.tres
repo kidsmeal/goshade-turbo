@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/ease"
+function = "ease"
+description = "ease curve, 0 is ease-in, 1 is ease-out, 0.5 is ease-in-out."
+source_math = "in: pow(x, x + 1). out: 1 - pow(1 - x, 2 - x). blended by bias. Own construction. At 0.5 blend it mirrors smoothstep."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "x",
+"label": "Value to curve",
+"description": "Clamped to 0..1 before the curve."
+}])
+params = Array[Dictionary]([{
+"default": 0.0,
+"max": 1.0,
+"min": 0.0,
+"name": "bias",
+"type": "float",
+"label": "Bias",
+"description": "0 ease-in, 1 ease-out, 0.5 both."
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float ease(float x, float bias) {
+	float v = clamp(x, 0.0, 1.0);
+	float ease_in = pow(v, v + 1.0);
+	float ease_out = 1.0 - pow(1.0 - v, 2.0 - v);
+	return mix(ease_in, ease_out, bias);
+}
+"

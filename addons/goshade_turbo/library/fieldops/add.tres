@@ -15,12 +15,12 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "a",
 "label": "Starting value",
-"description": "The first field in the addition."
+"description": ""
 }, {
 "kind": 0,
 "name": "b",
 "label": "Value to add",
-"description": "The field added to the starting value."
+"description": ""
 }])
 params = Array[Dictionary]([])
 coord = false

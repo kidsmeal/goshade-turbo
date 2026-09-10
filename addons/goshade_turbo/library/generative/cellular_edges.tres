@@ -19,7 +19,7 @@ params = Array[Dictionary]([{
 "name": "width",
 "type": "float",
 "label": "Edge width",
-"description": "How far the bright cellular boundary fades toward each cell center."
+"description": "Falloff distance from the border toward the cell center."
 }])
 coord = true
 samples_source = false

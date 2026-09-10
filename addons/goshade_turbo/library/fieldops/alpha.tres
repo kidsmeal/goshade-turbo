@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "color",
 "label": "Color transparency",
-"description": "The color whose own transparency channel will become a field."
+"description": "Only the alpha channel is read."
 }])
 params = Array[Dictionary]([])
 coord = false

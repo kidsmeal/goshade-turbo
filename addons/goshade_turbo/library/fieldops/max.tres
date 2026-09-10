@@ -15,12 +15,12 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "a",
 "label": "First comparison value",
-"description": "The first field considered by the maximum operation."
+"description": ""
 }, {
 "kind": 0,
 "name": "b",
 "label": "Second comparison value",
-"description": "The second field; the higher of the two values is kept at each pixel."
+"description": "Higher of the two wins per pixel."
 }])
 params = Array[Dictionary]([])
 coord = false

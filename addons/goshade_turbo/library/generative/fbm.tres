@@ -19,7 +19,7 @@ params = Array[Dictionary]([{
 "name": "octaves",
 "type": "int",
 "label": "Detail layers",
-"description": "The number of progressively finer noise layers combined into the result."
+"description": "Noise layers stacked; more is finer detail and slower."
 }, {
 "default": 0.5,
 "max": 0.8,
@@ -27,7 +27,7 @@ params = Array[Dictionary]([{
 "name": "gain",
 "type": "float",
 "label": "Fine detail strength",
-"description": "How much strength each finer noise layer keeps from the previous layer."
+"description": "Strength each finer layer keeps; 0.5 is standard."
 }])
 coord = true
 samples_source = false

@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "color",
 "label": "Color to posterize",
-"description": "The color whose smooth channel values will be reduced to fixed steps."
+"description": ""
 }])
 params = Array[Dictionary]([{
 "default": 6,
@@ -24,7 +24,7 @@ params = Array[Dictionary]([{
 "name": "levels",
 "type": "int",
 "label": "Color levels",
-"description": "The number of possible values kept in each red, green, and blue channel."
+"description": "Steps per channel; 2 is two-tone, 32 is near smooth."
 }])
 coord = false
 samples_source = false

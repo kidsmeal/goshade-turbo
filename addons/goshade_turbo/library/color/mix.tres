@@ -15,17 +15,17 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "a",
 "label": "First color",
-"description": "The color shown where the blend mask is zero."
+"description": "Shown where mask is 0."
 }, {
 "kind": 1,
 "name": "b",
 "label": "Second color",
-"description": "The color shown where the blend mask is one."
+"description": "Shown where mask is 1."
 }, {
 "kind": 0,
 "name": "mask",
 "label": "Blend mask",
-"description": "Zero selects the first color, one selects the second, and values outside that range continue past either color."
+"description": "Outside 0..1 keeps extrapolating past either color."
 }])
 params = Array[Dictionary]([])
 coord = false

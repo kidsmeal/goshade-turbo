@@ -19,7 +19,7 @@ params = Array[Dictionary]([{
 "name": "radius",
 "type": "float",
 "label": "Ring radius",
-"description": "The distance from the center to the middle of the ring stroke."
+"description": "Center to the middle of the stroke."
 }, {
 "default": 0.05,
 "max": 0.3,
@@ -27,7 +27,7 @@ params = Array[Dictionary]([{
 "name": "thickness",
 "type": "float",
 "label": "Ring half-width",
-"description": "Half of the ring stroke width measured inward and outward from its radius."
+"description": "Half the stroke width."
 }])
 coord = true
 samples_source = false

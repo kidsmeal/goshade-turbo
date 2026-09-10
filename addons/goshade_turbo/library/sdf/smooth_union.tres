@@ -15,12 +15,12 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "a",
 "label": "First shape",
-"description": "The first signed-distance shape joined by the smooth union."
+"description": ""
 }, {
 "kind": 0,
 "name": "b",
 "label": "Second shape",
-"description": "The second signed-distance shape joined to the first."
+"description": ""
 }])
 params = Array[Dictionary]([{
 "default": 0.1,
@@ -29,7 +29,7 @@ params = Array[Dictionary]([{
 "name": "k",
 "type": "float",
 "label": "Blend width",
-"description": "The signed-distance range over which the seam between both shapes is smoothed."
+"description": "Distance over which the seam blends; 0.01 is nearly sharp."
 }])
 coord = false
 samples_source = false

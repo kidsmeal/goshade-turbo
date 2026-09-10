@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "t",
 "label": "Palette position",
-"description": "A field that moves through the repeating cosine color palette."
+"description": "Repeats every whole unit."
 }])
 params = Array[Dictionary]([{
 "default": Vector3(0.5, 0.5, 0.5),
@@ -23,25 +23,25 @@ params = Array[Dictionary]([{
 "type": "vec3",
 "editor": "color_rgb",
 "label": "Color center",
-"description": "Choose the central RGB color around which the palette varies. The other palette controls determine the resulting colors."
+"description": "Center color. XYZ is RGB."
 }, {
 "default": Vector3(0.5, 0.5, 0.5),
 "name": "b",
 "type": "vec3",
 "label": "Color range",
-"description": "How far each color channel moves away from the color center. X is red, Y is green, Z is blue."
+"description": "Swing away from the center per channel. XYZ is RGB."
 }, {
 "default": Vector3(1, 1, 1),
 "name": "c",
 "type": "vec3",
 "label": "Cycle rate",
-"description": "How quickly each color channel repeats across the palette. X is red, Y is green, Z is blue."
+"description": "Repeats per unit of t, per channel. XYZ is RGB."
 }, {
 "default": Vector3(0, 0.33, 0.67),
 "name": "d",
 "type": "vec3",
 "label": "Color cycle offset",
-"description": "Offsets the red, green, and blue cycles to create different color sequences. X is red, Y is green, Z is blue."
+"description": "Phase offset per channel; staggers the cycles. XYZ is RGB."
 }])
 coord = false
 samples_source = false

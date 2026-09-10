@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "source",
 "label": "Image to blur",
-"description": "The texture or screen source sampled in a three-by-three grid."
+"description": "Sampled on a 3x3 grid."
 }])
 params = Array[Dictionary]([{
 "default": 0.004,
@@ -24,7 +24,7 @@ params = Array[Dictionary]([{
 "name": "radius",
 "type": "float",
 "label": "Blur radius",
-"description": "The horizontal and vertical texture-space spacing of the three-by-three sample grid."
+"description": "Sample spacing in texture space; 0 is no blur."
 }])
 coord = false
 samples_source = true

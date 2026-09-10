@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "source",
 "label": "Image to dither",
-"description": "The texture or screen source reduced with a per-pixel dither pattern."
+"description": ""
 }])
 params = Array[Dictionary]([{
 "default": 4,
@@ -24,7 +24,7 @@ params = Array[Dictionary]([{
 "name": "levels",
 "type": "int",
 "label": "Color levels",
-"description": "The number of brightness steps kept in each red, green, and blue channel."
+"description": "Brightness steps per channel; 2 is two-tone."
 }])
 coord = false
 samples_source = true

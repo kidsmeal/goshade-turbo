@@ -15,12 +15,12 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "a",
 "label": "Base color",
-"description": "The starting color that soft light will shade."
+"description": "Base."
 }, {
 "kind": 1,
 "name": "b",
 "label": "Light color",
-"description": "The color used to softly darken or lighten the base."
+"description": "Soft-light color; darkens or lightens the base gently."
 }])
 params = Array[Dictionary]([{
 "default": 1.0,
@@ -29,7 +29,7 @@ params = Array[Dictionary]([{
 "name": "t",
 "type": "float",
 "label": "Soft light strength",
-"description": "Blends from the unchanged base at zero to the full soft light result at one."
+"description": "0 keeps the base, 1 applies the full soft light."
 }])
 coord = false
 samples_source = false

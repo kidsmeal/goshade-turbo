@@ -141,6 +141,7 @@ plugin), so it cannot drift from what actually ships.
 | `fieldops/abs` | `gst_abs` | (field) -> field | absolute value, standard GLSL builtin construction. |
 | `fieldops/add` | `add` | (field, field) -> field | scalar addition, no external source. |
 | `fieldops/alpha` | `alpha` | (color) -> field | trivial vec4 alpha-channel read, no external source. |
+| `fieldops/ease` | `ease` | (field) -> field | ease-in pow(x, x + 1), ease-out 1 - pow(1 - x, 2 - x), blended by bias. Own construction; the 0.5 blend of x^2 and its mirror is smoothstep's polynomial. |
 | `fieldops/fract` | `gst_fract` | (field) -> field | fractional part, standard GLSL builtin construction. |
 | `fieldops/invert` | `invert` | (field) -> field | trivial unit-range complement, no external source. |
 | `fieldops/max` | `gst_max` | (field, field) -> field | scalar maximum, standard GLSL builtin construction. |

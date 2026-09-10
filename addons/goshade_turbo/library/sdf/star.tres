@@ -19,7 +19,7 @@ params = Array[Dictionary]([{
 "name": "radius",
 "type": "float",
 "label": "Outer radius",
-"description": "The distance from the star center to each of its five outer points."
+"description": "Center to each outer point."
 }, {
 "default": 0.5,
 "max": 0.9,
@@ -27,7 +27,7 @@ params = Array[Dictionary]([{
 "name": "inner_ratio",
 "type": "float",
 "label": "Inner radius ratio",
-"description": "The inner corner radius as a fraction of the outer radius; higher values make a rounder star."
+"description": "Inner radius as a fraction of the outer; higher is rounder."
 }])
 coord = true
 samples_source = false

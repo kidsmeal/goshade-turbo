@@ -15,17 +15,17 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "a",
 "label": "Start value",
-"description": "The field selected where the blend amount is zero."
+"description": "Selected where t is 0."
 }, {
 "kind": 0,
 "name": "b",
 "label": "End value",
-"description": "The field selected where the blend amount is one."
+"description": "Selected where t is 1."
 }, {
 "kind": 0,
 "name": "t",
 "label": "Blend amount",
-"description": "Zero selects the start, one selects the end, and values outside that range continue past either one."
+"description": "Outside 0..1 keeps extrapolating past either field."
 }])
 params = Array[Dictionary]([])
 coord = false

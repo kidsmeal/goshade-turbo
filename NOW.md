@@ -8,20 +8,20 @@ _Committed, so it follows your branch: `git checkout` swaps this cursor to that 
 
 This file is generated (design section 4): the facts below (Mode, Position, from, Counts, Last touched) render from `.now/state.json`, never hand-typed. The Active thread's two lines are the one piece of human prose, prompted at boundaries and persisted as state fields too - so it survives a regeneration without ever being parsed back out of this file.
 
-Mode: (none - idle)
-Position: idle - pick a mode with /claudhd:start or /claudhd:design
-from: r-0907-1
+Mode: build
+Position: phase 1 of docs/SHADER_TABS_reviewed-plan.md
+from: (unplanned work)
 Counts: queue 0 · quick fixes 0 · ideas untriaged 0
 
-Last touched: 2026-09-09
+Last touched: 2026-09-10
 
 ## Active thread (only one)
 
-**GoShade Turbo v0.1 release gate**
+**Paused: multiple shader tabs**
 
 Next physical action:
 
-- [ ] User tuning pass in the editor: load fresh Foil and Opal recipes, drag every slider on every recipe across its range, report any slider with no visible change; then tick docs/DESIGN.md line 155 and move r-0907-1 to Shipped
+- [ ] Wait for user to resume; then verify the partial phase 1 review fixes and request independent re-review
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

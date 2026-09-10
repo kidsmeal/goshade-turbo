@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "x",
 "label": "Value to repeat",
-"description": "The field whose whole-number part will be removed to repeat values from zero to one."
+"description": "Whole-number part dropped; repeats 0..1 every unit."
 }])
 params = Array[Dictionary]([])
 coord = false

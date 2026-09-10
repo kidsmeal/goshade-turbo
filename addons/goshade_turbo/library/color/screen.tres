@@ -15,12 +15,12 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "a",
 "label": "Base color",
-"description": "The starting color that will be lightened by the screen blend."
+"description": "Base."
 }, {
 "kind": 1,
 "name": "b",
 "label": "Screen color",
-"description": "The color screened over the base; lighter channels have more effect."
+"description": "Screened over the base; lighter channels lighten more."
 }])
 params = Array[Dictionary]([{
 "default": 1.0,
@@ -29,7 +29,7 @@ params = Array[Dictionary]([{
 "name": "t",
 "type": "float",
 "label": "Screen strength",
-"description": "Blends from the unchanged base at zero to the full screen result at one."
+"description": "0 keeps the base, 1 applies the full screen."
 }])
 coord = false
 samples_source = false

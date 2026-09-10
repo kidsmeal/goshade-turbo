@@ -19,7 +19,7 @@ params = Array[Dictionary]([{
 "name": "half_width",
 "type": "float",
 "label": "Half width",
-"description": "The distance from the rounded box center to its left or right extent."
+"description": "Center to left or right extent."
 }, {
 "default": 0.3,
 "max": 1.0,
@@ -27,7 +27,7 @@ params = Array[Dictionary]([{
 "name": "half_height",
 "type": "float",
 "label": "Half height",
-"description": "The distance from the rounded box center to its top or bottom extent."
+"description": "Center to top or bottom extent."
 }, {
 "default": 0.08,
 "max": 0.4,
@@ -35,7 +35,7 @@ params = Array[Dictionary]([{
 "name": "corner_radius",
 "type": "float",
 "label": "Corner radius",
-"description": "How far each box corner is rounded."
+"description": "0 is sharp corners."
 }])
 coord = true
 samples_source = false

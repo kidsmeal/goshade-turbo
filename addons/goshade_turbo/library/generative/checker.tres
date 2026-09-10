@@ -19,7 +19,7 @@ params = Array[Dictionary]([{
 "name": "cells",
 "type": "int",
 "label": "Grid cells",
-"description": "The number of checker cells across one coordinate unit in each direction."
+"description": "Cells per coordinate unit, each direction."
 }])
 coord = true
 samples_source = false

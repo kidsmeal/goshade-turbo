@@ -15,12 +15,12 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "a",
 "label": "Base color",
-"description": "The starting color that receives the additive blend."
+"description": "Base."
 }, {
 "kind": 1,
 "name": "b",
 "label": "Color to add",
-"description": "The color added to the base before the result is clamped."
+"description": "Added to the base, then clamped to 1."
 }])
 params = Array[Dictionary]([{
 "default": 1.0,
@@ -29,7 +29,7 @@ params = Array[Dictionary]([{
 "name": "t",
 "type": "float",
 "label": "Add strength",
-"description": "How strongly the added color affects the result."
+"description": "0 keeps the base, 1 adds the full amount."
 }])
 coord = false
 samples_source = false

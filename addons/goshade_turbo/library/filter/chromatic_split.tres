@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "source",
 "label": "Image to split",
-"description": "The texture or screen source whose red and blue channels will be shifted apart."
+"description": "Red shifts left, blue shifts right, green stays."
 }])
 params = Array[Dictionary]([{
 "default": 0.004,
@@ -24,7 +24,7 @@ params = Array[Dictionary]([{
 "name": "offset",
 "type": "float",
 "label": "Channel offset",
-"description": "Shifts visible red features left and blue features right by this texture-space distance; green stays centered."
+"description": "Shift distance in texture space; 0 is no split."
 }])
 coord = false
 samples_source = true

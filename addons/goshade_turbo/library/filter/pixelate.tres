@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "source",
 "label": "Image to pixelate",
-"description": "The texture or screen source sampled once at the center of each block."
+"description": "One sample at the center of each block."
 }])
 params = Array[Dictionary]([{
 "default": 0.02,
@@ -24,7 +24,7 @@ params = Array[Dictionary]([{
 "name": "cell_size",
 "type": "float",
 "label": "Pixel block size",
-"description": "The width and height of each square block in texture space."
+"description": "Block size in texture space."
 }])
 coord = false
 samples_source = true

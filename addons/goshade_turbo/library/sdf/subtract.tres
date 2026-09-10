@@ -15,12 +15,12 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "a",
 "label": "Base shape",
-"description": "The signed-distance shape that remains after subtraction."
+"description": "Remains."
 }, {
 "kind": 0,
 "name": "b",
 "label": "Shape to remove",
-"description": "The signed-distance shape carved out of the base shape."
+"description": "Carved out of a."
 }])
 params = Array[Dictionary]([])
 coord = false

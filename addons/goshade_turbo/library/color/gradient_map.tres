@@ -15,20 +15,20 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "t",
 "label": "Gradient position",
-"description": "A field that chooses a point between the start and end colors; values outside zero to one use the nearest endpoint."
+"description": "0 gives color A, 1 gives color B, outside that clamps to the nearest."
 }])
 params = Array[Dictionary]([{
 "default": Color(0, 0, 0, 1),
 "name": "color_a",
 "type": "color",
 "label": "Start color",
-"description": "The color used where the input field is zero."
+"description": "Where the field is 0."
 }, {
 "default": Color(1, 1, 1, 1),
 "name": "color_b",
 "type": "color",
 "label": "End color",
-"description": "The color used where the input field is one."
+"description": "Where the field is 1."
 }])
 coord = false
 samples_source = false

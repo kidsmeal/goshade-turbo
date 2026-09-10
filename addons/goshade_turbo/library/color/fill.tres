@@ -17,7 +17,7 @@ params = Array[Dictionary]([{
 "name": "color",
 "type": "color",
 "label": "Fill color",
-"description": "The single color produced across the entire layer."
+"description": "Same across the whole layer."
 }])
 coord = false
 samples_source = false
