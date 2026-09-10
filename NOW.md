@@ -8,8 +8,8 @@ _Committed, so it follows your branch: `git checkout` swaps this cursor to that 
 
 This file is generated (design section 4): the facts below (Mode, Position, from, Counts, Last touched) render from `.now/state.json`, never hand-typed. The Active thread's two lines are the one piece of human prose, prompted at boundaries and persisted as state fields too - so it survives a regeneration without ever being parsed back out of this file.
 
-Mode: build
-Position: phase 1 of docs/SHADER_TABS_reviewed-plan.md
+Mode: (none - idle)
+Position: idle - pick a mode with /claudhd:start or /claudhd:design
 from: (unplanned work)
 Counts: queue 0 · quick fixes 3 · ideas untriaged 6
 
@@ -17,11 +17,11 @@ Last touched: 2026-09-10
 
 ## Active thread (only one)
 
-**Paused: multiple shader tabs**
+**Multiple shader tabs**
 
 Next physical action:
 
-- [ ] Wait for user to resume; then verify the partial phase 1 review fixes and request independent re-review
+- [ ] Phase 1 review round 5 PASS-WITH-NOTES (deferred note logged); commit gate open, waiting for user go on the compound commit
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

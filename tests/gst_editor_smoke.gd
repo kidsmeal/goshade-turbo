@@ -22,7 +22,10 @@ var _fail_count: int = 0
 ## keeps running the phase 4 checks unchanged.
 func run(plugin: EditorPlugin) -> void:
 	var flag: String = OS.get_environment("GST_EDITOR_SMOKE")
-	if flag == "ui_complete":
+	if flag == "tabs_proof":
+		var document_proof: RefCounted = load("res://tests/gst_editor_document_proof.gd").new()
+		await document_proof.run(plugin)
+	elif flag == "ui_complete":
 		var complete_smoke: RefCounted = load("res://tests/gst_editor_ui_complete_smoke.gd").new()
 		await complete_smoke.run(plugin)
 	elif flag == "ui_picker":
