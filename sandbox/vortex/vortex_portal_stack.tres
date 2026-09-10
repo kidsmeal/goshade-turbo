@@ -1,0 +1,203 @@
+[gd_resource type="Resource" script_class="GSTStack" load_steps=21 format=3 uid="uid://kighgs0wxwxj"]
+
+[ext_resource type="Script" uid="uid://nqe51f4vxj3h" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_uouj6"]
+[ext_resource type="Script" uid="uid://oeqv6ongpfcd" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_eofe7"]
+[ext_resource type="Script" uid="uid://b8jioobudt2x3" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_mjoic"]
+
+[sub_resource type="Resource" id="Resource_e47px"]
+script = ExtResource("1_uouj6")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+slots = {}
+params = {}
+
+[sub_resource type="Resource" id="Resource_pg6pb"]
+script = ExtResource("1_uouj6")
+id = &"1"
+entry = "fieldops/smoothstep"
+kind_out = 0
+slots = {
+"x": &"0"
+}
+params = {
+"edge0": 0.3,
+"edge1": 0.5
+}
+
+[sub_resource type="Resource" id="Resource_8qrv4"]
+script = ExtResource("1_uouj6")
+id = &"11"
+entry = "color/fill"
+kind_out = 1
+slots = {}
+params = {
+"color": Color(0.860914, 0.456958, 0.717396, 1)
+}
+
+[sub_resource type="Resource" id="Resource_cv8ms"]
+script = ExtResource("1_uouj6")
+id = &"12"
+entry = "fieldops/smoothstep"
+kind_out = 0
+slots = {
+"x": &"0"
+}
+params = {
+"edge0": 0.6,
+"edge1": 0.68
+}
+
+[sub_resource type="Resource" id="Resource_i5h4u"]
+script = ExtResource("1_uouj6")
+id = &"13"
+entry = "fieldops/invert"
+kind_out = 0
+slots = {
+"x": &"12"
+}
+params = {}
+
+[sub_resource type="Resource" id="Resource_m4f8y"]
+script = ExtResource("1_uouj6")
+id = &"14"
+entry = "fieldops/multiply"
+kind_out = 0
+slots = {
+"a": &"1",
+"b": &"13"
+}
+params = {}
+
+[sub_resource type="Resource" id="Resource_6ydht"]
+script = ExtResource("2_eofe7")
+scale = Vector2(1, 1)
+offset = Vector2(0, 0)
+rotation = 1.015
+scroll = Vector2(0.25, 0)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_i75k4"]
+script = ExtResource("1_uouj6")
+id = &"3"
+entry = "generative/stripes"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_6ydht")
+
+[sub_resource type="Resource" id="Resource_gl63f"]
+script = ExtResource("1_uouj6")
+id = &"4"
+entry = "color/palette"
+kind_out = 1
+slots = {
+"t": &"3"
+}
+params = {
+"a": Vector3(0.5, 0.3, 0.6),
+"b": Vector3(0.5, 0.4, 0.5),
+"c": Vector3(1, 1, 1),
+"d": Vector3(0, 0.2, 0.4)
+}
+
+[sub_resource type="Resource" id="Resource_b77ht"]
+script = ExtResource("2_eofe7")
+scale = Vector2(12, 12)
+offset = Vector2(0, 0)
+rotation = 0.0
+scroll = Vector2(0.1, 0.1)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_jfmqy"]
+script = ExtResource("1_uouj6")
+id = &"5"
+entry = "generative/voronoi"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_b77ht")
+
+[sub_resource type="Resource" id="Resource_5r0rc"]
+script = ExtResource("1_uouj6")
+id = &"6"
+entry = "fieldops/smoothstep"
+kind_out = 0
+slots = {
+"x": &"5"
+}
+params = {
+"edge0": 0.02,
+"edge1": 0.12
+}
+
+[sub_resource type="Resource" id="Resource_qh0vy"]
+script = ExtResource("1_uouj6")
+id = &"7"
+entry = "fieldops/invert"
+kind_out = 0
+slots = {
+"x": &"6"
+}
+params = {}
+
+[sub_resource type="Resource" id="Resource_juov1"]
+script = ExtResource("1_uouj6")
+id = &"8"
+entry = "color/gradient_map"
+kind_out = 1
+slots = {
+"t": &"7"
+}
+params = {
+"color_a": Color(0, 0, 0.05, 1),
+"color_b": Color(1, 1, 0.9, 1)
+}
+
+[sub_resource type="Resource" id="Resource_uouj6"]
+script = ExtResource("1_uouj6")
+id = &"16"
+entry = "color/hue_shift"
+kind_out = 1
+slots = {
+"color": &"8"
+}
+params = {
+"shift": 0.0
+}
+
+[sub_resource type="Resource" id="Resource_ccbhk"]
+script = ExtResource("1_uouj6")
+id = &"9"
+entry = "color/mix"
+kind_out = 1
+slots = {
+"a": &"16",
+"b": &"8",
+"mask": &"7"
+}
+params = {}
+
+[sub_resource type="Resource" id="Resource_5y2xv"]
+script = ExtResource("1_uouj6")
+id = &"10"
+entry = "color/mix"
+kind_out = 1
+slots = {
+"a": &"9",
+"b": &"4",
+"mask": &"14"
+}
+params = {}
+
+[resource]
+script = ExtResource("3_mjoic")
+coord_space = 0
+layers = Array[ExtResource("1_uouj6")]([SubResource("Resource_e47px"), SubResource("Resource_pg6pb"), SubResource("Resource_8qrv4"), SubResource("Resource_cv8ms"), SubResource("Resource_i5h4u"), SubResource("Resource_m4f8y"), SubResource("Resource_i75k4"), SubResource("Resource_gl63f"), SubResource("Resource_jfmqy"), SubResource("Resource_5r0rc"), SubResource("Resource_qh0vy"), SubResource("Resource_juov1"), SubResource("Resource_uouj6"), SubResource("Resource_ccbhk"), SubResource("Resource_5y2xv")])
+output_color = &"10"
+output_alpha = &"1"
+next_id = 18

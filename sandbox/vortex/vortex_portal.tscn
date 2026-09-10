@@ -1,0 +1,79 @@
+[gd_scene load_steps=9 format=3 uid="uid://ds672mwxr5a7u"]
+
+[ext_resource type="Shader" uid="uid://dq2qdqo30akm3" path="res://sandbox/vortex/vortex_process.gdshader" id="1_proc"]
+[ext_resource type="Shader" uid="uid://bnf0baff4vwlj" path="res://sandbox/vortex/metaball_portal.gdshader" id="2_portal"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_add"]
+blend_mode = 1
+
+[sub_resource type="Gradient" id="Gradient_soft"]
+interpolation_mode = 2
+offsets = PackedFloat32Array(0, 0.5, 0.85, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0.5, 1, 1, 1, 0.08, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_soft"]
+gradient = SubResource("Gradient_soft")
+width = 112
+height = 112
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_proc"]
+shader = ExtResource("1_proc")
+shader_parameter/disc_radius = 170.0
+shader_parameter/base_rps = 0.05
+shader_parameter/rps_per_100px = 0.15
+shader_parameter/drift = 0.0
+shader_parameter/fade = 0.15
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_portal"]
+shader = ExtResource("2_portal")
+shader_parameter/l1_gst_smoothstep_edge0 = 0.48
+shader_parameter/l1_gst_smoothstep_edge1 = 0.52
+shader_parameter/l11_fill_color = Color(1, 0.419608, 1, 1)
+shader_parameter/l12_gst_smoothstep_edge0 = 0.55
+shader_parameter/l12_gst_smoothstep_edge1 = 0.6
+shader_parameter/l3_scale = Vector2(1, 1)
+shader_parameter/l3_offset = Vector2(0, 0)
+shader_parameter/l3_rotation = 0.0
+shader_parameter/l3_scroll = Vector2(0.25, 0)
+shader_parameter/l4_palette_a = Vector3(0.5, 0.3, 0.6)
+shader_parameter/l4_palette_b = Vector3(0.5, 0.4, 0.5)
+shader_parameter/l4_palette_c = Vector3(1, 1, 1)
+shader_parameter/l4_palette_d = Vector3(0, 0.2, 0.4)
+shader_parameter/l5_scale = Vector2(12, 12)
+shader_parameter/l5_offset = Vector2(0, 0)
+shader_parameter/l5_rotation = 0.0
+shader_parameter/l5_scroll = Vector2(0.1, 0.1)
+shader_parameter/l6_gst_smoothstep_edge0 = 0.02
+shader_parameter/l6_gst_smoothstep_edge1 = 0.12
+shader_parameter/l8_gradient_map_color_a = Color(0, 0, 0.05, 1)
+shader_parameter/l8_gradient_map_color_b = Color(1, 1, 0.9, 1)
+shader_parameter/l16_hue_shift_shift = 0.0
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_sub"]
+viewport_path = NodePath("Sub")
+
+[node name="VortexPortal" type="Node2D"]
+
+[node name="Sub" type="SubViewport" parent="."]
+disable_3d = true
+transparent_bg = true
+
+[node name="Vortex" type="GPUParticles2D" parent="Sub"]
+material = SubResource("CanvasItemMaterial_add")
+position = Vector2(256, 256)
+amount = 32
+texture = SubResource("GradientTexture2D_soft")
+lifetime = 3.0
+interp_to_end = 1.0
+preprocess = 6.0
+speed_scale = 0.2
+local_coords = true
+process_material = SubResource("ShaderMaterial_proc")
+
+[node name="Blobs" type="Sprite2D" parent="."]
+material = SubResource("ShaderMaterial_portal")
+position = Vector2(256, 256)
+texture = SubResource("ViewportTexture_sub")
