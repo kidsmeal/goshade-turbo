@@ -1,0 +1,72 @@
+[gd_resource type="Resource" script_class="GSTStack" load_steps=10 format=3 uid="uid://sb6w1eblv221"]
+
+[ext_resource type="Script" uid="uid://nqe51f4vxj3h" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_xoxwf"]
+[ext_resource type="Script" uid="uid://oeqv6ongpfcd" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_uulx2"]
+[ext_resource type="Script" uid="uid://b8jioobudt2x3" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_qknam"]
+
+[sub_resource type="Resource" id="Resource_lb8os"]
+script = ExtResource("1_xoxwf")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+slots = {}
+params = {}
+
+[sub_resource type="Resource" id="Resource_j8i7w"]
+script = ExtResource("2_uulx2")
+scale = Vector2(20, 20)
+offset = Vector2(0, 0)
+rotation = -0.325
+scroll = Vector2(1, 1)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_pttrp"]
+script = ExtResource("1_xoxwf")
+id = &"1"
+entry = "generative/snoise"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_j8i7w")
+
+[sub_resource type="Resource" id="Resource_8pkyu"]
+script = ExtResource("2_uulx2")
+scale = Vector2(-18.74, -15.28)
+offset = Vector2(0, 0.025)
+rotation = 0.35
+scroll = Vector2(-0.01, 0.045)
+warp_x = &"1"
+warp_y = &"1"
+warp_strength = 0.45
+
+[sub_resource type="Resource" id="Resource_n57jy"]
+script = ExtResource("1_xoxwf")
+id = &"2"
+entry = "generative/voronoi"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_8pkyu")
+
+[sub_resource type="Resource" id="Resource_qoiax"]
+script = ExtResource("1_xoxwf")
+id = &"3"
+entry = "color/overlay"
+kind_out = 1
+slots = {
+"a": &"2",
+"b": &"0"
+}
+params = {
+"t": 1.0
+}
+
+[resource]
+script = ExtResource("3_qknam")
+coord_space = 0
+layers = Array[ExtResource("1_xoxwf")]([SubResource("Resource_lb8os"), SubResource("Resource_pttrp"), SubResource("Resource_n57jy"), SubResource("Resource_qoiax")])
+output_color = &"3"
+output_alpha = &""
+next_id = 4

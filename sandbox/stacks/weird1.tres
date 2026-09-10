@@ -1,0 +1,106 @@
+[gd_resource type="Resource" script_class="GSTStack" load_steps=13 format=3 uid="uid://dalot0o6gc1s3"]
+
+[ext_resource type="Script" uid="uid://nqe51f4vxj3h" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_6qgej"]
+[ext_resource type="Script" uid="uid://oeqv6ongpfcd" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_08x4o"]
+[ext_resource type="Script" uid="uid://b8jioobudt2x3" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_62lku"]
+
+[sub_resource type="Resource" id="Resource_edqk1"]
+script = ExtResource("1_6qgej")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+slots = {}
+params = {}
+
+[sub_resource type="Resource" id="Resource_e11uj"]
+script = ExtResource("2_08x4o")
+scale = Vector2(2.83, 2.83)
+offset = Vector2(0, 0)
+rotation = -0.785398
+scroll = Vector2(0.4, 0)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_2d1qm"]
+script = ExtResource("1_6qgej")
+id = &"1"
+entry = "generative/stripes"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_e11uj")
+
+[sub_resource type="Resource" id="Resource_1563b"]
+script = ExtResource("1_6qgej")
+id = &"2"
+entry = "color/palette"
+kind_out = 1
+slots = {
+"t": &"1"
+}
+params = {
+"a": Vector3(0.655856, 0.167146, 0.273596),
+"b": Vector3(0.5, 0.5, 0.5),
+"c": Vector3(1, 1, 1),
+"d": Vector3(0, 0.33, 0.67)
+}
+
+[sub_resource type="Resource" id="Resource_godjw"]
+script = ExtResource("1_6qgej")
+id = &"3"
+entry = "color/screen"
+kind_out = 1
+slots = {
+"a": &"0",
+"b": &"2"
+}
+params = {
+"t": 0.688
+}
+
+[sub_resource type="Resource" id="Resource_g3kge"]
+script = ExtResource("2_08x4o")
+scale = Vector2(-16.63, -14.47)
+offset = Vector2(-2.475, 0.17)
+rotation = -0.42
+scroll = Vector2(0.38, 0)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_umtyi"]
+script = ExtResource("1_6qgej")
+id = &"4"
+entry = "generative/snoise"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_g3kge")
+
+[sub_resource type="Resource" id="Resource_5c4ya"]
+script = ExtResource("2_08x4o")
+scale = Vector2(1.27, 2.315)
+offset = Vector2(0.71, 2.49)
+rotation = -0.51
+scroll = Vector2(0.475, 0.215)
+warp_x = &"4"
+warp_y = &"4"
+warp_strength = 0.16
+
+[sub_resource type="Resource" id="Resource_awilt"]
+script = ExtResource("1_6qgej")
+id = &"5"
+entry = "generative/voronoi"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_5c4ya")
+
+[resource]
+script = ExtResource("3_62lku")
+coord_space = 0
+layers = Array[ExtResource("1_6qgej")]([SubResource("Resource_edqk1"), SubResource("Resource_2d1qm"), SubResource("Resource_1563b"), SubResource("Resource_godjw"), SubResource("Resource_umtyi"), SubResource("Resource_awilt")])
+output_color = &"5"
+output_alpha = &"texture"
+next_id = 12

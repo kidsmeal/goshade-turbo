@@ -149,6 +149,7 @@ plugin), so it cannot drift from what actually ships.
 | `fieldops/mix` | `gst_mix` | (field, field, field) -> field | linear interpolation, standard GLSL builtin construction. |
 | `fieldops/multiply` | `multiply` | (field, field) -> field | scalar multiplication, no external source. |
 | `fieldops/pow` | `gst_pow` | (field) -> field | power function, standard GLSL builtin construction. Input clamped to non-negative because GLSL pow() is undefined for a negative base. |
+| `fieldops/ratchet` | `ratchet` | (field) -> field | own construction: mod(x + 1, x * x) descending sawtooth over a pow(1 - x, x + steep) ease-in floor, blended by x; a reset at 0.99 finishes the last tooth. |
 | `fieldops/remap` | `remap` | (field) -> field | standard linear range remap, no external source. |
 | `fieldops/smoothstep` | `gst_smoothstep` | (field) -> field | Hermite smoothstep interpolation, standard GLSL builtin construction. Khronos GLSL ES 3.0 spec, section 8.3. |
 | `filter/box_blur` | `box_blur` | (color) -> color (filter) | 3x3 box filter, unweighted mean, standard convolution kernel. |
@@ -157,6 +158,7 @@ plugin), so it cannot drift from what actually ships.
 | `filter/outline` | `outline` | (color) -> color (filter) | alpha edge detection via 4-neighbor max difference, standard sprite outline technique. |
 | `filter/pixelate` | `pixelate` | (color) -> color (filter) | grid snapping / spatial quantization, standard pixelation construction. |
 | `generative/cellular_edges` | `cellular_edges` | () -> field (generator) | F2 - F1 cellular edge construction over a jittered grid, per Inigo Quilez, "Voronoi Edges", https://iquilezles.org/articles/voronoilines/. The bright-boundary remap (1.0 - smoothstep(0.0, width, F2 - F1)) is our own addition on top of that construction. |
+| `generative/clock` | `clock` | () -> field | fract(TIME * speed), standard construction. Ignores position; feeds add or mix to animate a field value. |
 | `generative/checker` | `checker` | () -> field (generator) | standard floor-parity checkerboard construction, common technique, no single canonical source. |
 | `generative/fbm` | `fbm` | () -> field (generator) | fractional Brownian motion: standard sum-of-octaves construction. See D. Ebert et al., "Texturing & Modeling: A Procedural Approach" (3rd ed., 2003), ch. 2. |
 | `generative/hash` | `hash` | () -> field (generator) | sin/dot pseudo-random hash, a common GLSL technique. The Book of Shaders, ch. 10 "Random", https://thebookofshaders.com/10/ |

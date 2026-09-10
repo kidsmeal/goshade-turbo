@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/clock"
+function = "clock"
+description = "time as a field, a 0..1 sawtooth that repeats every cycle; same value at every pixel"
+source_math = "fract(TIME * speed), standard construction. Ignores position; feeds add or mix to animate a field value. Adding it before a fract is the same as adding unbounded time, since fract drops the whole part."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.5,
+"max": 4.0,
+"min": 0.0,
+"name": "speed",
+"type": "float",
+"label": "Cycles per second",
+"description": "0 holds at zero, 1 wraps once a second."
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float clock(float speed) {
+	return fract(TIME * speed);
+}
+"

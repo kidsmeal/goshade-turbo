@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fieldops/ratchet"
+function = "ratchet"
+description = "ease-in with sawtooth teeth that widen and grow toward one"
+source_math = "Own construction. mod(x + 1, x * x) descending sawtooth over a pow(1 - x, x + steep) ease-in floor, blended by x. The reset at 0.99 finishes the last tooth, which mod would only wrap at exactly 1."
+source_code_url = ""
+source_code_license = ""
+kind_out = 0
+inputs = Array[Dictionary]([{
+"kind": 0,
+"name": "x",
+"label": "Value to curve",
+"description": "Clamped to 0..1 before the curve."
+}])
+params = Array[Dictionary]([{
+"default": 0.5,
+"max": 1.0,
+"min": 0.0,
+"name": "amount",
+"type": "float",
+"label": "Tooth strength",
+"description": "0 plain ease-in, 1 full teeth by the right edge."
+}, {
+"default": 2.0,
+"max": 2.0,
+"min": 0.0,
+"name": "gain",
+"type": "float",
+"label": "Tooth height",
+"description": "0 flat, 1 natural height, 2 teeth reach one near 0.7."
+}, {
+"default": 0.5,
+"max": 1.0,
+"min": 0.0,
+"name": "steep",
+"type": "float",
+"label": "Floor steepness",
+"description": "0 lifts the valleys to a plain ramp, 1 holds them near zero longer."
+}])
+coord = false
+samples_source = false
+depends = Array[String]([])
+code = "float ratchet(float x, float amount, float gain, float steep) {
+	float v = clamp(x, 0.0, 1.0);
+	float floor_curve = 1.0 - pow(1.0 - v, v + steep);
+	float teeth = mod(v + 1.0, max(v * v, 0.0001)) * gain;
+	float snap = 1.0 - smoothstep(0.99, 1.0, v);
+	return mix(floor_curve, teeth, v * amount * snap);
+}
+"
