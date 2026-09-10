@@ -11,7 +11,7 @@ This file is generated (design section 4): the facts below (Mode, Position, from
 Mode: build
 Position: phase 1 of docs/SHADER_TABS_reviewed-plan.md
 from: (unplanned work)
-Counts: queue 0 · quick fixes 0 · ideas untriaged 9
+Counts: queue 0 · quick fixes 3 · ideas untriaged 6
 
 Last touched: 2026-09-10
 
@@ -37,7 +37,9 @@ What is eligible to become active next, in order. The readiness gate lives at ac
 
 Small, self-contained chores that need no plan and aren't worth their own thread. Capped at 3 - overflow means clear some or promote one out, so this stays a batch and never a second backlog. Add with `/claudhd:quick <text>`, clear them in one focused pass with `/claudhd:quick`. The active thread has right of way: clear these between threads, not mid-thread. A fix that turns out to need real thinking gets kicked back to IDEAS.md.
 
-(nothing queued yet)
+- [ ] mouse: coord center follows the mouse via a uniform written by a script on the exported node
+- [ ] cellular_edges: drop the width param, return raw F2 - F1 and let smoothstep/band set width downstream
+- [ ] generative/cell_borders: exact distance to voronoi edge, iq two-pass bisector algorithm, MIT port with source_code_license set
 
 ## Idea flow (do not open a new chat)
 

@@ -10,12 +10,12 @@ Legend: `[ ]` new, `[~]` promoted (to ROADMAP.md, or to the quick-fixes batch), 
 
 ## Inbox
 
-- [ ] live read-only code panel beside the preview showing codegen output on every stack change (gst_material_sync already has the string)
-- [ ] fork-to-entry: from the code panel, write a new .tres from a selected function and swap the layer to it
-- [ ] param driven by a field layer: wire any param to a layer output instead of a slider (clock -> tent -> ratchet.amount); subsumes time-animated params
-- [ ] centered origin: uv space defaults offset to -0.5 or gains a centered coord space, so generators stop needing Position -0.5 by hand (recipes do it manually, sprite_opal.tres:38)
-- [ ] generative/cell_borders: exact distance to voronoi edge, iq two-pass bisector algorithm, MIT port with source_code_license set
-- [ ] cellular_edges: drop the width param, return raw F2 - F1 and let smoothstep/band set width downstream
-- [ ] exercise entries, all own construction: fieldops tent, band, quantize, pingpong, wave, threshold; generative rings, rays, spiral, dots, grain, scanlines; filter vignette, mirror, kaleidoscope, wave_distort; color tint, alpha_from_luma, two_tone
-- [ ] filter/plot: draw a field as a curve against UV.y, book-of-shaders style, as a teaching view for the code panel
-- [ ] mouse: coord center follows the mouse via a uniform written by a script on the exported node
+- [~] 2026-09-10 08:07 (while: Paused: multiple shader tabs) mouse: coord center follows the mouse via a uniform written by a script on the exported node
+- [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) filter/plot: draw a field as a curve against UV.y, book-of-shaders style, as a teaching view for the code panel
+- [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) exercise entries, all own construction: fieldops tent, band, quantize, pingpong, wave, threshold; generative rings, rays, spiral, dots, grain, scanlines; filter vignette, mirror, kaleidoscope, wave_distort; color tint, alpha_from_luma, two_tone
+- [~] 2026-09-10 08:07 (while: Paused: multiple shader tabs) cellular_edges: drop the width param, return raw F2 - F1 and let smoothstep/band set width downstream
+- [~] 2026-09-10 08:07 (while: Paused: multiple shader tabs) generative/cell_borders: exact distance to voronoi edge, iq two-pass bisector algorithm, MIT port with source_code_license set
+- [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) centered origin: uv space defaults offset to -0.5 or gains a centered coord space, so generators stop needing Position -0.5 by hand (recipes do it manually, sprite_opal.tres:38)
+- [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) param driven by a field layer: wire any param to a layer output instead of a slider (clock -> tent -> ratchet.amount); subsumes time-animated params
+- [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) fork-to-entry: from the code panel, write a new .tres from a selected function and swap the layer to it
+- [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) live read-only code panel beside the preview showing codegen output on every stack change (gst_material_sync already has the string)
