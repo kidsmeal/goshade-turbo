@@ -4,6 +4,8 @@
 .now/
 .gantry/active-phase.json
 .gantry/models.json
+.gantry/models.codex.json
+.gantry/codex-run.json
 .gantry/headless-implementer-settings.json
 .gantry/review-round.json
 

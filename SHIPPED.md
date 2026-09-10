@@ -5,6 +5,8 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9f765a96026d938e415ae85be1e66eb0a24fa25e -->
 
 ### 2026-09-09
+- Ignore Codex adapter state files under .gantry
+- Ignore Codex adapter state files under .gantry
 - hook probe: reconcile and verify after trust
 - Fix preview transparency, recipe motion, and inactive control guidance `9f765a9`
 - Use native RGB picker for palette Color center `f488370`
