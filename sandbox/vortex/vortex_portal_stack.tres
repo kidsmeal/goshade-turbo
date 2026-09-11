@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="GSTStack" load_steps=21 format=3 uid="uid://kighgs0wxwxj"]
+[gd_resource type="Resource" script_class="GSTStack" load_steps=20 format=3 uid="uid://kighgs0wxwxj"]
 
 [ext_resource type="Script" uid="uid://nqe51f4vxj3h" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_uouj6"]
 [ext_resource type="Script" uid="uid://oeqv6ongpfcd" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_eofe7"]
@@ -158,18 +158,6 @@ params = {
 "color_b": Color(1, 1, 0.9, 1)
 }
 
-[sub_resource type="Resource" id="Resource_uouj6"]
-script = ExtResource("1_uouj6")
-id = &"16"
-entry = "color/hue_shift"
-kind_out = 1
-slots = {
-"color": &"8"
-}
-params = {
-"shift": 0.0
-}
-
 [sub_resource type="Resource" id="Resource_ccbhk"]
 script = ExtResource("1_uouj6")
 id = &"9"
@@ -197,7 +185,7 @@ params = {}
 [resource]
 script = ExtResource("3_mjoic")
 coord_space = 0
-layers = Array[ExtResource("1_uouj6")]([SubResource("Resource_e47px"), SubResource("Resource_pg6pb"), SubResource("Resource_8qrv4"), SubResource("Resource_cv8ms"), SubResource("Resource_i5h4u"), SubResource("Resource_m4f8y"), SubResource("Resource_i75k4"), SubResource("Resource_gl63f"), SubResource("Resource_jfmqy"), SubResource("Resource_5r0rc"), SubResource("Resource_qh0vy"), SubResource("Resource_juov1"), SubResource("Resource_uouj6"), SubResource("Resource_ccbhk"), SubResource("Resource_5y2xv")])
+layers = Array[ExtResource("1_uouj6")]([SubResource("Resource_e47px"), SubResource("Resource_pg6pb"), SubResource("Resource_8qrv4"), SubResource("Resource_cv8ms"), SubResource("Resource_i5h4u"), SubResource("Resource_m4f8y"), SubResource("Resource_i75k4"), SubResource("Resource_gl63f"), SubResource("Resource_jfmqy"), SubResource("Resource_5r0rc"), SubResource("Resource_qh0vy"), SubResource("Resource_juov1"), SubResource("Resource_ccbhk"), SubResource("Resource_5y2xv")])
 output_color = &"10"
 output_alpha = &"1"
 next_id = 19

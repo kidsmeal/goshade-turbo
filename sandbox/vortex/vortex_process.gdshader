@@ -11,7 +11,7 @@
 // expansions: particles stack type).
 //
 // CUSTOM layout: x = eye index (centre eye = eye_count), y = lifetime phase,
-// z = local orbit angle, w = local orbit radius.
+// z = local orbit angle, w = local orbit radius. COLOR.a = per-ball size.
 shader_type particles;
 
 uniform int eye_count : hint_range(1, 8) = 5;
@@ -26,6 +26,9 @@ uniform float eye_rps_variance : hint_range(0.0, 1.0) = 0.5; // per-eye speed sp
 uniform float eye_rps_differential = 0.1;   // extra rps at core_radius, 0 at eye_radius
 uniform float drift = -4.0;                 // px per second along the local radius; negative pulls toward the eye core
 uniform float fade = 0.15;                  // fraction of lifetime spent growing in and shrinking out
+uniform float ball_scale = 1.0;             // base size multiplier on the particle texture
+uniform float ball_scale_random : hint_range(0.0, 1.0) = 0.0; // per-particle size spread: each ball is ball_scale * [1 - r, 1 + r]
+uniform float spawn_random : hint_range(0.0, 1.0) = 1.0;      // 0 = every eye gets an even share of balls, 1 = eye picked at random per ball
 
 float rand(uint seed, uint salt) {
 	uint n = seed * 747796405u + salt * 2891336453u;
@@ -56,15 +59,20 @@ float eye_spin(int eye) {
 void start() {
 	uint seed = RANDOM_SEED + NUMBER * 7919u;
 	int eye = int(floor(rand(seed, 1u) * float(total_eyes())));
+	if (rand(seed, 4u) >= spawn_random) {
+		eye = int(NUMBER % uint(total_eyes()));
+	}
 	eye = min(eye, total_eyes() - 1);
 	float span = max(eye_radius - core_radius, 0.0);
 	float r = core_radius + span * rand(seed, 2u);
 	float a = TAU * rand(seed, 3u);
 	CUSTOM = vec4(float(eye), 0.0, a, r);
+	// Per-ball size lives in COLOR.a (unused by the additive source blend
+	// once the portal stack reads luma), sampled once at spawn.
+	COLOR = vec4(1.0, 1.0, 1.0, ball_scale * (1.0 + ball_scale_random * (2.0 * rand(seed, 5u) - 1.0)));
 	TRANSFORM = mat4(1.0);
 	TRANSFORM[3].xy = eye_centre(eye) + vec2(cos(a), sin(a)) * r;
 	VELOCITY = vec3(0.0);
-	COLOR = vec4(1.0);
 }
 
 void process() {
@@ -86,7 +94,7 @@ void process() {
 	// whole core, and the portal's edge band would paint the entire ball.
 	CUSTOM.y = min(CUSTOM.y + DELTA / LIFETIME, 1.0);
 	float t = CUSTOM.y;
-	float grow = smoothstep(0.0, fade, t) * smoothstep(1.0, 1.0 - fade, t);
+	float grow = smoothstep(0.0, fade, t) * smoothstep(1.0, 1.0 - fade, t) * COLOR.a;
 	TRANSFORM[0].xy = vec2(grow, 0.0);
 	TRANSFORM[1].xy = vec2(0.0, grow);
 }
