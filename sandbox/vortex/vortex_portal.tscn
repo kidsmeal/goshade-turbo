@@ -21,10 +21,6 @@ fill_to = Vector2(1, 0.5)
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_proc"]
 shader = ExtResource("1_proc")
-shader_parameter/disc_radius = 170.0
-shader_parameter/base_rps = 0.05
-shader_parameter/rps_per_100px = 0.15
-shader_parameter/drift = 0.0
 shader_parameter/fade = 0.15
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_portal"]

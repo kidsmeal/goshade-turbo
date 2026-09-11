@@ -908,7 +908,23 @@ func export_to_path(path: String, confirm: bool) -> void:
 	if not result["ok"]:
 		_set_operation_message("Export", result["reason"])
 		return
+	_refresh_exported_shader(path, result["code"])
 	_set_operation_message("Export", "")
+
+
+## GSTExport.write only replaces the bytes on disk. A Shader the editor has
+## already loaded from `path` (a scene using it is open, or a material in a
+## running preview holds it) keeps its old code until something reloads
+## it, so a re-export looked like it never overwrote the file. Push the
+## written text into the cached Shader (every ShaderMaterial on it
+## recompiles) and tell EditorFileSystem the file changed.
+func _refresh_exported_shader(path: String, code: String) -> void:
+	if ResourceLoader.has_cached(path):
+		var cached: Resource = ResourceLoader.load(path)
+		if cached is Shader:
+			(cached as Shader).code = code
+	if Engine.is_editor_hint():
+		EditorInterface.get_resource_filesystem().update_file(path)
 
 
 func _on_overwrite_confirmed() -> void:

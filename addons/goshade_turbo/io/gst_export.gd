@@ -16,7 +16,8 @@ static func build(stack: GSTStack, library: GSTLibrary) -> GSTCodegenResult:
 	return GSTCodegen.generate_result(stack, library)
 
 
-## `{ok, reason, needs_confirmation}`. A codegen failure refuses immediately
+## `{ok, reason, needs_confirmation}` plus `code` (the written text) on a
+## successful write. A codegen failure refuses immediately
 ## (nothing to write). Otherwise: when `path` already exists and
 ## `confirm_overwrite` is false, GSTOverwriteCheck decides whether the
 ## on-disk body differs from a fresh codegen of its own header; a real
@@ -42,7 +43,7 @@ static func write(stack: GSTStack, library: GSTLibrary, path: String, confirm_ov
 		}
 	file.store_string(result.code)
 	file.close()
-	return {"ok": true, "reason": "", "needs_confirmation": false}
+	return {"ok": true, "reason": "", "needs_confirmation": false, "code": result.code}
 
 
 ## Reopens a stack from an exported .gdshader's embedded header.
