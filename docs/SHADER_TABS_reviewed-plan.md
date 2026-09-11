@@ -151,7 +151,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 
 ## Phase 3: Add runtime document ownership
 
-**Status:** pending
+**Status:** committed (2026-09-11) (review PASS-WITH-NOTES round 3, deferred note logged, 2026-09-11)
 
 **Goal:** Make each open shader own its content, private history, baseline, and editing state independently.
 
@@ -166,6 +166,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 - `tests/gst_editor_ui_complete_smoke.gd`.
 - `tests/gst_editor_ui_labels_smoke.gd`.
 - `docs/EDITOR_SMOKE.md`.
+- `NOW.md` (ClauDHD build bookkeeping only: the Active thread next-action lines; no phase content).
 
 **Implementation:**
 

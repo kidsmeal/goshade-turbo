@@ -66,16 +66,25 @@ func run(plugin: EditorPlugin) -> void:
 		entry_variant = "recipe"
 	var entry_stack_path: String = "user://gst_ui_complete_entry_stack.tres"
 	_cleanup([entry_stack_path])
+	# Phase 3 (docs/SHADER_TABS_reviewed-plan.md): every branch below now
+	# activates a brand new GSTDocument with its own fresh, empty, actionless
+	# UndoRedo (open_document) instead of registering an undoable "Replace
+	# stack" action on the shared history captured above -- history is
+	# recaptured immediately after each transition so later checks in this
+	# function measure the actually-active document's own history, not a
+	# stale reference to whichever document was active before it.
 	match entry_variant:
 		"recipe":
 			panel.get_start_recipe_button("fire").pressed.emit()
 			await _frames(6)
+			history = panel.get_watched_history()
 			var entry_image: Image = panel.get_preview().get_viewport_image()
-			_check("entry_recipe", not panel.is_start_screen_visible() and panel.get_stack().layers.size() == 5 and history.get_history_count() == start_history_count + 1 and GSTShaderCompile.compiles(panel.get_shader_material().shader.code) and _image_is_nonuniform(entry_image), "start=%s layers=%d history=%d compile=%s nonuniform=%s" % [panel.is_start_screen_visible(), panel.get_stack().layers.size(), history.get_history_count(), GSTShaderCompile.compiles(panel.get_shader_material().shader.code), _image_is_nonuniform(entry_image)])
+			_check("entry_recipe", not panel.is_start_screen_visible() and panel.get_stack().layers.size() == 5 and history.get_history_count() == 0 and GSTShaderCompile.compiles(panel.get_shader_material().shader.code) and _image_is_nonuniform(entry_image), "start=%s layers=%d history=%d compile=%s nonuniform=%s" % [panel.is_start_screen_visible(), panel.get_stack().layers.size(), history.get_history_count(), GSTShaderCompile.compiles(panel.get_shader_material().shader.code), _image_is_nonuniform(entry_image)])
 		"empty":
 			panel.get_create_empty_button().pressed.emit()
 			await _frames(3)
-			var empty_started: bool = not panel.is_start_screen_visible() and panel.is_picker_open() and panel.get_stack().layers.is_empty() and history.get_history_count() == start_history_count + 1
+			history = panel.get_watched_history()
+			var empty_started: bool = not panel.is_start_screen_visible() and panel.is_picker_open() and panel.get_stack().layers.is_empty() and history.get_history_count() == 0
 			_check("entry_empty", empty_started and panel.get_preview_status_label().text == "No effect yet" and panel.get_codegen_message_label().text.is_empty(), "start=%s picker=%s history=%d status='%s'" % [panel.is_start_screen_visible(), panel.is_picker_open(), history.get_history_count(), panel.get_preview_status_label().text])
 			_key(KEY_ESCAPE)
 			await _frames(3)
@@ -88,7 +97,8 @@ func run(plugin: EditorPlugin) -> void:
 			panel._open_dialog.hide()
 			panel._open_dialog.file_selected.emit(entry_stack_path)
 			await _frames(6)
-			_check("entry_open", entry_saved["ok"] and dialog_visible and not panel.is_start_screen_visible() and panel.get_stack().layers.size() == 5 and panel.get_current_path() == entry_stack_path and history.get_history_count() == start_history_count + 1 and GSTShaderCompile.compiles(panel.get_shader_material().shader.code), "saved=%s dialog=%s start=%s layers=%d path='%s' history=%d" % [entry_saved["ok"], dialog_visible, panel.is_start_screen_visible(), panel.get_stack().layers.size(), panel.get_current_path(), history.get_history_count()])
+			history = panel.get_watched_history()
+			_check("entry_open", entry_saved["ok"] and dialog_visible and not panel.is_start_screen_visible() and panel.get_stack().layers.size() == 5 and panel.get_current_path() == entry_stack_path and history.get_history_count() == 0 and GSTShaderCompile.compiles(panel.get_shader_material().shader.code), "saved=%s dialog=%s start=%s layers=%d path='%s' history=%d" % [entry_saved["ok"], dialog_visible, panel.is_start_screen_visible(), panel.get_stack().layers.size(), panel.get_current_path(), history.get_history_count()])
 		_:
 			_check("entry_variant", false, "GST_UI_COMPLETE_ENTRY must be recipe, empty, or open; got '%s'" % entry_variant)
 			_cleanup([entry_stack_path])
@@ -98,36 +108,61 @@ func run(plugin: EditorPlugin) -> void:
 	if panel.is_picker_open():
 		_key(KEY_ESCAPE)
 		await _frames(2)
-	history.undo()
+	# Phase 3: there is no "Replace stack" action left to undo back to a
+	# common empty baseline regardless of entry variant (recipe/open loaded
+	# non-empty content into a document whose own history has nothing to
+	# undo). New now plays that role directly: it always creates and
+	# activates a fresh, independent, empty document, so it reaches the same
+	# common starting point every variant needs for the rest of this test.
+	panel._on_new_pressed()
 	await _frames(5)
+	if panel.is_picker_open():
+		_key(KEY_ESCAPE)
+		await _frames(2)
+	history = panel.get_watched_history()
 	var empty_stack: GSTStack = panel.get_stack()
 	var add_button: Button = panel.get_stack_list().get_node("%AddButton") as Button
-	_check("entry_undo_ordinary_empty", empty_stack.layers.is_empty() and not panel.is_start_screen_visible() and not history.has_undo() and add_button.is_visible_in_tree() and not add_button.disabled and panel.get_preview_status_label().text == "No effect yet", "variant='%s' start=%s has_undo=%s add=%s/%s status='%s'" % [entry_variant, panel.is_start_screen_visible(), history.has_undo(), add_button.is_visible_in_tree(), add_button.disabled, panel.get_preview_status_label().text])
+	_check("entry_then_new_reaches_empty", empty_stack.layers.is_empty() and not panel.is_start_screen_visible() and not history.has_undo() and add_button.is_visible_in_tree() and not add_button.disabled and panel.get_preview_status_label().text == "No effect yet", "variant='%s' start=%s has_undo=%s add=%s/%s status='%s'" % [entry_variant, panel.is_start_screen_visible(), history.has_undo(), add_button.is_visible_in_tree(), add_button.disabled, panel.get_preview_status_label().text])
 	_cleanup([entry_stack_path])
 
+	# Phase 3 fix pass 1, round 1, item 4: the document active here (from
+	# line 117's own New press) is itself already pristine and untouched --
+	# nothing dirtied it since -- so this second New (through the real File
+	# menu item, not panel._on_new_pressed() directly) must reuse that exact
+	# document instead of allocating another blank one.
 	var before_new: GSTStack = panel.get_stack()
+	var doc_before_new_press: GSTDocument = panel.get_active_document()
+	var docs_before_new_press: int = panel.get_documents().size()
 	(panel.get_node("%FileMenu") as MenuButton).get_popup().id_pressed.emit(0)
 	await _frames(2)
-	_check("file_new_library", panel.get_stack() != before_new and panel.get_stack().layers.is_empty() and panel.is_picker_open(), "new_instance=%s picker=%s" % [panel.get_stack() != before_new, panel.is_picker_open()])
+	history = panel.get_watched_history()
+	_check("file_new_library", panel.get_stack() == before_new and panel.get_active_document() == doc_before_new_press and panel.get_documents().size() == docs_before_new_press and panel.get_stack().layers.is_empty() and panel.is_picker_open(), "reused_pristine=%s docs=%d->%d picker=%s" % [panel.get_stack() == before_new, docs_before_new_press, panel.get_documents().size(), panel.is_picker_open()])
 	picker.cancelled.emit()
 	await _frames(2)
 	empty_stack = panel.get_stack()
 	_check("cancelled_first_library", not panel.is_picker_open() and empty_stack.layers.is_empty() and add_button.is_visible_in_tree() and not add_button.disabled and panel.get_preview_status_label().text == "No effect yet", "picker=%s add_visible=%s add_disabled=%s status='%s'" % [panel.is_picker_open(), add_button.is_visible_in_tree(), add_button.disabled, panel.get_preview_status_label().text])
 
-	var recipe_history_before: int = history.get_history_count()
+	# Phase 3: the Recipes pick below activates a whole new GSTDocument
+	# rather than replacing this one's stack through an undoable action, so
+	# "undo"/"redo" of that transition is navigation between documents
+	# (activate_document), not history.undo()/redo() on a shared bucket.
+	var doc_before_recipe: GSTDocument = panel.get_active_document()
 	(panel.get_node("%RecipesButton") as Button).pressed.emit()
 	await _frames(2)
 	picker.activate_value("fire")
 	await _frames(6)
+	var doc_recipe: GSTDocument = panel.get_active_document()
+	history = panel.get_watched_history()
 	var recipe_stack: GSTStack = panel.get_stack()
 	var first_image: Image = panel.get_preview().get_viewport_image()
 	var recipe_rendered: bool = recipe_stack.layers.size() == 5 and not panel.is_start_screen_visible() and not panel.is_picker_open() and panel.get_shader_material().shader != null and GSTShaderCompile.compiles(panel.get_shader_material().shader.code) and _image_is_nonuniform(first_image)
-	_check("recipe_first_render", recipe_rendered and history.get_history_count() == recipe_history_before + 1, "layers=%d history=%d->%d compile=%s nonuniform=%s" % [recipe_stack.layers.size(), recipe_history_before, history.get_history_count(), panel.get_shader_material().shader != null and GSTShaderCompile.compiles(panel.get_shader_material().shader.code), _image_is_nonuniform(first_image)])
-	history.undo()
+	_check("recipe_first_render", recipe_rendered and doc_recipe != doc_before_recipe and history.get_history_count() == 0, "layers=%d new_document=%s history=%d compile=%s nonuniform=%s" % [recipe_stack.layers.size(), doc_recipe != doc_before_recipe, history.get_history_count(), panel.get_shader_material().shader != null and GSTShaderCompile.compiles(panel.get_shader_material().shader.code), _image_is_nonuniform(first_image)])
+	panel.activate_document(doc_before_recipe)
 	await _frames(4)
 	_check("recipe_one_action_undo", panel.get_stack() == empty_stack and panel.get_stack().layers.is_empty() and not panel.is_start_screen_visible() and panel.get_preview_status_label().text == "No effect yet", "same_empty=%s start=%s status='%s'" % [panel.get_stack() == empty_stack, panel.is_start_screen_visible(), panel.get_preview_status_label().text])
-	history.redo()
+	panel.activate_document(doc_recipe)
 	await _frames(5)
+	history = panel.get_watched_history()
 	recipe_stack = panel.get_stack()
 	_check("recipe_redo", recipe_stack.layers.size() == 5 and panel.get_codegen_message_label().text.is_empty() and not panel.get_randomize_button().disabled, "layers=%d codegen='%s' randomize_disabled=%s" % [recipe_stack.layers.size(), panel.get_codegen_message_label().text, panel.get_randomize_button().disabled])
 

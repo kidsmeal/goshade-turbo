@@ -28,6 +28,9 @@ func run(plugin: EditorPlugin) -> void:
 	elif flag == "tabs_native":
 		var native_undo_smoke: RefCounted = load("res://tests/gst_editor_native_undo_smoke.gd").new()
 		await native_undo_smoke.run(plugin)
+	elif flag == "tabs_documents":
+		var documents_smoke: RefCounted = load("res://tests/gst_editor_documents_smoke.gd").new()
+		await documents_smoke.run(plugin)
 	elif flag == "ui_complete":
 		var complete_smoke: RefCounted = load("res://tests/gst_editor_ui_complete_smoke.gd").new()
 		await complete_smoke.run(plugin)
@@ -937,73 +940,61 @@ func _run_phase6_build_and_save(plugin: EditorPlugin, panel: GSTMainPanel, stack
 	return {"checker": checker.id, "fbm": fbm.id, "invert": invert.id}
 
 
-## Item 3 (phase 6 fix pass 2, item 1; docs/PLAN.md Cross-cutting
-## "EditorUndoRedoManager integration"): New is itself an undoable "Replace
-## stack" action (gst_main_panel.gd's replace_stack), not a history reset, so
-## a pre-New structural edit stays undoable afterward instead of being
-## discarded along with the replaced GSTStack.
+## Item 3 (phase 3, docs/SHADER_TABS_reviewed-plan.md; supersedes phase 6 fix
+## pass 2, item 1): New now creates and activates a whole new GSTDocument
+## (gst_main_panel.gd's open_document) instead of registering an undoable
+## "Replace stack" action against a shared history bucket, so it registers
+## no action anywhere, and the old document's own history and content are
+## untouched, independent of navigation.
 ##
-## get_object_history_id() does not give a GSTStack its own private bucket
-## the moment it exists: verified on 4.6.2, a GSTStack is a bare Resource
-## never added to the edited scene, so EditorUndoRedoManager routes every
-## custom_context = stack action for every such Resource, across every
-## instance, into the one shared "Remote History" bucket for the life of the
-## editor session. replace_stack relies on exactly this: the "Replace stack"
-## action lands in the same bucket as the old stack's own prior actions, so
-## one continuous Ctrl+Z chain walks through both.
-##
-## Sequence: has_undo() is true right after New; one undo restores the exact
-## previous GSTStack instance (is_same), its three layers, and current_path;
-## one redo re-applies New (zero layers, empty path); undoing twice more
-## reaches the pre-New state of the old stack with its own last committed
-## action (set_output_color in _run_phase6_build_and_save) undone too,
-## proving the old stack's own GSTUndo instance -- not a freshly constructed
-## one -- is still the one driving replay for its actions; redoing twice more
-## returns to the New state so _run_phase6_open below continues from there
-## unchanged.
+## Sequence: New creates a distinct GSTDocument with its own fresh, empty,
+## actionless UndoRedo, and leaves the old document's history exactly as it
+## was; activate_document(old) reinstalls the exact previous GSTStack
+## instance (is_same), its three layers, and current_path with no history
+## change; the old document's own history still undoes/redoes its own last
+## action (set_output_color in _run_phase6_build_and_save) exactly as if New
+## had never been pressed; activate_document(new) returns to the New
+## document's own empty, actionless state so _run_phase6_open below
+## continues from there unchanged.
 func _run_phase6_new(plugin: EditorPlugin, panel: GSTMainPanel, ids: Dictionary) -> void:
+	var old_doc: GSTDocument = panel.get_active_document()
 	var old_stack: GSTStack = panel.get_stack()
 	var old_path: String = panel.get_current_path()
+	var old_history: UndoRedo = panel.get_watched_history()
 	var old_layer_count: int = old_stack.layers.size()
+	var old_action_count: int = old_history.get_history_count()
 
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
 	await _cancel_picker(plugin, panel)
+	var new_doc: GSTDocument = panel.get_active_document()
 	var new_stack: GSTStack = panel.get_stack()
-	var history: UndoRedo = _get_history(panel)
-	var new_ok: bool = new_stack.layers.is_empty() and panel.get_current_path().is_empty() and not is_same(new_stack, old_stack)
-	var has_undo_now: bool = history != null and history.has_undo()
-	_check("3a", new_ok and has_undo_now, "New: layers=%d current_path='%s' new_instance=%s has_undo=%s" % [new_stack.layers.size(), panel.get_current_path(), not is_same(new_stack, old_stack), has_undo_now])
+	var new_history: UndoRedo = panel.get_watched_history()
+	var new_ok: bool = new_stack.layers.is_empty() and panel.get_current_path().is_empty() and not is_same(new_stack, old_stack) and new_doc != old_doc
+	var new_history_own_and_empty: bool = new_history != old_history and not new_history.has_undo()
+	var old_history_untouched: bool = old_history.get_history_count() == old_action_count and old_history.has_undo()
+	_check("3a", new_ok and new_history_own_and_empty and old_history_untouched, "New creates and activates an independent, actionless document: layers=%d current_path='%s' new_instance=%s new_history_own_empty=%s old_history_untouched=%s" % [new_stack.layers.size(), panel.get_current_path(), not is_same(new_stack, old_stack), new_history_own_and_empty, old_history_untouched])
 
-	history.undo()
-	await plugin.get_tree().process_frame
+	panel.activate_document(old_doc)
 	var restored_1: GSTStack = panel.get_stack()
 	var layer_ids_match: bool = restored_1.layers.size() == 3 and restored_1.layers[0].id == ids["checker"] and restored_1.layers[1].id == ids["fbm"] and restored_1.layers[2].id == ids["invert"]
-	var undo1_ok: bool = is_same(restored_1, old_stack) and restored_1.layers.size() == old_layer_count and layer_ids_match and panel.get_current_path() == old_path
-	_check("3b", undo1_ok, "undo 1 after New restores the previous stack instance: is_same=%s layers=%d (expect %d) layer_ids_match=%s current_path='%s' (expect '%s')" % [is_same(restored_1, old_stack), restored_1.layers.size(), old_layer_count, layer_ids_match, panel.get_current_path(), old_path])
+	var reactivate_ok: bool = is_same(restored_1, old_stack) and restored_1.layers.size() == old_layer_count and layer_ids_match and panel.get_current_path() == old_path and panel.get_watched_history() == old_history and old_history.get_history_count() == old_action_count
+	_check("3b", reactivate_ok, "activate_document(old) restores the previous document unchanged, no history change: is_same=%s layers=%d (expect %d) layer_ids_match=%s current_path='%s' (expect '%s')" % [is_same(restored_1, old_stack), restored_1.layers.size(), old_layer_count, layer_ids_match, panel.get_current_path(), old_path])
 
-	history.redo()
+	old_history.undo()
 	await plugin.get_tree().process_frame
-	var restored_2: GSTStack = panel.get_stack()
-	var redo1_ok: bool = is_same(restored_2, new_stack) and restored_2.layers.is_empty() and panel.get_current_path().is_empty()
-	_check("3c", redo1_ok, "redo 1 re-applies New: is_same=%s layers=%d current_path='%s'" % [is_same(restored_2, new_stack), restored_2.layers.size(), panel.get_current_path()])
+	var undo_ok: bool = panel.get_stack() == old_stack and old_stack.output_color == ids["invert"]
+	_check("3c", undo_ok, "old document's own history still undoes its last action (set_output_color) independent of navigation: output_color='%s' (expect '%s')" % [String(old_stack.output_color), String(ids["invert"])])
 
-	history.undo()
+	old_history.redo()
 	await plugin.get_tree().process_frame
-	history.undo()
-	await plugin.get_tree().process_frame
-	var restored_3: GSTStack = panel.get_stack()
-	var output_color_reverted: bool = restored_3.output_color == ids["invert"]
-	var undo_twice_more_ok: bool = is_same(restored_3, old_stack) and restored_3.layers.size() == old_layer_count and output_color_reverted
-	_check("3d", undo_twice_more_ok, "undo twice more reaches the pre-New old stack with its own last action (set_output_color) undone: is_same=%s layers=%d (expect %d) output_color='%s' (expect '%s')" % [is_same(restored_3, old_stack), restored_3.layers.size(), old_layer_count, String(restored_3.output_color), String(ids["invert"])])
+	var redo_ok: bool = old_stack.output_color == ids["checker"]
+	_check("3d", redo_ok, "redo re-applies set_output_color: output_color='%s' (expect '%s')" % [String(old_stack.output_color), String(ids["checker"])])
 
-	history.redo()
-	await plugin.get_tree().process_frame
-	history.redo()
-	await plugin.get_tree().process_frame
+	panel.activate_document(new_doc)
 	var final_stack: GSTStack = panel.get_stack()
-	var final_ok: bool = is_same(final_stack, new_stack) and final_stack.layers.is_empty() and panel.get_current_path().is_empty() and final_stack.output_color == &""
-	_check("3e", final_ok, "redo twice more returns to the New state: is_same=%s layers=%d current_path='%s'" % [is_same(final_stack, new_stack), final_stack.layers.size(), panel.get_current_path()])
+	var final_ok: bool = is_same(final_stack, new_stack) and final_stack.layers.is_empty() and panel.get_current_path().is_empty() and final_stack.output_color == &"" and panel.get_watched_history() == new_history and not new_history.has_undo()
+	_check("3e", final_ok, "re-activating the New document restores its own empty, actionless state: is_same=%s layers=%d current_path='%s' has_undo=%s" % [is_same(final_stack, new_stack), final_stack.layers.size(), panel.get_current_path(), new_history.has_undo()])
 
 
 ## (phase 6 fix pass 2, item 3): pressing the Export button with no
@@ -1123,16 +1114,15 @@ func _run_phase7(plugin: EditorPlugin) -> void:
 	await _dismiss_initial_start(plugin, panel)
 
 	var library: GSTLibrary = panel.get_library()
-	# The shared "Remote History" bucket (docs/PLAN.md Cross-cutting
-	# "EditorUndoRedoManager integration"): get_object_history_id() resolves
-	# to the same UndoRedo regardless of which bare GSTStack instance is
-	# passed, so this one reference stays valid across every New/open_recipe
-	# replace_stack below.
-	var history: UndoRedo = _get_history(panel)
+	# Phase 3 (docs/SHADER_TABS_reviewed-plan.md): each _on_new_pressed() call
+	# below now activates a brand new GSTDocument with its own fresh
+	# UndoRedo, so a history captured once up front would go stale the
+	# moment the first of these three New calls runs. Each helper below
+	# captures its own history immediately after its own New instead.
 
-	await _run_phase7_dissolve(plugin, panel, history, library)
-	await _run_phase7_sprite_holographic(plugin, panel, history, library)
-	await _run_phase7_outline(plugin, panel, history, library)
+	await _run_phase7_dissolve(plugin, panel, library)
+	await _run_phase7_sprite_holographic(plugin, panel, library)
+	await _run_phase7_outline(plugin, panel, library)
 	await _run_phase7_history_anchor(plugin, panel)
 
 	_finish(plugin)
@@ -1152,12 +1142,13 @@ func _run_phase7(plugin: EditorPlugin) -> void:
 ## anchor checks), one redo re-applies the randomized body, and the
 ## Randomize button is disabled again after New (docs/PLAN.md Phase 8 Build
 ## item 3: "New/Open/Reopen clear it"). Then checks the recipe-open flag
-## itself round-trips through the same "Replace stack" undo history as the
-## rest of the panel state (fix pass 3, item 3): undoing New re-enables
-## Randomize, redoing it disables it again, and undoing twice more (past New,
-## back through the randomize action, stopping short of undoing the
-## open_recipe action itself) leaves Randomize enabled with the stack back at
-## its post-open values.
+## itself lives on the GSTDocument, independent of navigation (phase 3,
+## docs/SHADER_TABS_reviewed-plan.md; supersedes fix pass 3, item 3):
+## activating the fire document back (not undoing New, which is no longer an
+## undoable action at all) re-enables Randomize and shows its content
+## unchanged, activating the New document again disables it, and the fire
+## document's own history still undoes its one randomize action, independent
+## of the navigation in between, back to its post-open values.
 ##
 ## Items "1b"/"3b"/"4b"/"5b" (fix pass 2, item 1): the fbm layer's "gain"
 ## param, checked not off the GSTLayer model but off the real EditorProperty
@@ -1193,6 +1184,7 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 	panel.open_recipe("fire")
 	for i: int in range(3):
 		await plugin.get_tree().process_frame
+	var fire_doc: GSTDocument = panel.get_active_document()
 	var post_open_body: String = _codegen_body(panel.get_shader_material().shader.code)
 	var pre_params: Dictionary = _snapshot_params(panel.get_stack(), library)
 	var history: UndoRedo = panel.get_watched_history()
@@ -1293,36 +1285,42 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 	var redo_visible: bool = redo_ep != null and redo_ep.is_visible_in_tree() and redo_ep.get_global_rect().intersects(settings_scroll.get_global_rect())
 	_check("5b", redo_visible and absf(redo_displayed - post_layer_value) < 0.01, "redo gain EditorProperty found=%s visible=%s displayed=%s expected=%s" % [redo_ep != null, redo_visible, redo_displayed, post_layer_value])
 
+	var doc_before_new: GSTDocument = fire_doc
 	panel._on_new_pressed()
 	for i: int in range(2):
 		await plugin.get_tree().process_frame
 	await _cancel_picker(plugin, panel)
+	var new_doc: GSTDocument = panel.get_active_document()
 	_check("6", panel.get_randomize_button().disabled, "Randomize disabled after New: disabled=%s" % [panel.get_randomize_button().disabled])
 
-	# Recipe-open state is now part of the "Replace stack" action's own
-	# do/undo pair (fix pass 3, item 3, gst_main_panel.gd's replace_stack):
-	# undoing New must re-enable Randomize, redoing it must disable it again,
-	# and undoing past the New (back through the randomize action, without
-	# undoing the recipe-open action itself) must leave the button enabled
-	# with the stack back at its post-open (pre-randomize) values.
-	history.undo()
+	# Phase 3 (docs/SHADER_TABS_reviewed-plan.md; supersedes fix pass 3, item
+	# 3): recipe-open state lives on the GSTDocument itself now, not on a
+	# "Replace stack" action's own do/undo pair -- New creates and activates
+	# an independent document rather than replacing the fire recipe's own,
+	# so re-activating the fire document (not undoing New) is what re-enables
+	# Randomize and shows its content again; navigating back to the New
+	# document re-disables it. The fire document's own history is untouched
+	# by any of this navigation, so one undo (not two: there is no "Replace
+	# stack" action to also undo through) still reaches post_open_body.
+	panel.activate_document(doc_before_new)
 	for i: int in range(2):
 		await plugin.get_tree().process_frame
-	_check("7", not panel.get_randomize_button().disabled, "undo New: Randomize re-enabled=%s" % [not panel.get_randomize_button().disabled])
+	_check("7", not panel.get_randomize_button().disabled and panel.get_stack() == doc_before_new.stack, "activating the fire document re-enables Randomize independent of navigation: enabled=%s" % [not panel.get_randomize_button().disabled])
 
-	history.redo()
+	panel.activate_document(new_doc)
 	for i: int in range(2):
 		await plugin.get_tree().process_frame
-	_check("8", panel.get_randomize_button().disabled, "redo New: Randomize disabled again=%s" % [panel.get_randomize_button().disabled])
+	_check("8", panel.get_randomize_button().disabled and panel.get_stack().layers.is_empty(), "re-activating the New document disables Randomize again: disabled=%s" % [panel.get_randomize_button().disabled])
 
+	panel.activate_document(doc_before_new)
+	for i: int in range(2):
+		await plugin.get_tree().process_frame
+	history = panel.get_watched_history()
 	history.undo()
 	for i: int in range(2):
 		await plugin.get_tree().process_frame
-	history.undo()
-	for i: int in range(2):
-		await plugin.get_tree().process_frame
-	var body_after_two_more_undos: String = _codegen_body(panel.get_shader_material().shader.code)
-	_check("9", not panel.get_randomize_button().disabled and body_after_two_more_undos == post_open_body, "undo twice more (past New, past randomize): Randomize still enabled=%s body matches post-open body=%s" % [not panel.get_randomize_button().disabled, body_after_two_more_undos == post_open_body])
+	var body_after_final_undo: String = _codegen_body(panel.get_shader_material().shader.code)
+	_check("9", not panel.get_randomize_button().disabled and body_after_final_undo == post_open_body, "the fire document's own history still undoes back through its randomize action, independent of navigation in between: Randomize still enabled=%s body matches post-open body=%s" % [not panel.get_randomize_button().disabled, body_after_final_undo == post_open_body])
 
 	_finish(plugin)
 
@@ -1429,10 +1427,11 @@ func _value_in_range(param: Dictionary, value: Variant) -> bool:
 ## inverted primary threshold) masking a color/mix between texture and an
 ## orange fill for the output color. Mirrors addons/goshade_turbo/recipes/
 ## dissolve.tres's own construction exactly.
-func _run_phase7_dissolve(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary) -> void:
+func _run_phase7_dissolve(plugin: EditorPlugin, panel: GSTMainPanel, library: GSTLibrary) -> void:
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
 	await _cancel_picker(plugin, panel)
+	var history: UndoRedo = panel.get_watched_history()
 	var undo: GSTUndo = panel.get_undo()
 
 	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
@@ -1487,10 +1486,11 @@ func _run_phase7_dissolve(plugin: EditorPlugin, panel: GSTMainPanel, history: Un
 ## constants), screen-blended over the texture source. Mirrors
 ## addons/goshade_turbo/recipes/sprite_holographic.tres's own construction
 ## exactly.
-func _run_phase7_sprite_holographic(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary) -> void:
+func _run_phase7_sprite_holographic(plugin: EditorPlugin, panel: GSTMainPanel, library: GSTLibrary) -> void:
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
 	await _cancel_picker(plugin, panel)
+	var history: UndoRedo = panel.get_watched_history()
 	var undo: GSTUndo = panel.get_undo()
 
 	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
@@ -1523,10 +1523,11 @@ func _run_phase7_sprite_holographic(plugin: EditorPlugin, panel: GSTMainPanel, h
 ## own color_alpha rather than "texture" so the outline ring drawn outside
 ## the sprite silhouette stays visible. Mirrors
 ## addons/goshade_turbo/recipes/outline.tres's own construction exactly.
-func _run_phase7_outline(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary) -> void:
+func _run_phase7_outline(plugin: EditorPlugin, panel: GSTMainPanel, library: GSTLibrary) -> void:
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
 	await _cancel_picker(plugin, panel)
+	var history: UndoRedo = panel.get_watched_history()
 	var undo: GSTUndo = panel.get_undo()
 
 	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
@@ -1603,19 +1604,21 @@ func _run_phase7_recipe_checks(plugin: EditorPlugin, panel: GSTMainPanel, histor
 ## integration", "History anchor (phase 7)"): a GSTUndo action committed
 ## while the open stack carries a real res:// path (open_recipe /
 ## reopen_shader_path both load through GSTStackIO, which sets
-## resource_path on the returned Resource) must still land in
-## panel.get_watched_history() -- this panel's one standalone UndoRedo
-## (phase 2 removed the prior EditorUndoRedoManager per-stack bucket this
-## regression originally guarded; a path-bearing stack has no separate
-## bucket left to be misrouted into). Drives panel.get_watched_history()
-## directly, the same instance _get_history(panel) returns. The
-## layer-gone-and-text-matches-post-open check after undo is the real
-## differentiator: add_layer's own commit_action(false) always applies the
-## mutation and calls _notify() synchronously, so has_undo()/resync alone
-## would pass even if the action had landed somewhere else -- only calling
-## undo() on the panel's actual watched history and checking it removes the
-## add (not some other action, e.g. re-undoing the open_recipe/
-## reopen_shader_path replace itself) proves the anchor is shared.
+## resource_path on the returned Resource) must still land in that
+## document's own panel.get_watched_history(). Historically (phase 1/2) this
+## guarded against a path-bearing stack getting misrouted into a shared
+## EditorUndoRedoManager bucket keyed by resource path; phase 2 removed that
+## shared-manager history entirely, and phase 3 gives open_recipe/
+## reopen_shader_path's own document a brand new, always-private UndoRedo
+## regardless of path, so there is no bucket left to misroute into at all.
+## Kept as a regression guard that the document created for a path-bearing
+## load still lands real edits in its own history rather than some other
+## document's. The layer-gone-and-text-matches-post-open check after undo is
+## the real differentiator: add_layer's own commit_action(false) always
+## applies the mutation and calls _notify() synchronously, so has_undo()/
+## resync alone would pass even if the action had landed somewhere else --
+## only calling undo() on the panel's actual watched history and checking it
+## removes the add proves the anchor is this document's own.
 func _run_phase7_history_anchor(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	await _run_phase7_history_anchor_open_recipe(plugin, panel)
 	await _run_phase7_history_anchor_reopen_shader(plugin, panel)

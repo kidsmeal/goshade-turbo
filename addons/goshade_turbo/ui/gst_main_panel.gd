@@ -77,15 +77,22 @@ const FILE_REOPEN_SHADER: int = 3
 
 var _stack: GSTStack = null
 var _library: GSTLibrary = null
-## This interim phase (docs/SHADER_TABS_reviewed-plan.md phase 2) gives the
-## whole panel one standalone UndoRedo, shared across New/Open/Reopen/Recipe
-## the same way the prior EditorUndoRedoManager history was; phase 3 moves
-## ownership of a UndoRedo instance onto each GSTDocument instead. A
-## standalone UndoRedo has exactly one history bucket, so unlike the prior
-## EditorUndoRedoManager there is no custom_context/get_object_history_id
-## routing concern: every GSTUndo action and every "Replace stack"/Randomize
-## action below always lands in this same instance.
-var _undo_redo: UndoRedo = UndoRedo.new()
+## Every open GSTDocument (phase 3, docs/SHADER_TABS_reviewed-plan.md), in
+## creation order. Never pruned in this phase (document close is phase 6).
+var _documents: Array[GSTDocument] = []
+## The document currently bound to the shared UI (stack list, inspector
+## column, output block, coord-space dropdown, preview). Visible tab
+## controls that let a user switch it are wired in phase 4; until then only
+## New/Open/Reopen Shader/Recipes and the internal fixture seams below
+## change it.
+var _active_document: GSTDocument = null
+## Mirrors _active_document.undo_redo/.undo so every existing call site in
+## this file (get_watched_history(), get_undo(), keyboard undo/redo, every
+## _undo.* call) keeps reading the active document's own history without
+## rebinding each one individually (Cross-cutting "Rebind panel callers to
+## the active document"). Kept in sync exclusively by _install_stack/
+## _activate_document.
+var _undo_redo: UndoRedo = null
 var _undo: GSTUndo = null
 var _preview_sync: GSTMaterialSync = GSTMaterialSync.new()
 var _material: ShaderMaterial = _preview_sync.get_material()
@@ -248,23 +255,28 @@ func _ready() -> void:
 	_build_start_screen()
 	_apply_default_layout.call_deferred()
 
-	# Installs the initial, never-saved stack with no undo action registered
-	# around it: there is nothing before the first stack to undo back to.
-	# Previously called externally by plugin.gd once it had a real
-	# EditorUndoRedoManager to hand over (decision 20); phase 2 gives this
-	# panel its own standalone UndoRedo directly, so installation happens
-	# here instead of waiting on the plugin.
-	_install_stack(_stack, GSTUndo.new(_undo_redo, _stack, _library, _on_stack_changed, _on_property_changed))
+	# Installs the initial, never-saved document with no undo action
+	# registered around it: there is nothing before the first document to
+	# undo back to. Previously called externally by plugin.gd once it had a
+	# real EditorUndoRedoManager to hand over (decision 20); phase 2 gave this
+	# panel its own standalone UndoRedo directly; phase 3 moves that
+	# ownership onto the first GSTDocument instead, created the same way
+	# open_document creates every later one.
+	_activate_document(_create_document(_stack, "", false))
 
 
-## Releases this panel's own UndoRedo (an Object, not a RefCounted or a Node:
-## it has no owner to free it automatically) and its GSTUndo adapter, which
-## retains bound Callables closing over this panel, when the panel itself
-## leaves the tree (phase 2 review round 2 fix pass). GSTUndo's own bound
-## Callables inside _undo_redo's recorded actions are released along with it.
+## Releases every open document's own UndoRedo (an Object, not a RefCounted
+## or a Node: it has no owner to free it automatically) and its GSTUndo
+## adapter, which retains bound Callables closing over this panel and that
+## document, when the panel itself leaves the tree (phase 2 review round 2
+## fix pass; phase 3 extends it from the one panel-owned UndoRedo to every
+## open document's own instance, active or not -- an inactive document was
+## never reachable through _undo_redo alone).
 func _exit_tree() -> void:
-	if _undo_redo != null and is_instance_valid(_undo_redo):
-		_undo_redo.free()
+	for doc: GSTDocument in _documents:
+		doc.teardown()
+	_documents.clear()
+	_active_document = null
 	_undo_redo = null
 	_undo = null
 
@@ -557,22 +569,25 @@ func get_layout_measurements() -> Dictionary:
 	}
 
 
-## Called once by plugin.gd right after instantiation (decision 20's
-## Wires the stack-list/output-block/inspector columns and the coord-space
-## dropdown to `stack`/`undo`, and resyncs the material. This is the do/undo
-## primitive for a stack replacement (phase 6 fix pass 2, item 1): replace_stack
-## below registers this method as both the do and the undo method of a
-## "Replace stack" UndoRedo action (alongside a second do/undo pair for
-## _current_path), so undo reinstalls the exact previous GSTStack instance and
-## its previous GSTUndo instance -- not a freshly constructed one -- and every
-## action already recorded through that GSTUndo's own bound-Callable methods
-## keeps landing on the GSTStack/GSTLayer instances it actually closed over.
-## Also called directly, with no action registered, by _ready() for the very
-## first stack.
+## Rebinds the stack-list/output-block/inspector columns and the
+## coord-space dropdown to `stack`/`undo`, and resyncs the material. This is
+## the do/undo primitive for an in-place stack replacement (phase 6 fix pass
+## 2, item 1; phase 3 keeps it as replace_stack's own internal fixture-only
+## primitive): replace_stack below registers this method as both the do and
+## the undo method of a "Replace stack" UndoRedo action on the active
+## document's own history (alongside a second do/undo pair for
+## _current_path), so undo reinstalls the exact previous GSTStack instance
+## and its previous GSTUndo instance -- not a freshly constructed one -- and
+## every action already recorded through that GSTUndo's own bound-Callable
+## methods keeps landing on the GSTStack/GSTLayer instances it actually
+## closed over. Writes stack/undo onto _active_document too, so this stays
+## the one place document ownership and the shared UI mirrors ever diverge
+## (phase 3: New/Open/Reopen/Recipes create and activate a whole new
+## GSTDocument instead of calling this directly; see open_document/
+## _activate_document below). Does not touch preview_sync/material/
+## preview_layer_id: those are document-scoped state _activate_document
+## installs once per document, not once per raw stack swap.
 func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
-	_preview_sync.reset_installation()
-	_material = _preview_sync.get_material()
-	_preview_layer_id = &""
 	_picker.set_refusal("")
 	_control_refusals.clear()
 	_message_label.text = ""
@@ -582,6 +597,9 @@ func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
 	_output_block.clear_refusals()
 	_stack = stack
 	_undo = undo
+	if _active_document != null:
+		_active_document.stack = stack
+		_active_document.undo = undo
 	_stack_list.setup(_stack, _library, _undo)
 	_output_block.setup(_stack, _library, _undo)
 	_inspector_column.setup(_stack, _library, _undo)
@@ -594,10 +612,270 @@ func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
 
 func _raw_set_current_path(path: String) -> void:
 	_current_path = path
+	if _active_document != null:
+		_active_document.current_path = path
 
 
 func _notify_replace() -> void:
 	stack_changed.emit()
+
+
+## Wraps _install_stack with this panel's own preview material/diagnostic
+## state (phase 3): _install_stack's own internal _resync_material() call
+## must already see the right preview_sync/material/preview_layer_id before
+## it runs, so this sets those mirrors (and _active_document's matching
+## fields) first, then calls _install_stack, as a single atomic do/undo
+## primitive -- registering them as two separate UndoRedo methods would
+## replay in the wrong relative order on undo (UndoRedo replays undo
+## methods in reverse registration order). Kept separate from _install_stack
+## itself so tests/gst_editor_ui_picker_smoke.gd's own "Bypass guarded UI
+## only to simulate a stale installation" fixture can keep calling
+## _install_stack(stack, undo) directly to swap only stack/undo in place,
+## without touching preview material state at all (that fixture proves
+## picker-context staleness, not rendering).
+func _install_document_state(stack: GSTStack, undo: GSTUndo, preview_sync: GSTMaterialSync, material: ShaderMaterial, preview_layer_id: StringName) -> void:
+	_preview_sync = preview_sync
+	_material = material
+	_preview_layer_id = preview_layer_id
+	if _active_document != null:
+		_active_document.preview_sync = preview_sync
+		_active_document.material = material
+		_active_document.preview_layer_id = preview_layer_id
+	_install_stack(stack, undo)
+
+
+## Document-bound counterpart of _install_document_state, used only by
+## replace_stack's own "Replace stack" action (phase 3 fix pass 1, round 1):
+## always writes doc's own fields regardless of which document is active,
+## and only touches the shared UI/panel mirrors when doc is still the
+## active one. Without this, replaying replace_stack's do/undo methods for
+## an inactive doc (a stale callback, or a test driving that document's own
+## history directly) would overwrite whichever *other* document happens to
+## be active right now, since the un-scoped _install_document_state always
+## writes _active_document unconditionally.
+func _install_document_state_for(doc: GSTDocument, stack: GSTStack, undo: GSTUndo, preview_sync: GSTMaterialSync, material: ShaderMaterial, preview_layer_id: StringName) -> void:
+	doc.stack = stack
+	doc.undo = undo
+	doc.preview_sync = preview_sync
+	doc.material = material
+	doc.preview_layer_id = preview_layer_id
+	if doc != _active_document:
+		return
+	_preview_sync = preview_sync
+	_material = material
+	_preview_layer_id = preview_layer_id
+	_install_stack(stack, undo)
+
+
+## Document-bound counterpart of _raw_set_current_path, used only by
+## replace_stack's own action (same isolation reason as
+## _install_document_state_for above).
+func _raw_set_current_path_for(doc: GSTDocument, path: String) -> void:
+	doc.current_path = path
+	if doc == _active_document:
+		_current_path = path
+
+
+## Document-bound counterpart of _set_recipe_open, used only by
+## replace_stack's own action (same isolation reason as
+## _install_document_state_for above).
+func _set_recipe_open_for(doc: GSTDocument, value: bool) -> void:
+	doc.recipe_open = value
+	if doc != _active_document:
+		return
+	_recipe_open = value
+	_randomize_button.disabled = not value or is_picker_open()
+
+
+## Document-bound counterpart of _notify_replace, used only by
+## replace_stack's own action: an inactive document's own replay must never
+## announce stack_changed for content the shared UI is not currently
+## showing.
+func _notify_replace_for(doc: GSTDocument) -> void:
+	if doc == _active_document:
+		_notify_replace()
+
+
+## Builds a new GSTDocument for new_stack, appends it to _documents, and
+## returns it without activating it (bootstrap primitive shared by _ready()'s
+## very first document and open_document's later ones). GSTUndo's on_changed/
+## on_property_changed callbacks are bound to this document (Callable.bind),
+## so a later replay -- while this document is active or not -- always
+## resolves the document it actually belongs to (Cross-cutting "Public APIs,
+## signals, and callbacks": "capture the owning document in action
+## callbacks"). new_recipe_name/new_reopened_import retain the recipe/import
+## origin (phase 3 fix pass 1, round 1) so phase 4 can display it; passing
+## either marks the document dirty on setup instead of clean (GSTDocument.
+## setup's starts_dirty), since unsaved recipe/import content has no saved
+## baseline of its own to mark.
+func _create_document(new_stack: GSTStack, new_path: String, new_recipe_open: bool, new_recipe_name: String = "", new_reopened_import: bool = false) -> GSTDocument:
+	var doc: GSTDocument = GSTDocument.new()
+	doc.current_path = new_path
+	doc.recipe_open = new_recipe_open
+	doc.recipe_name = new_recipe_name
+	doc.reopened_import = new_reopened_import
+	doc.setup(new_stack, _library, _on_document_stack_changed.bind(doc), _on_document_property_changed.bind(doc), new_recipe_open or new_reopened_import)
+	_documents.append(doc)
+	return doc
+
+
+## GSTUndo's on_changed callback for a document-owned action (phase 3):
+## every structural/coord-space/Randomize action on any document, active or
+## not, calls this bound to its own owning document. Only the active
+## document's replay may touch the shared UI: an inactive document's own
+## undo/redo (e.g. a stale callback, or a test driving it directly) must
+## never rebuild _stack_list/_inspector_column/_output_block against a stack
+## they are not currently bound to (Cross-cutting: "Inactive histories must
+## survive switching without calling active-panel mutation callbacks against
+## the wrong stack").
+func _on_document_stack_changed(doc: GSTDocument) -> void:
+	if doc != _active_document:
+		return
+	_on_stack_changed()
+
+
+## Same isolation as _on_document_stack_changed, for a native property
+## edit's lighter on_property_changed callback.
+func _on_document_property_changed(doc: GSTDocument) -> void:
+	if doc != _active_document:
+		return
+	_on_property_changed()
+
+
+## Points the shared UI at doc: mirrors its stack/undo/current_path/
+## recipe_open/preview material/diagnostic state into this panel's own
+## fields, then calls _install_stack to rebind the stack list, inspector
+## column, output block, and coord-space dropdown. Registers no undo action
+## anywhere (decision superseding 20, phase 3): switching which open
+## document the UI shows is navigation, not a stack edit, and must never
+## appear in any document's own history -- an inactive document's history
+## survives switching untouched because its UndoRedo instance is simply not
+## the one _undo_redo/get_watched_history() point callers at right now. Does
+## not touch the start screen: _ready()'s own bootstrap activation of the
+## very first document must never dismiss a start screen that has not been
+## shown yet; activate_document/open_document below dismiss it themselves.
+func _activate_document(doc: GSTDocument) -> void:
+	_active_document = doc
+	_undo_redo = doc.undo_redo
+	_current_path = doc.current_path
+	_set_recipe_open(doc.recipe_open)
+	_install_document_state(doc.stack, doc.undo, doc.preview_sync, doc.material, doc.preview_layer_id)
+
+
+## Public navigation entry point onto an already-open document (phase 3).
+## Finishes any pending native gesture/color popup on the currently active
+## document before switching (phase 3 fix pass 1, round 1): ownership must
+## not move to doc while a commit is still in flight, since that commit
+## would otherwise land after _install_document_state/_inspector_column.setup
+## have already rebound _undo/the inspector column to doc's own adapter.
+## Wired-by: deferred (phase 4 wires visible tab controls onto this same
+## call); until then this is the New/Open/Reopen/Recipes handlers' own
+## canonical-path-reuse path (open_document below) and an editor smoke seam
+## for tests/gst_editor_documents_smoke.gd and the navigation/history-
+## preservation assertions in tests/gst_editor_smoke.gd.
+func activate_document(doc: GSTDocument) -> void:
+	if doc == null or doc == _active_document:
+		return
+	if is_picker_open() and not _applying_choice:
+		return
+	await _finish_pending_edits()
+	_dismiss_start_screen()
+	_activate_document(doc)
+
+
+## Wired-by: none (editor smoke seam)
+func get_active_document() -> GSTDocument:
+	return _active_document
+
+
+## Wired-by: none (editor smoke seam)
+func get_documents() -> Array[GSTDocument]:
+	return _documents.duplicate()
+
+
+## Canonical path comparison logic, exposed statically and gated by an
+## explicit case_insensitive argument so tests can exercise both filesystem
+## case-sensitivity modes without depending on the actual platform (phase 3
+## review round 2 fix-now note 1). simplify_path() first (dedupes "//" and
+## resolves "." / ".."), then ProjectSettings.globalize_path() so a res:// or
+## user:// path and its already-absolute filesystem equivalent compare
+## equal, then case-folds only when case_insensitive is true, so two
+## spellings that differ only in letter case compare equal on
+## case-insensitive filesystems and stay distinct on case-sensitive ones.
+static func _canonical_path_for(path: String, case_insensitive: bool) -> String:
+	var globalized: String = ProjectSettings.globalize_path(path.simplify_path())
+	return globalized.to_lower() if case_insensitive else globalized
+
+
+## Canonical identity for _find_document_by_path (phase 3 fix pass 1, round
+## 1; platform-gated by round 2's fix-now pass instead of unconditionally
+## case-folding): delegates to _canonical_path_for with case_insensitive
+## true only on the two platforms whose default filesystem is itself
+## case-insensitive (OS.get_name() "Windows"/"macOS"); every other platform
+## name (Linux, FreeBSD, etc.) keeps case-sensitive identity, so e.g.
+## Fire.tres and fire.tres never collapse into the same document there. Only
+## used for comparison here; doc.current_path itself always keeps the
+## caller's original spelling for display/save.
+func _canonical_path(path: String) -> String:
+	return _canonical_path_for(path, OS.get_name() in ["Windows", "macOS"])
+
+
+## An already-open document whose own current_path canonically matches path,
+## or null. Empty/unset paths never match (every never-saved document shares
+## the same empty current_path, which is not a canonical identity).
+func _find_document_by_path(path: String) -> GSTDocument:
+	if path.is_empty():
+		return null
+	var canonical: String = _canonical_path(path)
+	for doc: GSTDocument in _documents:
+		if not doc.current_path.is_empty() and _canonical_path(doc.current_path) == canonical:
+			return doc
+	return null
+
+
+## A still-open, never-saved, never-edited document with no recipe/import
+## origin, or null (phase 3 fix pass 1, round 1: "pristine initial empty
+## content remains reusable"). Recipe/import documents can never match:
+## GSTDocument.setup's starts_dirty leaves them dirty from creation, so
+## is_dirty() alone already excludes them here, without needing to also
+## check recipe_open/reopened_import. New reuses this document instead of
+## piling up another blank tab every time it is pressed with nothing yet
+## typed into the current one.
+func _find_reusable_pristine_document() -> GSTDocument:
+	for doc: GSTDocument in _documents:
+		if doc.current_path.is_empty() and not doc.is_dirty():
+			return doc
+	return null
+
+
+## Creates a new GSTDocument for new_stack and activates it (decision
+## superseding 20, phase 3): New, Open, Reopen Shader, and Recipes each open
+## their own document now instead of replacing the single active document's
+## stack through an undoable "Replace stack" action -- switching between
+## documents is navigation, not a stack edit, and registers no action in any
+## document's own UndoRedo. new_path "" for a never-saved or unsaved-origin
+## (recipe, reopened-from-.gdshader) document. new_recipe_name/
+## new_reopened_import mark and retain an unsaved recipe/import origin (Fix
+## pass 1, round 1); a plain New call (both left at their defaults) instead
+## reuses an existing pristine document via _find_reusable_pristine_document
+## rather than allocating another one. This is the New/Open/Reopen/Recipes
+## handlers' own shared entry point; public so
+## tests/gst_editor_documents_smoke.gd can drive it directly.
+## Wired-by: _on_new_pressed, open_path, open_recipe, reopen_shader_path,
+## and _on_picker_choice's "recipe" case.
+func open_document(new_stack: GSTStack, new_path: String, new_recipe_open: bool, new_recipe_name: String = "", new_reopened_import: bool = false) -> GSTDocument:
+	if is_picker_open() and not _applying_choice:
+		return null
+	await _finish_pending_edits()
+	_dismiss_start_screen()
+	if new_path.is_empty() and not new_recipe_open and not new_reopened_import:
+		var reusable: GSTDocument = _find_reusable_pristine_document()
+		if reusable != null:
+			_activate_document(reusable)
+			return reusable
+	var doc: GSTDocument = _create_document(new_stack, new_path, new_recipe_open, new_recipe_name, new_reopened_import)
+	_activate_document(doc)
+	return doc
 
 
 ## Finishes any active native gesture and closes any open native color popup
@@ -617,41 +895,64 @@ func get_stack() -> GSTStack:
 
 ## Installs new_stack (and new_path as the new _current_path, and
 ## new_recipe_open as the new _recipe_open) as an undoable "Replace stack"
-## action in this panel's one standalone UndoRedo, rather than mutating
-## _stack/_current_path/_recipe_open directly: a structural edit made before
-## New, Open, or Reopen Shader now stays undoable afterward instead of being
-## discarded along with the replaced GSTStack (phase 6 fix pass 2 item 1). The
-## recipe-open flag (decision 16's Randomize gate) is recorded and replayed
-## the same way: undoing a New/Open/Reopen that closed an open recipe
-## re-enables Randomize, and redoing it disables it again (fix pass 3, item
-## 3). Phase 2 removes the prior EditorUndoRedoManager custom_context/history
-## bucket concern entirely: this standalone UndoRedo has exactly one bucket,
-## so every action -- this one, every GSTUndo action, and Randomize -- always
-## lands in the same place regardless of what was opened in between.
-## _on_new_pressed, open_path, open_recipe, and reopen_shader_path call this
-## instead of mutating _stack/_current_path/_recipe_open directly.
+## action on the *active document's own* UndoRedo, in place -- the active
+## GSTDocument instance is retained; only its own .stack/.undo swap. Phase 3
+## (docs/SHADER_TABS_reviewed-plan.md) retired this as the production
+## New/Open/Reopen Shader/Recipes path: those now call open_document, which
+## creates and activates a whole new GSTDocument instead, so switching
+## between documents registers no action anywhere and an inactive
+## document's own history is never touched by navigating away from it.
+## Kept only as an internal fixture-only primitive (Cross-cutting: "Keep
+## internal replacement only where a fixture explicitly requires it and
+## document ownership remains intact") for tests that need a real, in-place,
+## undoable stack swap on the one active document without constructing a
+## second GSTDocument -- e.g. simulating a stale picker-context installation
+## or a broken-codegen stack directly on the document already under test.
+##
+## Binds the action's own do/undo methods and new_undo's on_changed/
+## on_property_changed callbacks to owner_doc, the document active when
+## this action was created, rather than to mutable panel state (phase 3 fix
+## pass 1, round 1): replaying this action from owner_doc's own history
+## while a *different* document is active (a stale callback, or a test
+## driving owner_doc's history directly) must rewrite only owner_doc's own
+## fields, and must only touch the shared UI when owner_doc is still the
+## active one -- never overwrite whichever other document is actually on
+## screen.
 func replace_stack(new_stack: GSTStack, new_path: String, new_recipe_open: bool) -> void:
 	if is_picker_open() and not _applying_choice:
 		return
 	await _finish_pending_edits()
 	_dismiss_start_screen()
+	var owner_doc: GSTDocument = _active_document
+	if owner_doc == null:
+		return
 	var old_stack: GSTStack = _stack
 	var old_undo: GSTUndo = _undo
 	var old_path: String = _current_path
 	var old_recipe_open: bool = _recipe_open
-	var new_undo: GSTUndo = GSTUndo.new(_undo_redo, new_stack, _library, _on_stack_changed, _on_property_changed)
-	_install_stack(new_stack, new_undo)
-	_raw_set_current_path(new_path)
-	_set_recipe_open(new_recipe_open)
+	# A fresh GSTMaterialSync/material, same as a brand new GSTDocument would
+	# carry (its own _init() calls reset_installation()): a later codegen
+	# failure on new_stack must never expose old_stack's last successful
+	# preview, matching every other install (GSTMaterialSync.
+	# reset_installation's own doc comment).
+	var old_preview_sync: GSTMaterialSync = _preview_sync
+	var old_material: ShaderMaterial = _material
+	var old_preview_layer_id: StringName = _preview_layer_id
+	var new_undo: GSTUndo = GSTUndo.new(_undo_redo, new_stack, _library, _on_document_stack_changed.bind(owner_doc), _on_document_property_changed.bind(owner_doc))
+	var new_preview_sync: GSTMaterialSync = GSTMaterialSync.new()
+	var new_material: ShaderMaterial = new_preview_sync.get_material()
+	_install_document_state_for(owner_doc, new_stack, new_undo, new_preview_sync, new_material, &"")
+	_raw_set_current_path_for(owner_doc, new_path)
+	_set_recipe_open_for(owner_doc, new_recipe_open)
 	_undo_redo.create_action("GST: Replace stack", UndoRedo.MERGE_DISABLE)
-	_undo_redo.add_do_method(_install_stack.bind(new_stack, new_undo))
-	_undo_redo.add_undo_method(_install_stack.bind(old_stack, old_undo))
-	_undo_redo.add_do_method(_raw_set_current_path.bind(new_path))
-	_undo_redo.add_undo_method(_raw_set_current_path.bind(old_path))
-	_undo_redo.add_do_method(_set_recipe_open.bind(new_recipe_open))
-	_undo_redo.add_undo_method(_set_recipe_open.bind(old_recipe_open))
-	_undo_redo.add_do_method(_notify_replace)
-	_undo_redo.add_undo_method(_notify_replace)
+	_undo_redo.add_do_method(_install_document_state_for.bind(owner_doc, new_stack, new_undo, new_preview_sync, new_material, &""))
+	_undo_redo.add_undo_method(_install_document_state_for.bind(owner_doc, old_stack, old_undo, old_preview_sync, old_material, old_preview_layer_id))
+	_undo_redo.add_do_method(_raw_set_current_path_for.bind(owner_doc, new_path))
+	_undo_redo.add_undo_method(_raw_set_current_path_for.bind(owner_doc, old_path))
+	_undo_redo.add_do_method(_set_recipe_open_for.bind(owner_doc, new_recipe_open))
+	_undo_redo.add_undo_method(_set_recipe_open_for.bind(owner_doc, old_recipe_open))
+	_undo_redo.add_do_method(_notify_replace_for.bind(owner_doc))
+	_undo_redo.add_undo_method(_notify_replace_for.bind(owner_doc))
 	_undo_redo.commit_action(false)
 	_notify_replace()
 
@@ -764,7 +1065,7 @@ func hide_export_dialog() -> void:
 func _on_new_pressed() -> void:
 	if is_picker_open() and not _applying_choice:
 		return
-	replace_stack(GSTStack.new(), "", false)
+	open_document(GSTStack.new(), "", false)
 	_message_label.text = ""
 	_on_chooser_requested("add", &"", "", _stack_list.get_node("%AddButton") as Control)
 
@@ -791,22 +1092,31 @@ func _on_open_file_selected(path: String) -> void:
 	open_path(path)
 
 
-## Loads `path` through GSTStackIO and installs it via replace_stack (decision
-## 20: an undoable "Replace stack" action, same as New). A refusal (a missing
-## file or an unresolved entry) leaves the current stack untouched and shows
-## the reason in the message label. This is the Open button's own
-## file-selected handler (_on_open_file_selected calls it directly); public
-## so tests/gst_editor_smoke.gd can drive the same path without popping the
-## file dialog (docs/PLAN.md Phase 4 Files precedent, gst_stack_list.gd's
-## add_layer_by_entry_id).
+## Activates path's already-open document if one exists (phase 3: "repeat
+## canonical stack paths activate the existing document"), checked before
+## ever touching disk so a document that is still open in memory reactivates
+## even if its file was since deleted or edited externally. Otherwise loads
+## `path` through GSTStackIO and installs it via open_document (phase 3: a
+## new, independent GSTDocument, not an undoable "Replace stack" action). A
+## refusal (a missing file or an unresolved entry) leaves the active
+## document untouched and shows the reason in the message label. This is the
+## Open button's own file-selected handler (_on_open_file_selected calls it
+## directly); public so tests/gst_editor_smoke.gd can drive the same path
+## without popping the file dialog (docs/PLAN.md Phase 4 Files precedent,
+## gst_stack_list.gd's add_layer_by_entry_id).
 func open_path(path: String) -> void:
 	if is_picker_open() and not _applying_choice:
+		return
+	var existing: GSTDocument = _find_document_by_path(path)
+	if existing != null:
+		activate_document(existing)
+		_set_operation_message("Open", "")
 		return
 	var result: Dictionary = GSTStackIO.load(path, _library)
 	if not result["ok"]:
 		_set_operation_message("Open", result["reason"])
 		return
-	replace_stack(result["stack"], path, false)
+	open_document(result["stack"], path, false)
 	_set_operation_message("Open", "")
 
 
@@ -826,13 +1136,16 @@ func _recipe_names() -> Array[String]:
 	return names
 
 
-## Loads RECIPES_DIR/<name>.tres and installs it via replace_stack (decision
-## 20: an undoable "Replace stack" action, same as New/Open/Reopen Shader),
+## Loads RECIPES_DIR/<name>.tres and installs it via open_document (phase 3:
+## a new, independent GSTDocument, not an undoable "Replace stack" action),
 ## with the new current_path left empty rather than set to the recipe's own
 ## path: a recipe is a template, so Save falls back to Save As instead of
 ## silently overwriting the shipped recipe file (docs/PLAN.md Phase 7 Files).
-## This is the Recipes menu's own handler; public so
-## tests/gst_editor_smoke.gd can drive the same path directly.
+## Never reuses another open document (recipes always create an
+## independent copy, even of the same recipe opened twice: phase 3
+## "Repeated recipes create independent layer/coord instances"). This is the
+## Recipes menu's own handler; public so tests/gst_editor_smoke.gd can drive
+## the same path directly.
 func open_recipe(name: String) -> void:
 	if is_picker_open() and not _applying_choice:
 		return
@@ -841,7 +1154,7 @@ func open_recipe(name: String) -> void:
 	if not result["ok"]:
 		_set_operation_message("Recipes", result["reason"])
 		return
-	replace_stack(result["stack"], "", true)
+	open_document(result["stack"], "", true, name)
 	_set_operation_message("Recipes", "")
 
 
@@ -864,14 +1177,20 @@ func _on_save_as_file_selected(path: String) -> void:
 ## button's own handler (when a current path already exists) and Save As's
 ## file-selected handler; public so the smoke can drive it directly too.
 ## Finishes pending native gestures/popups first (decision superseding 20):
-## a save must never write before the pending edit reaches the stack.
+## a save must never write before the pending edit reaches the stack. Marks
+## the active document's own baseline fingerprint on success (phase 3:
+## "Track successful open/save baselines separately from unsaved
+## recipe/import origin"), so is_dirty() reads clean immediately after a
+## successful save.
 func save_to_path(path: String) -> void:
 	await _finish_pending_edits()
 	var result: Dictionary = GSTStackIO.save(_stack, path)
 	if not result["ok"]:
 		_set_operation_message("Save", result["reason"])
 		return
-	_current_path = path
+	_raw_set_current_path(path)
+	if _active_document != null:
+		_active_document.mark_baseline()
 	_set_operation_message("Save", "")
 
 
@@ -945,14 +1264,16 @@ func _on_reopen_shader_file_selected(path: String) -> void:
 ## Reopens a stack from an exported .gdshader's embedded header through
 ## GSTExport.reopen (decision 8). A refusal (no header, unparsable header, or
 ## an unknown schema -- B8) shows the reason in the message label and leaves
-## the current stack untouched; no new empty stack is offered. On success,
-## installs the rebuilt stack via replace_stack (an undoable "Replace stack"
-## action, same as New/Open) with an empty _current_path (a reopened stack has
-## no .tres of its own). When the file's body differs from a fresh codegen of
-## its own header
-## (decision 8's stale-body warning), that is shown instead of the plain
-## success clear. This is the Reopen Shader button's own file-selected
-## handler; public so the smoke can drive it directly too.
+## the active document untouched; no new empty stack is offered. On success,
+## installs the rebuilt stack via open_document (phase 3: a new, independent
+## GSTDocument, not an undoable "Replace stack" action) with an empty
+## _current_path (a reopened stack has no .tres of its own, and this new
+## document's unsaved origin is never confused with another open document
+## that happens to share the same empty path). When the file's body differs
+## from a fresh codegen of its own header (decision 8's stale-body warning),
+## that is shown instead of the plain success clear. This is the Reopen
+## Shader button's own file-selected handler; public so the smoke can drive
+## it directly too.
 func reopen_shader_path(path: String) -> void:
 	if is_picker_open() and not _applying_choice:
 		return
@@ -960,7 +1281,7 @@ func reopen_shader_path(path: String) -> void:
 	if not result["ok"]:
 		_set_operation_message("Reopen Shader", result["reason"])
 		return
-	replace_stack(result["stack"], "", false)
+	open_document(result["stack"], "", false, "", true)
 	if result["body_differs"]:
 		_set_operation_message("Reopen Shader", "%s reopened: its body differs from a fresh codegen of the header (hand edits detected, decision 8)" % path)
 	else:
@@ -970,6 +1291,8 @@ func reopen_shader_path(path: String) -> void:
 func _on_layer_selected(layer_id: StringName) -> void:
 	_inspector_column.edit(layer_id)
 	_update_layer_menu()
+	if _active_document != null:
+		_active_document.selected_layer_id = layer_id
 
 
 func _on_refused(reason: String) -> void:
@@ -1011,6 +1334,8 @@ func _on_preset_selected(index: int) -> void:
 	_set_operation_message("Preview", "")
 	var preset_name: String = GSTPreviewPresets.PRESET_NAMES[index]
 	_preview.set_preset(preset_name)
+	if _active_document != null:
+		_active_document.preview_preset = preset_name
 	_resync_material()
 	if _codegen_message.text.is_empty() and GSTPreviewPresets.suggests_screen_uv(preset_name, _stack.coord_space):
 		_set_operation_message("Preview", "Text preview: use screen_uv for coordinates across the screen.")
@@ -1025,6 +1350,8 @@ func _on_preview_image_selected(path: String) -> void:
 	if texture == null:
 		return
 	_preview.set_image(texture)
+	if _active_document != null:
+		_active_document.preview_image_path = path
 	_resync_material()
 
 
@@ -1035,11 +1362,15 @@ func _on_layer_menu_pressed(id: int) -> void:
 	if GSTStackOps.find_layer(_stack, selected) == null:
 		return
 	_preview_layer_id = selected
+	if _active_document != null:
+		_active_document.preview_layer_id = _preview_layer_id
 	_resync_material()
 
 
 func _on_return_to_effect_pressed() -> void:
 	_preview_layer_id = &""
+	if _active_document != null:
+		_active_document.preview_layer_id = _preview_layer_id
 	_resync_material()
 
 
@@ -1059,6 +1390,8 @@ func _on_coord_space_selected(index: int) -> void:
 
 func _set_recipe_open(value: bool) -> void:
 	_recipe_open = value
+	if _active_document != null:
+		_active_document.recipe_open = value
 	_randomize_button.disabled = not value or is_picker_open()
 
 
@@ -1451,7 +1784,7 @@ func _on_picker_choice(choice: Dictionary) -> void:
 			var loaded: Dictionary = GSTStackIO.load("%s/%s.tres" % [RECIPES_DIR, value], _library)
 			result = loaded
 			if loaded["ok"]:
-				replace_stack(loaded["stack"], "", true)
+				open_document(loaded["stack"], "", true, value)
 	_applying_choice = false
 	if not result["ok"]:
 		_picker_refusal(result["reason"])
