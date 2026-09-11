@@ -32,7 +32,7 @@ entry = "color/fill"
 kind_out = 1
 slots = {}
 params = {
-"color": Color(0.860914, 0.456958, 0.717396, 1)
+"color": Color(0, 0, 0, 1)
 }
 
 [sub_resource type="Resource" id="Resource_cv8ms"]
@@ -44,8 +44,8 @@ slots = {
 "x": &"0"
 }
 params = {
-"edge0": 0.6,
-"edge1": 0.68
+"edge0": 0.37,
+"edge1": 0.877
 }
 
 [sub_resource type="Resource" id="Resource_i5h4u"]
@@ -97,10 +97,10 @@ slots = {
 "t": &"3"
 }
 params = {
-"a": Vector3(0.5, 0.3, 0.6),
+"a": Vector3(0.611698, 0.00110104, 0.741594),
 "b": Vector3(0.5, 0.4, 0.5),
-"c": Vector3(1, 1, 1),
-"d": Vector3(0, 0.2, 0.4)
+"c": Vector3(0.5, 0.5, 1),
+"d": Vector3(0.1, 0.2, 0.4)
 }
 
 [sub_resource type="Resource" id="Resource_b77ht"]
@@ -176,7 +176,7 @@ id = &"9"
 entry = "color/mix"
 kind_out = 1
 slots = {
-"a": &"16",
+"a": &"11",
 "b": &"8",
 "mask": &"7"
 }
@@ -200,4 +200,4 @@ coord_space = 0
 layers = Array[ExtResource("1_uouj6")]([SubResource("Resource_e47px"), SubResource("Resource_pg6pb"), SubResource("Resource_8qrv4"), SubResource("Resource_cv8ms"), SubResource("Resource_i5h4u"), SubResource("Resource_m4f8y"), SubResource("Resource_i75k4"), SubResource("Resource_gl63f"), SubResource("Resource_jfmqy"), SubResource("Resource_5r0rc"), SubResource("Resource_qh0vy"), SubResource("Resource_juov1"), SubResource("Resource_uouj6"), SubResource("Resource_ccbhk"), SubResource("Resource_5y2xv")])
 output_color = &"10"
 output_alpha = &"1"
-next_id = 18
+next_id = 19

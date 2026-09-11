@@ -1,25 +1,25 @@
 // GoShade Turbo generated shader. MIT License.
-// stack: {"coord_space":"uv","layers":[{"coord":null,"entry":"source/texture","id":"0","kind_out":1,"params":{},"slots":{}},{"coord":null,"entry":"fieldops/smoothstep","id":"1","kind_out":0,"params":{"edge0":0.3,"edge1":0.5},"slots":{"x":"0"}},{"coord":null,"entry":"color/fill","id":"11","kind_out":1,"params":{"color":[0.860914051532745,0.456958115100861,0.717395544052124,1.0]},"slots":{}},{"coord":null,"entry":"fieldops/smoothstep","id":"12","kind_out":0,"params":{"edge0":0.6,"edge1":0.68},"slots":{"x":"0"}},{"coord":null,"entry":"fieldops/invert","id":"13","kind_out":0,"params":{},"slots":{"x":"12"}},{"coord":null,"entry":"fieldops/multiply","id":"14","kind_out":0,"params":{},"slots":{"a":"1","b":"13"}},{"coord":{"offset":[0.0,0.0],"rotation":1.01499999999942,"scale":[1.0,1.0],"scroll":[0.25,0.0],"warp_strength":0.0,"warp_x":"","warp_y":""},"entry":"generative/stripes","id":"3","kind_out":0,"params":{},"slots":{}},{"coord":null,"entry":"color/palette","id":"4","kind_out":1,"params":{"a":[0.5,0.300000011920929,0.600000023841858],"b":[0.5,0.400000005960464,0.5],"c":[1.0,1.0,1.0],"d":[0.0,0.200000002980232,0.400000005960464]},"slots":{"t":"3"}},{"coord":{"offset":[0.0,0.0],"rotation":0.0,"scale":[12.0,12.0],"scroll":[0.100000001490116,0.100000001490116],"warp_strength":0.0,"warp_x":"","warp_y":""},"entry":"generative/voronoi","id":"5","kind_out":0,"params":{},"slots":{}},{"coord":null,"entry":"fieldops/smoothstep","id":"6","kind_out":0,"params":{"edge0":0.02,"edge1":0.12},"slots":{"x":"5"}},{"coord":null,"entry":"fieldops/invert","id":"7","kind_out":0,"params":{},"slots":{"x":"6"}},{"coord":null,"entry":"color/gradient_map","id":"8","kind_out":1,"params":{"color_a":[0.0,0.0,0.0500000007450581,1.0],"color_b":[1.0,1.0,0.899999976158142,1.0]},"slots":{"t":"7"}},{"coord":null,"entry":"color/hue_shift","id":"16","kind_out":1,"params":{"shift":0.0},"slots":{"color":"8"}},{"coord":null,"entry":"color/mix","id":"9","kind_out":1,"params":{},"slots":{"a":"16","b":"8","mask":"7"}},{"coord":null,"entry":"color/mix","id":"10","kind_out":1,"params":{},"slots":{"a":"9","b":"4","mask":"14"}}],"next_id":18,"output_alpha":"1","output_color":"10","schema":1}
+// stack: {"coord_space":"uv","layers":[{"coord":null,"entry":"source/texture","id":"0","kind_out":1,"params":{},"slots":{}},{"coord":null,"entry":"fieldops/smoothstep","id":"1","kind_out":0,"params":{"edge0":0.3,"edge1":0.5},"slots":{"x":"0"}},{"coord":null,"entry":"color/fill","id":"11","kind_out":1,"params":{"color":[0.0,0.0,0.0,1.0]},"slots":{}},{"coord":null,"entry":"fieldops/smoothstep","id":"12","kind_out":0,"params":{"edge0":0.37,"edge1":0.877},"slots":{"x":"0"}},{"coord":null,"entry":"fieldops/invert","id":"13","kind_out":0,"params":{},"slots":{"x":"12"}},{"coord":null,"entry":"fieldops/multiply","id":"14","kind_out":0,"params":{},"slots":{"a":"1","b":"13"}},{"coord":{"offset":[0.0,0.0],"rotation":1.015,"scale":[1.0,1.0],"scroll":[0.25,0.0],"warp_strength":0.0,"warp_x":"","warp_y":""},"entry":"generative/stripes","id":"3","kind_out":0,"params":{},"slots":{}},{"coord":null,"entry":"color/palette","id":"4","kind_out":1,"params":{"a":[0.611698031425476,0.00110103900078684,0.741594016551971],"b":[0.5,0.400000005960464,0.5],"c":[0.5,0.5,1.0],"d":[0.100000001490116,0.200000002980232,0.400000005960464]},"slots":{"t":"3"}},{"coord":{"offset":[0.0,0.0],"rotation":0.0,"scale":[12.0,12.0],"scroll":[0.100000001490116,0.100000001490116],"warp_strength":0.0,"warp_x":"","warp_y":""},"entry":"generative/voronoi","id":"5","kind_out":0,"params":{},"slots":{}},{"coord":null,"entry":"fieldops/smoothstep","id":"6","kind_out":0,"params":{"edge0":0.02,"edge1":0.12},"slots":{"x":"5"}},{"coord":null,"entry":"fieldops/invert","id":"7","kind_out":0,"params":{},"slots":{"x":"6"}},{"coord":null,"entry":"color/gradient_map","id":"8","kind_out":1,"params":{"color_a":[0.0,0.0,0.0500000007450581,1.0],"color_b":[1.0,1.0,0.899999976158142,1.0]},"slots":{"t":"7"}},{"coord":null,"entry":"color/hue_shift","id":"16","kind_out":1,"params":{"shift":0.0},"slots":{"color":"8"}},{"coord":null,"entry":"color/mix","id":"9","kind_out":1,"params":{},"slots":{"a":"11","b":"8","mask":"7"}},{"coord":null,"entry":"color/mix","id":"10","kind_out":1,"params":{},"slots":{"a":"9","b":"4","mask":"14"}}],"next_id":19,"output_alpha":"1","output_color":"10","schema":1}
 shader_type canvas_item;
 
 group_uniforms L01_gst_smoothstep;
 uniform float l1_gst_smoothstep_edge0 : hint_range(-1.0, 2.0) = 0.3;
 uniform float l1_gst_smoothstep_edge1 : hint_range(-1.0, 2.0) = 0.5;
 group_uniforms L02_fill;
-uniform vec4 l11_fill_color : source_color = vec4(0.86091405153275, 0.45695811510086, 0.71739554405212, 1.0);
+uniform vec4 l11_fill_color : source_color = vec4(0.0, 0.0, 0.0, 1.0);
 group_uniforms L03_gst_smoothstep;
-uniform float l12_gst_smoothstep_edge0 : hint_range(-1.0, 2.0) = 0.6;
-uniform float l12_gst_smoothstep_edge1 : hint_range(-1.0, 2.0) = 0.68;
+uniform float l12_gst_smoothstep_edge0 : hint_range(-1.0, 2.0) = 0.37;
+uniform float l12_gst_smoothstep_edge1 : hint_range(-1.0, 2.0) = 0.877;
 group_uniforms L06_stripes;
 uniform vec2 l3_scale = vec2(1.0, 1.0);
 uniform vec2 l3_offset = vec2(0.0, 0.0);
-uniform float l3_rotation = 1.01499999999942;
+uniform float l3_rotation = 1.015;
 uniform vec2 l3_scroll = vec2(0.25, 0.0);
 group_uniforms L07_palette;
-uniform vec3 l4_palette_a = vec3(0.5, 0.30000001192093, 0.60000002384186);
+uniform vec3 l4_palette_a = vec3(0.61169803142548, 0.00110103900079, 0.74159401655197);
 uniform vec3 l4_palette_b = vec3(0.5, 0.40000000596046, 0.5);
-uniform vec3 l4_palette_c = vec3(1.0, 1.0, 1.0);
-uniform vec3 l4_palette_d = vec3(0.0, 0.20000000298023, 0.40000000596046);
+uniform vec3 l4_palette_c = vec3(0.5, 0.5, 1.0);
+uniform vec3 l4_palette_d = vec3(0.10000000149012, 0.20000000298023, 0.40000000596046);
 group_uniforms L08_voronoi;
 uniform vec2 l5_scale = vec2(12.0, 12.0);
 uniform vec2 l5_offset = vec2(0.0, 0.0);
@@ -134,7 +134,7 @@ void fragment() {
 	float l7 = invert(l6);
 	vec4 l8 = gradient_map(l7, l8_gradient_map_color_a, l8_gradient_map_color_b);
 	vec4 l16 = hue_shift(l8, l16_hue_shift_shift);
-	vec4 l9 = color_mix(l16, l8, l7);
+	vec4 l9 = color_mix(l11, l8, l7);
 	vec4 l10 = color_mix(l9, l4, l14);
 	COLOR = vec4(l10.rgb, l1);
 }
