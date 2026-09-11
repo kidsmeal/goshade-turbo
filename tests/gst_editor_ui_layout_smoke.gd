@@ -202,8 +202,8 @@ func _check_responsive_tabs(plugin: EditorPlugin, panel: GSTMainPanel, _measured
 	for i: int in range(5):
 		await plugin.get_tree().process_frame
 	var inspector_column: GSTInspectorColumn = panel.get_inspector_column()
-	var parameter_inspector: EditorInspector = inspector_column.call("get_parameter_inspector") as EditorInspector
-	var coord_inspector: EditorInspector = inspector_column.call("get_coord_inspector") as EditorInspector
+	var parameter_rows: VBoxContainer = inspector_column.call("get_parameter_inspector") as VBoxContainer
+	var coord_rows: VBoxContainer = inspector_column.call("get_coord_inspector") as VBoxContainer
 	var representative_property: EditorProperty = inspector_column.find_editor_property(&"gain", selected_layer)
 	var representative_visible: bool = representative_property != null and representative_property.is_visible_in_tree() and representative_property.size.x > 0.0 and representative_property.size.y > 0.0
 	var tab_threshold: float = panel.get_layout_measurements()["tab_breakpoint"]
@@ -216,9 +216,12 @@ func _check_responsive_tabs(plugin: EditorPlugin, panel: GSTMainPanel, _measured
 	var narrow: Dictionary = panel.get_layout_measurements()
 	var same_layer_pane: bool = panel.get_node("%LayerPane").get_parent() == panel.get_node("%EditingTabs")
 	var same_settings_pane: bool = panel.get_node("%SettingsPane").get_parent() == panel.get_node("%EditingTabs")
-	var inspector_nodes: Array[Node] = panel.find_children("*", "EditorInspector", true, false)
-	var two_inspectors: bool = inspector_nodes.size() == 2
-	var inspector_targets_ok: bool = parameter_inspector != null and coord_inspector != null and parameter_inspector.get_edited_object() == selected_layer and coord_inspector.get_edited_object() == selected_layer.coord
+	# Phase 2: no embedded EditorInspector remains; the two persistent native
+	# row containers (never rebuilt by a layout reflow, only by edit()) stand
+	# in for the old "two EditorInspector nodes" count, and each row's own
+	# edited-object identity replaces the container-level check.
+	var two_inspectors: bool = parameter_rows != null and coord_rows != null
+	var inspector_targets_ok: bool = inspector_column.get_edited_object() == selected_layer and inspector_column.find_editor_property(&"gain", selected_layer) == representative_property and inspector_column.find_coord_editor_property(&"scale") != null and inspector_column.find_coord_editor_property(&"scale").get_edited_object() == selected_layer.coord
 	var settings_scroll_bounded: bool = false
 	if inspector_column.has_method("get_settings_scroll"):
 		var settings_scroll: ScrollContainer = inspector_column.call("get_settings_scroll") as ScrollContainer
@@ -243,11 +246,10 @@ func _check_responsive_tabs(plugin: EditorPlugin, panel: GSTMainPanel, _measured
 		await plugin.get_tree().process_frame
 	var wide: Dictionary = panel.get_layout_measurements()
 	var returned_to_split: bool = panel.get_node("%LayerPane").get_parent() == panel.get_node("%EditingSplit") and panel.get_node("%SettingsPane").get_parent() == panel.get_node("%EditingSplit")
-	var wide_inspector_nodes: Array[Node] = panel.find_children("*", "EditorInspector", true, false)
-	var same_inspectors_and_targets: bool = wide_inspector_nodes.size() == 2 and parameter_inspector in wide_inspector_nodes and coord_inspector in wide_inspector_nodes and parameter_inspector.get_edited_object() == selected_layer and coord_inspector.get_edited_object() == selected_layer.coord
+	var same_inspectors_and_targets: bool = inspector_column.call("get_parameter_inspector") == parameter_rows and inspector_column.call("get_coord_inspector") == coord_rows and inspector_column.get_edited_object() == selected_layer and inspector_column.find_editor_property(&"gain", selected_layer) == representative_property and inspector_column.find_coord_editor_property(&"scale") != null and inspector_column.find_coord_editor_property(&"scale").get_edited_object() == selected_layer.coord
 	var wide_enclosed: bool = wide["host_rect"].encloses(wide["root_rect"]) and wide["host_rect"].encloses(wide["editing_rect"]) and wide["host_rect"].encloses(wide["preview_area_rect"])
 	var actual_crossing: bool = narrow["editing_rect"].size.x <= tab_threshold + 0.5 and wide["editing_rect"].size.x > tab_threshold + 0.5
-	_check("responsive_tabs", representative_visible and actual_crossing and narrow["narrow"] and not wide["narrow"] and same_layer_pane and same_settings_pane and returned_to_split and two_inspectors and inspector_targets_ok and same_inspectors_and_targets and settings_scroll_bounded and narrow_enclosed and wide_enclosed and started_on_different_tab and tab_persisted, "representative_visible=%s breakpoint=%.1f widths=%.1f/%.1f narrow=%s wide=%s enclosed=%s/%s inspectors=%d/%d targets_ok=%s/%s scroll_bounded=%s different_start=%s tab_persisted=%s" % [representative_visible, tab_threshold, narrow["editing_rect"].size.x, wide["editing_rect"].size.x, narrow["narrow"], wide["narrow"], narrow_enclosed, wide_enclosed, inspector_nodes.size(), wide_inspector_nodes.size(), inspector_targets_ok, same_inspectors_and_targets, settings_scroll_bounded, started_on_different_tab, tab_persisted])
+	_check("responsive_tabs", representative_visible and actual_crossing and narrow["narrow"] and not wide["narrow"] and same_layer_pane and same_settings_pane and returned_to_split and two_inspectors and inspector_targets_ok and same_inspectors_and_targets and settings_scroll_bounded and narrow_enclosed and wide_enclosed and started_on_different_tab and tab_persisted, "representative_visible=%s breakpoint=%.1f widths=%.1f/%.1f narrow=%s wide=%s enclosed=%s/%s row_containers=%s targets_ok=%s/%s scroll_bounded=%s different_start=%s tab_persisted=%s" % [representative_visible, tab_threshold, narrow["editing_rect"].size.x, wide["editing_rect"].size.x, narrow["narrow"], wide["narrow"], narrow_enclosed, wide_enclosed, two_inspectors, inspector_targets_ok, same_inspectors_and_targets, settings_scroll_bounded, started_on_different_tab, tab_persisted])
 	DisplayServer.window_set_size(original_window_size)
 	for i: int in range(3):
 		await plugin.get_tree().process_frame

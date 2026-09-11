@@ -2,13 +2,15 @@
 class_name GSTUndo
 extends RefCounted
 
-## Wraps EditorUndoRedoManager for every structural stack edit (decision 20):
-## add, remove, reorder, slot change, warp slot change, output color change,
-## output alpha change. Slider edits come free from the inspector and never
-## go through this file.
+## Wraps a standalone UndoRedo for every stack edit: structural edits (add,
+## remove, reorder, slot change, warp slot change, output color change,
+## output alpha change), coord-space edits, Randomize, and native property
+## edits (decision superseding 20: property edits no longer come free from an
+## embedded EditorInspector; gst_inspector_column.gd finishes each native
+## gesture and routes the result here).
 ##
 ## Pattern: every front-door method applies the mutation directly (via
-## GSTStackOps where one exists), registers a do/undo pair of raw appliers
+## GSTStackOps where one exists), registers a do/undo pair of bound Callables
 ## plus a do/undo pair of _notify calls, then commits with
 ## commit_action(false) since the mutation is already applied. Because
 ## commit_action(false) never invokes the do methods, each front-door method
@@ -22,40 +24,42 @@ extends RefCounted
 ##
 ## Layer ids are never reused on undo of an add (decision 22): undo removes
 ## the layer from the array but never touches stack.next_id.
-
-var _undo_redo: EditorUndoRedoManager
+##
+## Phase 2 (docs/SHADER_TABS_reviewed-plan.md): the shared, abstract
+## EditorUndoRedoManager and its path-less history-anchor Resource are gone.
+## _undo_redo is a plain UndoRedo the panel owns directly (one per document
+## from phase 3 on; one panel-owned instance in this interim phase). A
+## standalone UndoRedo has exactly one history bucket, so no custom_context
+## routing or get_object_history_id() lookup is needed at all: every action
+## created here always lands in the one bucket _undo_redo already is.
+## add_do_method/add_undo_method take bound Callables (self._method.bind(...))
+## rather than the manager's (object, method_name, *varargs) overload.
+var _undo_redo: UndoRedo
 var _stack: GSTStack
 var _library: GSTLibrary
-## Called after every do and undo, so the panel can resync its columns.
+## Called after every do and undo of a structural edit, coord-space edit,
+## Randomize, or "Replace stack" action, so the panel can rebuild its columns
+## (a layer's own identity, slots, or manifest can change under these).
 var _on_changed: Callable
-## The panel's path-less history anchor Resource (docs/PLAN.md Cross-cutting
-## "EditorUndoRedoManager integration", "History anchor (phase 7)"): every
-## action this file creates uses this as custom_context, never _stack itself.
-## EditorUndoRedoManager.get_object_history_id routes a Resource with a
-## res:// path (a stack loaded from disk) to a different history bucket than
-## a path-less one on 4.6.2 (verified in the phase 7 smoke), so keying off
-## _stack would split a session's undo history across Open/Reopen boundaries
-## instead of sharing the one bucket GSTMainPanel._get_history() watches.
-var _history_context: Resource
+## Called after every do and undo of a native property edit specifically
+## (commit_property_change). Deliberately lighter than _on_changed: a
+## property edit never changes which layer is selected or what it
+## references, so this must only resync the material, never rebuild/free the
+## row gst_inspector_column.gd's own commit (or a later undo/redo of it) is
+## running on.
+var _on_property_changed: Callable
 
 
-func _init(undo_redo: EditorUndoRedoManager, stack: GSTStack, library: GSTLibrary, on_changed: Callable, history_context: Resource) -> void:
+func _init(undo_redo: UndoRedo, stack: GSTStack, library: GSTLibrary, on_changed: Callable, on_property_changed: Callable) -> void:
 	_undo_redo = undo_redo
 	_stack = stack
 	_library = library
 	_on_changed = on_changed
-	_history_context = history_context
+	_on_property_changed = on_property_changed
 
 
-## custom_context = _history_context is required: without a stable, path-less
-## anchor, EditorUndoRedoManager either binds create_action() to whatever
-## object the editor last inspected (not a stable bucket, desyncing
-## get_object_history_id(stack) from the actions actually created, per
-## docs/EDITOR_SMOKE.md phase 4 fail-then-fix note) or, if bound to _stack
-## directly, routes a path-bearing stack (loaded from res://) to a different
-## history than a path-less one (phase 7 finding).
 func _create_action(name: String) -> void:
-	_undo_redo.create_action(name, UndoRedo.MERGE_DISABLE, _history_context)
+	_undo_redo.create_action(name, UndoRedo.MERGE_DISABLE)
 
 
 ## Creates a new layer with the next monotonic id and appends it to the top
@@ -64,10 +68,10 @@ func add_layer(entry_id: String, kind_out: GSTLayer.Kind, is_generator: bool) ->
 	var layer: GSTLayer = GSTStackOps.add_layer(_stack, entry_id, kind_out, is_generator)
 	layer.manifest = _library.get_entry(entry_id)
 	_create_action("GST: add %s" % entry_id)
-	_undo_redo.add_do_method(self, "_redo_add", layer)
-	_undo_redo.add_undo_method(self, "_undo_add", layer.id)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_redo_add.bind(layer))
+	_undo_redo.add_undo_method(_undo_add.bind(layer.id))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return layer
@@ -89,10 +93,10 @@ func add_layer_for_ui(entry_id: String) -> Dictionary:
 	GSTStackOps.initialize_inputs_from_immediate_below(_stack, layer.id, _library)
 	_stack.output_color = layer.id
 	_create_action("GST: add %s" % entry_id)
-	_undo_redo.add_do_method(self, "_redo_add_for_ui", layer)
-	_undo_redo.add_undo_method(self, "_undo_add_for_ui", layer.id, old_output_color)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_redo_add_for_ui.bind(layer))
+	_undo_redo.add_undo_method(_undo_add_for_ui.bind(layer.id, old_output_color))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return {"ok": true, "reason": "", "layer": layer}
@@ -124,10 +128,10 @@ func _undo_add(layer_id: StringName) -> void:
 ## index and writes the pre-removal values back onto the surviving layers'
 ## own slot/coord-warp dictionaries, rather than restoring a duplicated
 ## snapshot array. A duplicated snapshot would detach every surviving layer
-## from the instances EditorInspector's property undo already points at
-## (phase 4 fix pass 3, item 1): an inspector slider edit made before a
-## remove, undone after that remove is itself undone, must still land on the
-## same GSTLayer/GSTCoordBlock the inspector is editing.
+## from the instance its own native property rows already point at (phase 4
+## fix pass 3, item 1): a property edit made before a remove, undone after
+## that remove is itself undone, must still land on the same
+## GSTLayer/GSTCoordBlock the inspector column is editing.
 ##
 ## Also snapshots stack.output_color and stack.output_alpha: a deleted layer
 ## id left in either field would make codegen resolve a dangling reference
@@ -146,10 +150,10 @@ func remove_layer(layer_id: StringName) -> void:
 	GSTStackOps.remove_layer(_stack, layer_id, _library)
 	_clear_output_refs(layer_id)
 	_create_action("GST: remove %s" % String(layer_id))
-	_undo_redo.add_do_method(self, "_redo_remove", removed_layer)
-	_undo_redo.add_undo_method(self, "_undo_remove", removed_layer, removed_index, slot_snapshot, warp_snapshot, output_color_snapshot, output_alpha_snapshot)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_redo_remove.bind(removed_layer))
+	_undo_redo.add_undo_method(_undo_remove.bind(removed_layer, removed_index, slot_snapshot, warp_snapshot, output_color_snapshot, output_alpha_snapshot))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 
@@ -222,10 +226,10 @@ func reorder_layer(layer_id: StringName, new_index: int) -> Dictionary:
 	if applied_index == old_index:
 		return result
 	_create_action("GST: reorder %s" % String(layer_id))
-	_undo_redo.add_do_method(self, "_raw_reorder", layer_id, applied_index)
-	_undo_redo.add_undo_method(self, "_raw_reorder", layer_id, old_index)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_raw_reorder.bind(layer_id, applied_index))
+	_undo_redo.add_undo_method(_raw_reorder.bind(layer_id, old_index))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return result
@@ -251,10 +255,10 @@ func assign_slot(layer_id: StringName, slot_name: String, target_id: StringName)
 	if not result["ok"]:
 		return result
 	_create_action("GST: wire %s.%s" % [String(layer_id), slot_name])
-	_undo_redo.add_do_method(self, "_raw_set_slot", layer_id, slot_name, target_id)
-	_undo_redo.add_undo_method(self, "_raw_set_slot", layer_id, slot_name, old_target)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_raw_set_slot.bind(layer_id, slot_name, target_id))
+	_undo_redo.add_undo_method(_raw_set_slot.bind(layer_id, slot_name, old_target))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return result
@@ -296,10 +300,10 @@ func assign_warp(layer_id: StringName, axis: String, target_id: StringName) -> D
 
 	_raw_set_warp(layer_id, axis, target_id)
 	_create_action("GST: warp_%s %s" % [axis, String(layer_id)])
-	_undo_redo.add_do_method(self, "_raw_set_warp", layer_id, axis, target_id)
-	_undo_redo.add_undo_method(self, "_raw_set_warp", layer_id, axis, old_target)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_raw_set_warp.bind(layer_id, axis, target_id))
+	_undo_redo.add_undo_method(_raw_set_warp.bind(layer_id, axis, old_target))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return {"ok": true, "reason": ""}
@@ -324,10 +328,10 @@ func set_output_color(layer_id: StringName) -> Dictionary:
 	var old_value: StringName = _stack.output_color
 	_raw_set_output_color(layer_id)
 	_create_action("GST: output color %s" % String(layer_id))
-	_undo_redo.add_do_method(self, "_raw_set_output_color", layer_id)
-	_undo_redo.add_undo_method(self, "_raw_set_output_color", old_value)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_raw_set_output_color.bind(layer_id))
+	_undo_redo.add_undo_method(_raw_set_output_color.bind(old_value))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return {"ok": true, "reason": ""}
@@ -350,10 +354,10 @@ func set_output_alpha(value: StringName) -> Dictionary:
 	var old_value: StringName = _stack.output_alpha
 	_raw_set_output_alpha(value)
 	_create_action("GST: output alpha %s" % String(value))
-	_undo_redo.add_do_method(self, "_raw_set_output_alpha", value)
-	_undo_redo.add_undo_method(self, "_raw_set_output_alpha", old_value)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_raw_set_output_alpha.bind(value))
+	_undo_redo.add_undo_method(_raw_set_output_alpha.bind(old_value))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return {"ok": true, "reason": ""}
@@ -374,10 +378,10 @@ func set_coord_space(space: GSTStack.CoordSpace) -> Dictionary:
 		return {"ok": true, "reason": ""}
 	_raw_set_coord_space(space)
 	_create_action("GST: coord space %d" % space)
-	_undo_redo.add_do_method(self, "_raw_set_coord_space", space)
-	_undo_redo.add_undo_method(self, "_raw_set_coord_space", old_value)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_raw_set_coord_space.bind(space))
+	_undo_redo.add_undo_method(_raw_set_coord_space.bind(old_value))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return {"ok": true, "reason": ""}
@@ -421,10 +425,10 @@ func add_layer_below_and_wire(anchor_id: StringName, entry_id: String, slot_name
 	_raw_set_slot(anchor_id, slot_name, layer.id)
 
 	_create_action("GST: add %s below %s" % [entry_id, String(anchor_id)])
-	_undo_redo.add_do_method(self, "_redo_add_below", layer, anchor_index, anchor_id, slot_name)
-	_undo_redo.add_undo_method(self, "_undo_add_below", layer.id, anchor_id, slot_name, old_slot_present, old_target)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_redo_add_below.bind(layer, anchor_index, anchor_id, slot_name))
+	_undo_redo.add_undo_method(_undo_add_below.bind(layer.id, anchor_id, slot_name, old_slot_present, old_target))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return {"ok": true, "reason": ""}
@@ -469,10 +473,10 @@ func add_layer_below_and_wire_warp(anchor_id: StringName, entry_id: String, axis
 	GSTStackOps.initialize_inputs_from_immediate_below(_stack, layer.id, _library)
 	_raw_set_warp(anchor_id, axis, layer.id)
 	_create_action("GST: add %s for distortion" % entry_id)
-	_undo_redo.add_do_method(self, "_redo_add_warp", layer, index, anchor_id, axis)
-	_undo_redo.add_undo_method(self, "_undo_add_warp", layer.id, anchor_id, axis, old_target)
-	_undo_redo.add_do_method(self, "_notify")
-	_undo_redo.add_undo_method(self, "_notify")
+	_undo_redo.add_do_method(_redo_add_warp.bind(layer, index, anchor_id, axis))
+	_undo_redo.add_undo_method(_undo_add_warp.bind(layer.id, anchor_id, axis, old_target))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
 	_notify()
 	return {"ok": true, "reason": ""}
@@ -486,3 +490,147 @@ func _redo_add_warp(layer: GSTLayer, index: int, anchor_id: StringName, axis: St
 func _undo_add_warp(layer_id: StringName, anchor_id: StringName, axis: String, old_target: StringName) -> void:
 	_raw_set_warp(anchor_id, axis, old_target)
 	_undo_add(layer_id)
+
+
+## Commits one finished native property gesture (decision superseding 20):
+## gst_inspector_column.gd applies new_value to target directly as the
+## gesture progresses (so the widget and material stay live during a drag),
+## then calls this once the gesture finishes, mutation-first like every
+## other method here. A no-op (the value round-tripped back to old_value)
+## registers nothing. Registers plain Callables, not add_do_property/
+## add_undo_property: those call Resource.emit_changed() on replay, which
+## this file has no watcher for and does not need.
+##
+## old_present is whether target held an explicit params entry for
+## property_name before the gesture began (phase 2 review round 1 fix pass:
+## a target with no method for this, e.g. GSTCoordBlock's real @export
+## fields, is always treated as present). A no-op gesture (final value
+## round-tripped back to old_value) restores that exact absence directly,
+## without registering an action, since gst_inspector_column.gd's own live
+## application during the gesture may already have written an explicit
+## params entry equal to the default. A genuine change whose old value was
+## implicit erases the params entry on undo instead of writing the default
+## back explicitly, so undo reproduces the identical pre-edit serialization.
+##
+## on_replayed, when valid, is bound by the caller to the specific row it
+## owns (by a stable key, not the row/editor Nodes themselves) and runs
+## alongside _on_property_changed on this commit and every later undo/redo,
+## so that one row's own displayed value refreshes (EditorProperty.
+## update_property()) without gst_inspector_column.gd rebuilding any row --
+## rebuilding here would free the very control a live gesture, an open
+## native color popup, or a test still holds a reference to mid-interaction.
+func commit_property_change(target: Object, property_name: StringName, old_value: Variant, new_value: Variant, on_replayed: Callable = Callable(), old_present: bool = true) -> void:
+	if _values_equal(old_value, new_value):
+		if not old_present:
+			_restore_absent_param(target, property_name)
+		return
+	_create_action("GST: edit %s" % property_name)
+	var undo_method: Callable = target.set.bind(property_name, old_value)
+	if not old_present and target.has_method(&"erase_param_value"):
+		undo_method = target.erase_param_value.bind(property_name)
+	_undo_redo.add_do_method(target.set.bind(property_name, new_value))
+	_undo_redo.add_undo_method(undo_method)
+	if on_replayed.is_valid():
+		_undo_redo.add_do_method(on_replayed)
+		_undo_redo.add_undo_method(on_replayed)
+	_undo_redo.add_do_method(_notify_property)
+	_undo_redo.add_undo_method(_notify_property)
+	_undo_redo.commit_action(false)
+	if on_replayed.is_valid():
+		on_replayed.call()
+	_notify_property()
+
+
+## Public so gst_inspector_column.gd can restore an absent params entry
+## directly for a no-op gesture finish, without ever routing that no-op
+## through commit_property_change (which would need a real old/new value
+## pair to register or skip an action).
+static func restore_absent_param(target: Object, property_name: StringName) -> void:
+	_restore_absent_param(target, property_name)
+
+
+static func _restore_absent_param(target: Object, property_name: StringName) -> void:
+	if target.has_method(&"erase_param_value"):
+		target.call(&"erase_param_value", property_name)
+
+
+## Notifies material synchronization for an intermediate (still-active)
+## native property change, without registering any history action (phase 2
+## review round 1 fix pass): a live drag applies its value directly to the
+## resource for immediate visual feedback, but only commit_property_change's
+## own do/undo pair notifies material sync by default, leaving the preview
+## stale until the gesture finishes. gst_inspector_column.gd calls this once
+## per intermediate value while a gesture is active.
+func notify_property_changed() -> void:
+	_notify_property()
+
+
+func _notify_property() -> void:
+	if _on_property_changed.is_valid():
+		_on_property_changed.call()
+
+
+## Public so gst_inspector_column.gd can apply the same no-op definition
+## when deciding whether a finished gesture needs to reach
+## commit_property_change at all.
+static func values_equal(a: Variant, b: Variant) -> bool:
+	return _values_equal(a, b)
+
+
+static func _values_equal(a: Variant, b: Variant) -> bool:
+	if a is float and b is float:
+		return is_equal_approx(a, b)
+	if a is Vector2 and b is Vector2:
+		return (a as Vector2).is_equal_approx(b as Vector2)
+	if a is Vector3 and b is Vector3:
+		return (a as Vector3).is_equal_approx(b as Vector3)
+	if a is Color and b is Color:
+		return (a as Color).is_equal_approx(b as Color)
+	return a == b
+
+
+## Randomizes every slider on the open recipe (decision 16, docs/PLAN.md
+## Phase 8 Build item 3), routed through GSTUndo like every other mutation
+## (phase 2: previously registered directly on the shared
+## EditorUndoRedoManager by gst_main_panel.gd, paired with an explicit
+## _refresh_inspector do/undo call because GSTRandomize.apply's writes were
+## external to whatever EditorProperty widgets the inspector column had
+## already built). commit_action(false)'s do/undo _notify pair now covers
+## that refresh the same way it covers every other GSTUndo action, since
+## _notify already rebuilds the inspector column's rows for the selected
+## layer. `old_changes` mirrors `changes`' shape with each layer's
+## pre-randomize values; `unset_params` records which of those values were
+## implicit defaults (not yet written into layer.params) so undo can erase
+## them again rather than leaving an explicit default that would change the
+## serialized header (decision: absent parameter keys survive undo).
+func apply_randomize(changes: Dictionary, old_changes: Dictionary, unset_params: Dictionary) -> void:
+	GSTRandomize.apply(_stack, changes)
+	_create_action("GST: randomize sliders")
+	_undo_redo.add_do_method(_apply_randomize_changes.bind(changes))
+	_undo_redo.add_undo_method(_undo_randomize_changes.bind(old_changes, unset_params))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
+	_undo_redo.commit_action(false)
+	_notify()
+
+
+func _apply_randomize_changes(changes: Dictionary) -> void:
+	GSTRandomize.apply(_stack, changes)
+
+
+## Restores pre-randomize values and erases any param key that was an
+## implicit default before the randomize action ran (kept as one undo
+## method, paired 1:1 with apply_randomize's own do method, matching every
+## other GSTUndo action's do/undo balance).
+func _undo_randomize_changes(old_changes: Dictionary, unset_params: Dictionary) -> void:
+	GSTRandomize.apply(_stack, old_changes)
+	_restore_unset_params(unset_params)
+
+
+## Explicit defaults change the serialized header even when values match.
+func _restore_unset_params(unset_params: Dictionary) -> void:
+	for layer_id: Variant in unset_params:
+		var layer: GSTLayer = GSTStackOps.find_layer(_stack, StringName(layer_id))
+		if layer != null:
+			for param_name: String in unset_params[layer_id]:
+				layer.params.erase(param_name)

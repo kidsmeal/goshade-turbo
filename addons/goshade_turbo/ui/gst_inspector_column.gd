@@ -2,22 +2,38 @@
 class_name GSTInspectorColumn
 extends VBoxContainer
 
-## Selected-layer controls. Manifest params and coordinates use separate
-## native inspectors; input and distortion references route through GSTUndo.
+## Selected-layer controls. Manifest params and coordinates use standalone
+## native property rows (phase 2, docs/SHADER_TABS_reviewed-plan.md: no
+## embedded EditorInspector remains in this column); input and distortion
+## references route through GSTUndo via picker buttons, unchanged.
+##
+## Each row is built directly with EditorInspector.instantiate_property_editor
+## (a static factory, independent of any EditorInspector container), the same
+## proven mechanism phase 1's tabs_proof used outside a real inspector. This
+## column owns gesture tracking for each row's public EditorSpinSlider
+## descendants (grabbed/ungrabbed/value_focus_entered/value_focus_exited) and
+## the `changing` fallback for controls with no such descendants (native
+## color popups), and finishes each completed gesture through
+## GSTUndo.commit_property_change -- the only path a native edit reaches the
+## stack now (decision superseding 20: edits no longer come free from an
+## embedded inspector's own undo integration).
 
 signal edit_refused(reason: String)
 signal chooser_requested(purpose: String, layer_id: StringName, slot_name: String, initiator: Control)
-## Real EditorInspector-driven param edit (a slider or a GSTCoordBlock
-## field), relayed so GSTMainPanel can resync the preview material.
-## Decision 20 excludes these from GSTUndo entirely, so this signal is the
-## only path a live inspector edit reaches the panel.
-signal param_edited(property: String)
 signal section_state_changed(states: Dictionary)
+## Forwards a real ui_undo/ui_redo keyboard shortcut received while a native
+## color popup holds focus (phase 2 review round 3 finding): Godot's
+## embedded-subwindow forwarding (scene/main/viewport.cpp) claims a focused
+## popup's own key events before gst_main_panel.gd's root-viewport _input()
+## ever runs, so the popup's own Window signals it here instead
+## (_on_color_popup_window_input below), and gst_main_panel.gd connects this
+## straight to its own _apply_keyboard_undo_redo.
+signal color_popup_undo_redo_requested(redo: bool)
 
 var _scroll: ScrollContainer = null
 var _sections: VBoxContainer = null
-var _parameter_inspector: EditorInspector = null
-var _coord_inspector: EditorInspector = null
+var _parameter_rows_box: VBoxContainer = null
+var _coord_rows_box: VBoxContainer = null
 var _inputs_box: VBoxContainer = null
 var _warp_box: VBoxContainer = null
 var _slot_picker: GSTPicker = null
@@ -32,7 +48,11 @@ var _undo: GSTUndo = null
 var _layer: GSTLayer = null
 var _mutations_blocked: bool = false
 var _refusals: Dictionary = {}
-var _context_histories: Array[UndoRedo] = []
+## key (see _row_key) -> {"editor": EditorProperty, "target": Object,
+## "property": StringName, "state": Dictionary}. Rebuilt wholesale on every
+## edit(); a row's state never survives its own rebuild, matching the prior
+## embedded-EditorInspector behavior of rebinding fresh widgets per edit().
+var _property_rows: Dictionary = {}
 
 
 func _ready() -> void:
@@ -50,21 +70,15 @@ func _ready() -> void:
 	_inputs_box = inputs["content"] as VBoxContainer
 
 	var parameters: Dictionary = _build_section("parameters", "Parameters")
-	_parameter_inspector = EditorInspector.new()
-	_parameter_inspector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_parameter_inspector.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_parameter_inspector.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_parameter_inspector.property_edited.connect(_on_property_edited)
-	(parameters["content"] as VBoxContainer).add_child(_parameter_inspector)
+	_parameter_rows_box = VBoxContainer.new()
+	_parameter_rows_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	(parameters["content"] as VBoxContainer).add_child(_parameter_rows_box)
 
 	var position: Dictionary = _build_section("position", "Position and movement")
 	var position_content: VBoxContainer = position["content"] as VBoxContainer
-	_coord_inspector = EditorInspector.new()
-	_coord_inspector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_coord_inspector.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_coord_inspector.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_coord_inspector.property_edited.connect(_on_property_edited)
-	position_content.add_child(_coord_inspector)
+	_coord_rows_box = VBoxContainer.new()
+	_coord_rows_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	position_content.add_child(_coord_rows_box)
 	_warp_box = VBoxContainer.new()
 	_warp_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	position_content.add_child(_warp_box)
@@ -122,72 +136,467 @@ func setup(stack: GSTStack, library: GSTLibrary, undo: GSTUndo) -> void:
 
 
 ## Points the inspector at layer_id's GSTLayer. An empty id clears the
-## column (nothing selected).
+## column (nothing selected). Finishes any pending native gesture and closes
+## an open native color popup on the previous layer before rebinding (decision
+## superseding 20: a rebind must never leave a pending edit stranded on a row
+## about to be freed).
 func edit(layer_id: StringName) -> void:
-	_unwatch_context_histories()
-	if _layer != null and _layer.coord != null and _layer.coord.changed.is_connected(_on_coord_changed):
-		_layer.coord.changed.disconnect(_on_coord_changed)
+	await finish_pending_edits()
 	_layer = GSTStackOps.find_layer(_stack, layer_id)
 	_prune_refusals()
 	if _layer != null:
 		_layer.manifest = _library.get_entry(_layer.entry)
-	_parameter_inspector.edit(_layer)
-	_coord_inspector.edit(_layer.coord if _layer != null else null)
-	_schedule_inspector_layout_update(_parameter_inspector)
-	_schedule_inspector_layout_update(_coord_inspector)
-	if _layer != null and _layer.coord != null:
-		_layer.coord.changed.connect(_on_coord_changed)
-	if _layer != null:
-		_watch_context_history(_layer)
-		if _layer.coord != null:
-			_watch_context_history(_layer.coord)
+	_rebuild_parameter_rows()
+	_rebuild_coord_rows()
 	_rebuild_slots()
+	_schedule_rows_layout_update(_parameter_rows_box)
+	_schedule_rows_layout_update(_coord_rows_box)
 	_schedule_context_update()
 
 
-## Resource.changed remains a secondary relay for coordinate changes outside
-## the native EditorInspector.property_edited path.
-func _on_coord_changed() -> void:
+## Before rebind, Save/Save As, shutdown save, or undo/redo, finishes any
+## active numeric gesture and closes any open native color popup, so the
+## pending value reaches its original target before the caller continues
+## (decision superseding 20; phase 1 tabs_proof "forced_finish_ordering").
+## Flushes any pending numeric text first (phase 2 review round 1 fix pass):
+## Godot evaluates a typed EditorSpinSlider value only on its internal
+## LineEdit's own focus exit, so a cached "final" value can omit a typed
+## value that was never submitted; releasing that focus here delivers it
+## through the row's own value_focus_exited path (already wired below)
+## before this function's own commit loop reads state["final"].
+func finish_pending_edits() -> void:
+	for entry: Variant in _property_rows.values().duplicate():
+		if bool((entry["state"] as Dictionary)["active"]):
+			_flush_pending_row_text(entry)
+	# An active color-popup row is excluded here and left to
+	# _force_close_color_popups below: its true final value is only known
+	# once the popup's own close handler has actually run (deferred), so
+	# committing it early from whatever state["final"] holds mid-interaction
+	# would race that handler's own unconditional restore-then-conditional-
+	# commit write.
+	var active_keys: Array = []
+	for key: String in _property_rows.keys():
+		var state: Dictionary = _property_rows[key]["state"]
+		if bool(state["active"]) and String(state["boundary"]) != "color_popup":
+			active_keys.append(key)
+	for key: String in active_keys:
+		var entry: Variant = _property_rows.get(key)
+		if entry == null:
+			continue
+		var state: Dictionary = entry["state"]
+		if bool(state["active"]):
+			_commit_row(key, state["original"], state["final"], bool(state["original_present"]))
+	await _force_close_color_popups()
+
+
+## Releases focus of a row's own numeric text-entry LineEdit, if one is
+## currently focused, so Godot commits its typed value synchronously (via
+## the row's own value_focus_exited connection) instead of leaving it
+## pending. A no-op when the row holds no such focused control.
+func _flush_pending_row_text(entry: Dictionary) -> void:
+	var editor: EditorProperty = entry["editor"] as EditorProperty
+	if editor == null or not is_instance_valid(editor):
+		return
+	var line_edit: LineEdit = _find_focused_line_edit(editor)
+	if line_edit != null:
+		line_edit.release_focus()
+
+
+static func _find_focused_line_edit(node: Node) -> LineEdit:
+	if node is LineEdit and (node as LineEdit).has_focus():
+		return node as LineEdit
+	for child: Node in node.get_children():
+		var found: LineEdit = _find_focused_line_edit(child)
+		if found != null:
+			return found
+	return null
+
+
+## Force-finishes every row whose native color popup is open or whose close
+## has been triggered but has not yet delivered its final value: closing the
+## popup here only starts that delivery, since EditorPropertyColor connects
+## its own close handler CONNECT_DEFERRED (phase 2 review round 2 fix pass).
+## Waits for each such row's own gesture state to clear (set by
+## _finish_color_popup, itself driven by the popup's own popup_closed
+## signal) before returning, so a caller awaiting this is never handed
+## control back with a pending native color edit still in flight.
+func _force_close_color_popups() -> void:
+	for key: String in _property_rows.keys().duplicate():
+		var entry: Variant = _property_rows.get(key)
+		if entry == null:
+			continue
+		var state: Dictionary = entry["state"]
+		if not bool(state["active"]) or String(state["boundary"]) != "color_popup":
+			continue
+		var editor: EditorProperty = entry["editor"] as EditorProperty
+		var button: ColorPickerButton = _find_color_button(editor) if editor != null and is_instance_valid(editor) else null
+		if button != null and is_instance_valid(button) and button.get_popup().visible:
+			var picker: ColorPicker = button.get_picker()
+			var focused: Control = picker.get_viewport().gui_get_focus_owner()
+			if focused is LineEdit and picker.is_ancestor_of(focused):
+				focused.release_focus()
+				await get_tree().process_frame
+			if is_instance_valid(button) and button.get_popup().visible:
+				button.get_popup().hide()
+		await _await_row_inactive(state)
+
+
+## Bounded wait for state["active"] to clear, since the deferred handler that
+## clears it (_finish_color_popup, via commit) runs on a later idle-frame
+## flush rather than synchronously with hide() above.
+func _await_row_inactive(state: Dictionary) -> void:
+	var attempts: int = 0
+	while bool(state["active"]) and attempts < 10:
+		attempts += 1
+		await get_tree().process_frame
+
+
+## True if focus is inside a currently open native color popup this column
+## owns. Wired-by: gst_main_panel.gd's keyboard Undo/Redo scoping, so a
+## popup counts as GoShade focus even though a Popup's own Window sits
+## outside this column's Control ancestry.
+func owns_popup_focus(focus: Control) -> bool:
+	if focus == null:
+		return false
+	for entry: Dictionary in _property_rows.values():
+		var button: ColorPickerButton = _find_color_button(entry["editor"] as Node)
+		if button != null and button.get_popup().visible and button.get_popup().is_ancestor_of(focus):
+			return true
+	return false
+
+
+static func _find_color_button(node: Node) -> ColorPickerButton:
+	if node is ColorPickerButton:
+		return node as ColorPickerButton
+	for child: Node in node.get_children():
+		var found: ColorPickerButton = _find_color_button(child)
+		if found != null:
+			return found
+	return null
+
+
+## Manifest params (get_param_schema-backed dynamic properties). Skips
+## anything the layer's own _validate_property hid from the editor.
+func _rebuild_parameter_rows() -> void:
+	_clear_rows(_parameter_rows_box)
+	if _layer == null:
+		return
+	for property: Dictionary in _layer.get_property_list():
+		if int(property.get("usage", 0)) & PROPERTY_USAGE_EDITOR == 0:
+			continue
+		var property_name: StringName = StringName(property["name"])
+		var metadata: Dictionary = _layer.get_param_schema(property_name)
+		if metadata.is_empty():
+			continue
+		_build_property_row(_parameter_rows_box, "param", _layer, property, String(metadata["label"]), String(metadata["description"]))
+
+
+## Coord block whitelist (scale/offset/rotation/scroll/warp_strength).
+## warp_x/warp_y stay button-based rows in _warp_box (_rebuild_slots), never
+## native property rows: GSTCoordBlock._validate_property already strips
+## their editor usage.
+func _rebuild_coord_rows() -> void:
+	_clear_rows(_coord_rows_box)
+	if _layer == null or _layer.coord == null:
+		return
+	var coord: GSTCoordBlock = _layer.coord
+	for property: Dictionary in coord.get_property_list():
+		if int(property.get("usage", 0)) & PROPERTY_USAGE_EDITOR == 0:
+			continue
+		var property_name: StringName = StringName(property["name"])
+		var metadata: Dictionary = GSTCoordBlock.get_editor_metadata(property_name)
+		if metadata.is_empty():
+			continue
+		_build_property_row(_coord_rows_box, "coord", coord, property, String(metadata["label"]), String(metadata["description"]))
+
+
+func _clear_rows(box: VBoxContainer) -> void:
+	for key: String in _property_rows.keys().duplicate():
+		if (_property_rows[key]["row"] as Node).get_parent() == box:
+			_property_rows.erase(key)
+	for child: Node in box.get_children():
+		child.queue_free()
+
+
+func _build_property_row(box: VBoxContainer, kind: String, target: Object, property: Dictionary, label: String, description: String) -> void:
+	var hint: PropertyHint = int(property.get("hint", PROPERTY_HINT_NONE))
+	var editor: EditorProperty = EditorInspector.instantiate_property_editor(target, int(property.get("type", TYPE_NIL)), String(property["name"]), hint, String(property.get("hint_string", "")), int(property.get("usage", PROPERTY_USAGE_DEFAULT)), false)
+	if editor == null:
+		return
+	var property_name: StringName = StringName(property["name"])
+	editor.set_object_and_property(target, property_name)
+	editor.set_label(label)
+	editor.set_tooltip_text(description)
+	editor.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	editor.update_property()
+	var row: VBoxContainer = VBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(editor)
+	if (kind == "coord" and property_name in [&"warp_strength", &"offset", &"scroll", &"rotation"]) or (kind == "param" and property_name in [&"gain", &"edge0", &"edge1"]):
+		var context: Label = Label.new()
+		context.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		context.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		context.hide()
+		editor.set_meta(&"gst_context_label", context)
+		row.add_child(context)
+	box.add_child(row)
+
+	var key: String = _row_key(target, property_name)
+	var state: Dictionary = {"original": target.get(property_name), "final": target.get(property_name), "active": false, "boundary": "", "original_present": _param_present(target, property_name)}
+	_property_rows[key] = {"row": row, "editor": editor, "target": target, "property": property_name, "state": state}
+	editor.property_changed.connect(_on_bound_property_changed.bind(key))
+	for spin_node: Node in editor.find_children("*", "EditorSpinSlider", true, false):
+		var spin: EditorSpinSlider = spin_node as EditorSpinSlider
+		spin.grabbed.connect(_begin_native_interaction.bind(key, "grabbed"))
+		spin.ungrabbed.connect(_finish_native_interaction.bind(key, "ungrabbed"))
+		spin.value_focus_entered.connect(_begin_native_interaction.bind(key, "value_focus_entered"))
+		spin.value_focus_exited.connect(_finish_native_interaction.bind(key, "value_focus_exited"))
+	# EditorPropertyColor's own C++ implementation never reports live preview
+	# through property_changed (ColorPicker.color_changed writes the edited
+	# object directly, bypassing emit_changed), and its close handler writes
+	# the pre-popup color back onto the edited object unconditionally before
+	# conditionally emitting the final change -- so old_present read at that
+	# point would already see a key that write just created. This row's own
+	# lifecycle hooks below capture original/original_present at popup-open,
+	# forward every live preview write to material sync, and finish once the
+	# popup's own close signal (button.popup_closed) has actually run.
+	var color_button: ColorPickerButton = _find_color_button(editor)
+	if color_button != null:
+		color_button.get_popup().about_to_popup.connect(_begin_native_interaction.bind(key, "color_popup"))
+		color_button.color_changed.connect(_on_color_live_changed.bind(key))
+		color_button.popup_closed.connect(_finish_color_popup.bind(key), CONNECT_DEFERRED)
+		color_button.get_popup().window_input.connect(_on_color_popup_window_input.bind(color_button.get_popup()))
+
+
+func _row_key(target: Object, property_name: StringName) -> String:
+	return "%d:%s" % [target.get_instance_id(), String(property_name)]
+
+
+## Native property_changed(property, value, field, changing) (phase 1
+## evidence): an EditorSpinSlider-backed row's grabbed/ungrabbed/
+## value_focus_entered/value_focus_exited pair (below) is the authoritative
+## gesture boundary; a control with none of those (a native color popup)
+## falls back to the changing flag itself, which for EditorPropertyColor
+## already carries a real live-preview/final-commit boundary.
+func _on_bound_property_changed(property: StringName, value: Variant, field: StringName, changing: bool, key: String) -> void:
+	var entry: Variant = _property_rows.get(key)
+	if entry == null:
+		return
+	var state: Dictionary = entry["state"]
+	var target: Object = entry["target"]
+	var property_name: StringName = entry["property"]
+	if property != property_name:
+		return
+	var new_value: Variant = _merge_component_value(target.get(property_name), value, field)
+	if bool(state["active"]):
+		target.set(property_name, new_value)
+		state["final"] = new_value
+		(entry["editor"] as EditorProperty).update_property()
+		# Live preview during an in-progress gesture (phase 2 review round 1
+		# fix pass): syncs the material and contextual read-only hints for
+		# every intermediate value without rebuilding this or any other row
+		# and without registering a history action -- only the eventual
+		# finish (below) does that.
+		if _undo != null:
+			_undo.notify_property_changed()
+		_schedule_context_update()
+		if not changing and String(state["boundary"]) == "changing":
+			_finish_native_interaction(key, "changing_false")
+		return
+	if changing:
+		_begin_native_interaction(key, "changing")
+		target.set(property_name, new_value)
+		state["final"] = new_value
+		if _undo != null:
+			_undo.notify_property_changed()
+		_schedule_context_update()
+		return
+	var old_present: bool = _param_present(target, property_name)
+	_commit_row(key, target.get(property_name), new_value, old_present)
+
+
+func _merge_component_value(current: Variant, value: Variant, field: StringName) -> Variant:
+	if current is Vector2 and field != &"":
+		var vector: Vector2 = current as Vector2
+		if field == &"x":
+			vector.x = value.x if value is Vector2 else value
+		elif field == &"y":
+			vector.y = value.y if value is Vector2 else value
+		return vector
+	if current is Vector3 and field != &"":
+		var vector3: Vector3 = current as Vector3
+		if field == &"x":
+			vector3.x = value.x if value is Vector3 else value
+		elif field == &"y":
+			vector3.y = value.y if value is Vector3 else value
+		elif field == &"z":
+			vector3.z = value.z if value is Vector3 else value
+		return vector3
+	return value
+
+
+## First begin captures the exact pre-gesture value; a later begin during the
+## same interaction retains it (decision superseding 20).
+func _begin_native_interaction(key: String, boundary: String) -> void:
+	var entry: Variant = _property_rows.get(key)
+	if entry == null:
+		return
+	var state: Dictionary = entry["state"]
+	if bool(state["active"]):
+		return
+	var target: Object = entry["target"]
+	var property_name: StringName = entry["property"]
+	state["original"] = target.get(property_name)
+	state["original_present"] = _param_present(target, property_name)
+	state["final"] = state["original"]
+	state["active"] = true
+	state["boundary"] = boundary
+
+
+func _finish_native_interaction(key: String, _boundary: String) -> void:
+	var entry: Variant = _property_rows.get(key)
+	if entry == null:
+		return
+	var state: Dictionary = entry["state"]
+	if not bool(state["active"]):
+		return
+	_commit_row(key, state["original"], state["final"], bool(state["original_present"]))
+
+
+## A native color popup's own live preview (ColorPicker.color_changed,
+## re-emitted by ColorPickerButton) writes the edited object directly,
+## bypassing EditorProperty.property_changed entirely, so it never reaches
+## _on_bound_property_changed. Forwards the resulting live value to material
+## sync/context the same way an active numeric gesture's intermediate value
+## does, without registering any history action.
+func _on_color_live_changed(_color: Color, key: String) -> void:
+	var entry: Variant = _property_rows.get(key)
+	if entry == null:
+		return
+	var state: Dictionary = entry["state"]
+	if not bool(state["active"]):
+		return
+	var target: Object = entry["target"]
+	var property_name: StringName = entry["property"]
+	state["final"] = target.get(property_name)
+	if _undo != null:
+		_undo.notify_property_changed()
 	_schedule_context_update()
-	param_edited.emit("coord")
 
 
-func _on_property_edited(property: String) -> void:
-	_schedule_context_update()
-	param_edited.emit(property)
+## Runs once button.popup_closed fires (connected CONNECT_DEFERRED, after
+## EditorPropertyColor's own deferred close handler has already run its
+## unconditional restore-to-pre-popup write and its conditional final
+## property_changed emission), so state["final"] reflects whichever of those
+## actually happened before this commits.
+func _finish_color_popup(key: String) -> void:
+	_finish_native_interaction(key, "popup_closed")
 
 
-func _exit_tree() -> void:
-	_unwatch_context_histories()
+## Window.window_input fires on the popup's own Window before that Window's
+## normal GUI input dispatch runs (Window::_window_input emits this signal,
+## then calls push_input() itself, per scene/main/window.cpp) -- earlier than
+## any Control inside it, including the hex ColorPicker's own LineEdit, could
+## consume a Ctrl+Z as its own built-in text-undo. Consumes the event with
+## set_input_as_handled() on the popup itself (a Window is a Viewport) before
+## any await, per the phase 2 review round 3 fix pass, then emits
+## color_popup_undo_redo_requested so gst_main_panel.gd can finish this
+## pending color edit and run GoShade's own standalone-history undo/redo --
+## the root viewport's own _input() never sees this event at all while the
+## popup holds focus (embedded-subwindow forwarding, scene/main/viewport.cpp).
+func _on_color_popup_window_input(event: InputEvent, popup: Window) -> void:
+	if not event is InputEventKey:
+		return
+	var redo: bool
+	if event.is_action_pressed(&"ui_redo"):
+		redo = true
+	elif event.is_action_pressed(&"ui_undo"):
+		redo = false
+	else:
+		return
+	popup.set_input_as_handled()
+	color_popup_undo_redo_requested.emit(redo)
 
 
-func _watch_context_history(object: Object) -> void:
-	var manager: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
-	var history: UndoRedo = manager.get_history_undo_redo(manager.get_object_history_id(object))
-	if history != null and history not in _context_histories:
-		_context_histories.append(history)
-		history.version_changed.connect(_schedule_context_update)
+## True if target currently holds an explicit stored entry for property_name
+## rather than an implicit manifest default (GSTLayer.has_param_value); a
+## target with no such concept (GSTCoordBlock's real @export fields) is
+## always present.
+static func _param_present(target: Object, property_name: StringName) -> bool:
+	if target.has_method(&"has_param_value"):
+		return bool(target.call(&"has_param_value", property_name))
+	return true
 
 
-func _unwatch_context_histories() -> void:
-	for history: UndoRedo in _context_histories:
-		if history.version_changed.is_connected(_schedule_context_update):
-			history.version_changed.disconnect(_schedule_context_update)
-	_context_histories.clear()
+## Registers one mutation-first action only when final content differs
+## (old_present-aware no-op guard below); resets gesture state so the next
+## begin captures a fresh original value. Passes _refresh_row bound to this
+## row's own stable key (never the row/editor Nodes themselves) as
+## commit_property_change's on_replayed callback, so this row's own value
+## refreshes on every later undo/redo of the action without any row ever
+## being rebuilt.
+##
+## old_present is the presence of property_name's explicit params entry
+## before this gesture began; a no-op finish (final value round-tripped back
+## to old_value, by GSTUndo.values_equal's approximate comparison) restores
+## the exact original content instead of leaving whatever a live intermediate
+## write already applied: an explicit key present before restores old_value
+## itself (values_equal is approximate, so the live-written value can differ
+## from old_value in its low bits even though it reads as unchanged), and an
+## absent key restores that exact absence (phase 2 review round 2 fix pass;
+## round 1 only handled the absent case).
+func _commit_row(key: String, old_value: Variant, new_value: Variant, old_present: bool) -> void:
+	var entry: Variant = _property_rows.get(key)
+	if entry == null:
+		return
+	var state: Dictionary = entry["state"]
+	var target: Object = entry["target"]
+	var property_name: StringName = entry["property"]
+	state["active"] = false
+	state["boundary"] = ""
+	if GSTUndo.values_equal(old_value, new_value):
+		if old_present:
+			target.set(property_name, old_value)
+		else:
+			GSTUndo.restore_absent_param(target, property_name)
+		state["final"] = target.get(property_name)
+		state["original_present"] = _param_present(target, property_name)
+		_refresh_row(key)
+		return
+	target.set(property_name, new_value)
+	state["final"] = new_value
+	state["original_present"] = true
+	if _undo != null:
+		_undo.commit_property_change(target, property_name, old_value, new_value, _refresh_row.bind(key), old_present)
+	else:
+		_refresh_row(key)
 
 
-func _schedule_context_update() -> void:
-	if is_inside_tree() and not get_tree().process_frame.is_connected(_update_control_context):
-		get_tree().process_frame.connect(_update_control_context, CONNECT_ONE_SHOT)
-
-
-## Wired-by: GSTInspectorPlugin when a contextual row enters the inspector.
-func refresh_control_context() -> void:
+## Refreshes one row's displayed value and the shared context hints without
+## rebuilding any row (decision superseding 20). Bound by key so a later
+## rebuild (a structural edit, a layer switch) that has already freed this
+## row safely no-ops here instead of touching a stale Node.
+func _refresh_row(key: String) -> void:
+	var entry: Variant = _property_rows.get(key)
+	if entry == null:
+		return
+	var editor: EditorProperty = entry["editor"] as EditorProperty
+	if editor != null and is_instance_valid(editor):
+		editor.update_property()
 	_schedule_context_update()
 
 
 ## These explanations depend on exact function inputs, not sampled pixels.
 ## Read-only state belongs to native widgets and never changes the resource.
+## Triggered directly after building rows and after every finished edit
+## (decision superseding 20's tree_entered relay, no longer needed now that
+## rows are built synchronously by this file, not by an EditorInspectorPlugin
+## parsing an embedded EditorInspector).
+func _schedule_context_update() -> void:
+	if is_inside_tree() and not get_tree().process_frame.is_connected(_update_control_context):
+		get_tree().process_frame.connect(_update_control_context, CONNECT_ONE_SHOT)
+
+
 func _update_control_context() -> void:
 	if _layer == null:
 		return
@@ -232,16 +641,16 @@ func _set_control_context(property: EditorProperty, text: String, inactive: bool
 		label.visible = not text.is_empty()
 
 
-func _schedule_inspector_layout_update(inspector: EditorInspector) -> void:
-	var callback: Callable = _update_inspector_layout.bind(inspector)
+func _schedule_rows_layout_update(box: VBoxContainer) -> void:
+	var callback: Callable = _update_rows_layout.bind(box)
 	if not get_tree().process_frame.is_connected(callback):
 		get_tree().process_frame.connect(callback, CONNECT_ONE_SHOT)
 
 
-func _update_inspector_layout(inspector: EditorInspector) -> void:
+func _update_rows_layout(box: VBoxContainer) -> void:
 	var scale: float = EditorInterface.get_editor_scale()
-	var inspector_minimum: float = 0.0
-	for node: Node in inspector.find_children("*", "EditorProperty", true, false):
+	var box_minimum: float = 0.0
+	for node: Node in box.find_children("*", "EditorProperty", true, false):
 		var property: EditorProperty = node as EditorProperty
 		var font: Font = property.get_theme_font(&"font", &"Tree")
 		var font_size: int = property.get_theme_font_size(&"font_size", &"Tree")
@@ -255,15 +664,15 @@ func _update_inspector_layout(inspector: EditorInspector) -> void:
 		var reload_allowance: float = reload_icon.get_width() + half_padding + float(property.get_theme_constant(&"h_separation", &"Tree"))
 		var padded_label_width: float = label_width + font_offset + reload_allowance
 		var child_minimum: float = property.get_combined_minimum_size().x
-		inspector_minimum = maxf(inspector_minimum, maxf(
+		box_minimum = maxf(box_minimum, maxf(
 			(padded_label_width + editor_padding) / split_ratio,
 			padded_label_width + editor_padding + child_minimum,
 		))
-	inspector.set_meta(&"gst_measured_minimum_width", ceilf(inspector_minimum))
-	var inspector_content_width: float = maxf(float(_parameter_inspector.get_meta(&"gst_measured_minimum_width", 0.0)), float(_coord_inspector.get_meta(&"gst_measured_minimum_width", 0.0)))
+	box.set_meta(&"gst_measured_minimum_width", ceilf(box_minimum))
+	var content_width: float = maxf(float(_parameter_rows_box.get_meta(&"gst_measured_minimum_width", 0.0)), float(_coord_rows_box.get_meta(&"gst_measured_minimum_width", 0.0)))
 	var scrollbar_width: float = _scroll.get_v_scroll_bar().get_combined_minimum_size().x
 	var scroll_panel_width: float = _scroll.get_theme_stylebox(&"panel").get_minimum_size().x
-	custom_minimum_size.x = inspector_content_width + scrollbar_width + scroll_panel_width
+	custom_minimum_size.x = content_width + scrollbar_width + scroll_panel_width
 
 
 func _rebuild_slots() -> void:
@@ -446,38 +855,23 @@ func _reference_text(reference_id: StringName) -> String:
 	return "l%s %s" % [String(reference.id), function_name]
 
 
-## External writes such as Randomize do not refresh built EditorProperty
-## widgets. Re-edit both objects because EditorInspector has no refresh API.
-## Wired-by: gst_main_panel.gd's _refresh_inspector (registered as a do/undo
-## method on the randomize action, bracketing GSTRandomize.apply).
-func refresh() -> void:
-	if _layer == null:
-		return
-	_parameter_inspector.edit(null)
-	_parameter_inspector.edit(_layer)
-	_coord_inspector.edit(null)
-	_coord_inspector.edit(_layer.coord)
-	_schedule_inspector_layout_update(_parameter_inspector)
-	_schedule_inspector_layout_update(_coord_inspector)
-	_schedule_context_update()
-
-
-## The object the underlying EditorInspector currently edits, so callers can
-## confirm it still points at a specific GSTLayer instance after an undo
-## restores that layer (phase 4 fix pass 3, item 2).
+## The layer this column currently edits, so callers can confirm it still
+## points at a specific GSTLayer instance after an undo restores that layer
+## (phase 4 fix pass 3, item 2). Every row is always freshly bound to this
+## same instance (or its .coord) on each edit(), so this is authoritative.
 ## Wired-by: none (editor smoke seam)
 func get_edited_object() -> Object:
-	return _parameter_inspector.get_edited_object()
+	return _layer
 
 
 ## Wired-by: gst_editor_ui_labels_smoke.gd and ui_layout smoke.
-func get_parameter_inspector() -> EditorInspector:
-	return _parameter_inspector
+func get_parameter_inspector() -> VBoxContainer:
+	return _parameter_rows_box
 
 
 ## Wired-by: gst_editor_ui_labels_smoke.gd and ui_layout smoke.
-func get_coord_inspector() -> EditorInspector:
-	return _coord_inspector
+func get_coord_inspector() -> VBoxContainer:
+	return _coord_rows_box
 
 
 ## Wired-by: gst_editor_ui_layout_smoke.gd.
@@ -489,14 +883,14 @@ func get_settings_scroll() -> ScrollContainer:
 ## emit_changed() path and inspect the displayed value.
 ## Wired-by: none (editor smoke seam)
 func find_editor_property(property_name: StringName, edited_object: Object) -> EditorProperty:
-	return find_editor_property_in(_parameter_inspector, property_name, edited_object)
+	return find_editor_property_in(_parameter_rows_box, property_name, edited_object)
 
 
 ## Wired-by: gst_editor_ui_labels_smoke.gd.
 func find_coord_editor_property(property_name: StringName) -> EditorProperty:
 	if _layer == null or _layer.coord == null:
 		return null
-	return find_editor_property_in(_coord_inspector, property_name, _layer.coord)
+	return find_editor_property_in(_coord_rows_box, property_name, _layer.coord)
 
 
 ## Static so editor smoke can inspect any native EditorInspector tree.

@@ -21,7 +21,7 @@ Last touched: 2026-09-10
 
 Next physical action:
 
-- [ ] Phase 1 review round 5 PASS-WITH-NOTES (deferred note logged); commit gate open, waiting for user go on the compound commit
+- [ ] Phase 1 committed 979e835 and pushed; next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 2 (session documents, per-document UndoRedo) when you say go
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

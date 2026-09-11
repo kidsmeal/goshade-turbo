@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9f765a96026d938e415ae85be1e66eb0a24fa25e -->
 
 ### 2026-09-10
+- Shader tabs phase 2: route stack edits through a panel-owned UndoRedo with native property rows
 - Shader tabs phase 1: prove per-document UndoRedo, native gestures, and confirmed-quit recovery on Godot 4.4
 - Add sandbox/vortex: GPUParticles2D metaball vortex scene on the portal export `6f32f14`
 - Add fieldops/ratchet and generative/clock, file session ideas (content) `00e8128`

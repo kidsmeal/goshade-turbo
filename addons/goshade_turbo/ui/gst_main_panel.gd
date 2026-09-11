@@ -13,29 +13,20 @@ extends VBoxContainer
 ## invocation-local codegen-error excursion), can re-emit it to force a
 ## resync (docs/PLAN.md Phase 5 Files, tests/gst_editor_smoke.gd item 8).
 ##
-## Phase 5 material sync (decision 7, GSTMaterialSync) resyncs on five
-## triggers: (1) stack_changed, self-connected here, covering every GSTUndo
-## structural edit plus any caller-forced re-emission; (2)
-## gst_inspector_column.gd's param_edited signal, the direct relay of a real
-## EditorInspector-driven property edit (a slider via EditorInspector's own
-## property_edited, or a GSTCoordBlock field via GSTCoordBlock.changed) --
-## decision 20's "slider edits come free from the inspector" never goes
-## through GSTUndo at all, so this relay is the only path such an edit
-## reaches the preview (fix pass 2, item 1: the shared
-## EditorUndoRedoManager history's version_changed signal alone is not
-## sufficient here, since a real inspector-driven create_action() call binds
-## to whatever object the editor's undo manager currently treats as context,
-## not necessarily this stack's own history bucket -- only a
-## GSTUndo-authored action or a caller that explicitly passes
-## custom_context = the stack is guaranteed to land there); (3) that same
-## version_changed signal, kept for undo/redo replay of a property edit,
-## which sets the value straight through Object.set() and fires neither
-## property_edited nor Resource.changed; (4) diagnostic preview changes;
-## (5) a preset or preview-image change. A sixth path,
-## GSTPreview.target_rect_changed (an editor-window or splitter resize), does
-## not run this full resync: it writes only gst_rect_size via
-## GSTMaterialSync.write_rect_size, since it can fire once per frame during a
-## drag (B5).
+## Material sync (decision 7, GSTMaterialSync) resyncs on three triggers now
+## that phase 2 (docs/SHADER_TABS_reviewed-plan.md) routes every stack
+## mutation -- structural edits, coord-space edits, Randomize, and native
+## property edits alike -- through GSTUndo into one standalone UndoRedo:
+## (1) stack_changed, self-connected here, fired by GSTUndo's own bound
+## _notify/_notify_replace do/undo pair on every initial edit, undo, and
+## redo, covering every mutation this panel makes without needing a separate
+## history-version watcher (decision superseding 20: an embedded
+## EditorInspector's own automatic undo integration no longer exists, so
+## there is no gap to cover); (2) diagnostic preview changes; (3) a preset or
+## preview-image change. A fourth path, GSTPreview.target_rect_changed (an
+## editor-window or splitter resize), does not run this full resync: it
+## writes only gst_rect_size via GSTMaterialSync.write_rect_size, since it
+## can fire once per frame during a drag (B5).
 
 signal stack_changed
 
@@ -86,28 +77,20 @@ const FILE_REOPEN_SHADER: int = 3
 
 var _stack: GSTStack = null
 var _library: GSTLibrary = null
-var _undo_redo: EditorUndoRedoManager = null
+## This interim phase (docs/SHADER_TABS_reviewed-plan.md phase 2) gives the
+## whole panel one standalone UndoRedo, shared across New/Open/Reopen/Recipe
+## the same way the prior EditorUndoRedoManager history was; phase 3 moves
+## ownership of a UndoRedo instance onto each GSTDocument instead. A
+## standalone UndoRedo has exactly one history bucket, so unlike the prior
+## EditorUndoRedoManager there is no custom_context/get_object_history_id
+## routing concern: every GSTUndo action and every "Replace stack"/Randomize
+## action below always lands in this same instance.
+var _undo_redo: UndoRedo = UndoRedo.new()
 var _undo: GSTUndo = null
-## A dedicated, never-persisted, never-installed Resource used only as
-## EditorUndoRedoManager's custom_context for "Replace stack" actions and for
-## resolving the watched history (docs/PLAN.md Phase 7 finding): a GSTStack
-## loaded from a real res:// path -- as GSTStackIO.load produces for Open,
-## Reopen Shader, and open_recipe -- routes to a different
-## EditorUndoRedoManager history bucket than a bare, path-less
-## GSTStack.new() does on 4.6.2 (empirically verified: chaining
-## open_recipe -> New -> build -> undo-to-end -> redo-to-end left the panel's
-## material on the prior recipe's codegen, because the New action's
-## custom_context was old_stack, the just-loaded path-bearing recipe stack,
-## which landed outside the bucket _get_history() resolved and drove). This
-## anchor is always a bare, path-less Resource, so replace_stack's own action
-## and _get_history()'s lookup both stay in the one shared bucket regardless
-## of what was opened in between.
-var _history_context: Resource = Resource.new()
 var _preview_sync: GSTMaterialSync = GSTMaterialSync.new()
 var _material: ShaderMaterial = _preview_sync.get_material()
 var _preview_layer_id: StringName = &""
 var _start_recipe_buttons: Dictionary = {}
-var _watched_history: UndoRedo = null
 ## Guards _coord_space_option.select() calls made to reflect stack state from
 ## re-triggering _on_coord_space_selected (mirrors gst_output_block.gd's own
 ## _syncing guard for the same reason).
@@ -167,6 +150,7 @@ func _ready() -> void:
 	resized.connect(_on_editing_area_resized)
 	_editing_tabs.tab_changed.connect(_on_editing_tab_changed)
 	_inspector_column.section_state_changed.connect(_on_section_state_changed)
+	_inspector_column.color_popup_undo_redo_requested.connect(_apply_keyboard_undo_redo)
 	_library = GSTLibrary.new()
 	_library.scan()
 	_stack = GSTStack.new()
@@ -177,7 +161,6 @@ func _ready() -> void:
 	_picker.choice_requested.connect(_on_picker_choice)
 	_picker.cancelled.connect(_close_picker)
 	_picker.tab_changed.connect(_on_picker_tab_changed)
-	_inspector_column.param_edited.connect(_on_param_edited)
 	stack_changed.connect(_resync_material)
 
 	# _resync_material runs before the material is ever handed to the preview
@@ -191,10 +174,9 @@ func _ready() -> void:
 	# never green, across 8 further frames; a material created with real code
 	# before ever being assigned rendered correctly immediately). Every
 	# _resync_material() call after this first one is safe either way, since
-	# by then the shader already carries real code. _install_stack() (called by
-	# set_undo_redo_manager right after this node enters the tree) resyncs
-	# again once the stack is actually editable, so no further call is needed
-	# here.
+	# by then the shader already carries real code. _install_stack() (called
+	# below, once this node's own wiring above is complete) resyncs again once
+	# the stack is actually editable, so no further call is needed here.
 	_resync_material()
 	_preview.set_shader_material(_material)
 	_preview.target_rect_changed.connect(_on_target_rect_changed)
@@ -265,6 +247,26 @@ func _ready() -> void:
 	add_child(_overwrite_dialog)
 	_build_start_screen()
 	_apply_default_layout.call_deferred()
+
+	# Installs the initial, never-saved stack with no undo action registered
+	# around it: there is nothing before the first stack to undo back to.
+	# Previously called externally by plugin.gd once it had a real
+	# EditorUndoRedoManager to hand over (decision 20); phase 2 gives this
+	# panel its own standalone UndoRedo directly, so installation happens
+	# here instead of waiting on the plugin.
+	_install_stack(_stack, GSTUndo.new(_undo_redo, _stack, _library, _on_stack_changed, _on_property_changed))
+
+
+## Releases this panel's own UndoRedo (an Object, not a RefCounted or a Node:
+## it has no owner to free it automatically) and its GSTUndo adapter, which
+## retains bound Callables closing over this panel, when the panel itself
+## leaves the tree (phase 2 review round 2 fix pass). GSTUndo's own bound
+## Callables inside _undo_redo's recorded actions are released along with it.
+func _exit_tree() -> void:
+	if _undo_redo != null and is_instance_valid(_undo_redo):
+		_undo_redo.free()
+	_undo_redo = null
+	_undo = null
 
 
 func _build_start_screen() -> void:
@@ -556,28 +558,17 @@ func get_layout_measurements() -> Dictionary:
 
 
 ## Called once by plugin.gd right after instantiation (decision 20's
-## EditorUndoRedoManager is only reachable through the EditorPlugin, not a
-## plain Control). Installs the initial, never-saved stack with no undo action
-## registered around it: there is nothing before the first stack to undo back
-## to.
-func set_undo_redo_manager(undo_redo: EditorUndoRedoManager) -> void:
-	_undo_redo = undo_redo
-	_install_stack(_stack, GSTUndo.new(_undo_redo, _stack, _library, _on_stack_changed, _history_context))
-
-
-## Wires the stack-list/output-block/inspector columns, the watched undo
-## history, and the coord-space dropdown to `stack`/`undo`, and resyncs the
-## material. This is the do/undo primitive for a stack replacement (phase 6
-## fix pass 2, item 1; docs/PLAN.md Cross-cutting "EditorUndoRedoManager
-## integration"): replace_stack below registers this method as both the do
-## and the undo method of a "Replace stack" EditorUndoRedoManager action
-## (alongside a second do/undo pair for _current_path), so undo reinstalls the
-## exact previous GSTStack instance and its previous GSTUndo instance -- not a
-## freshly constructed one -- and every action already recorded through that
-## GSTUndo's own add_do_method(self, ...) bindings keeps landing on the
-## GSTStack/GSTLayer instances it actually closed over. Also called directly,
-## with no action registered, by set_undo_redo_manager for the very first
-## stack.
+## Wires the stack-list/output-block/inspector columns and the coord-space
+## dropdown to `stack`/`undo`, and resyncs the material. This is the do/undo
+## primitive for a stack replacement (phase 6 fix pass 2, item 1): replace_stack
+## below registers this method as both the do and the undo method of a
+## "Replace stack" UndoRedo action (alongside a second do/undo pair for
+## _current_path), so undo reinstalls the exact previous GSTStack instance and
+## its previous GSTUndo instance -- not a freshly constructed one -- and every
+## action already recorded through that GSTUndo's own bound-Callable methods
+## keeps landing on the GSTStack/GSTLayer instances it actually closed over.
+## Also called directly, with no action registered, by _ready() for the very
+## first stack.
 func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
 	_preview_sync.reset_installation()
 	_material = _preview_sync.get_material()
@@ -595,7 +586,6 @@ func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
 	_output_block.setup(_stack, _library, _undo)
 	_inspector_column.setup(_stack, _library, _undo)
 	_inspector_column.edit(_stack_list.get_selected_layer_id())
-	_rewatch_history()
 	_syncing_coord_space = true
 	_coord_space_option.select(int(_stack.coord_space))
 	_syncing_coord_space = false
@@ -610,6 +600,16 @@ func _notify_replace() -> void:
 	stack_changed.emit()
 
 
+## Finishes any active native gesture and closes any open native color popup
+## before a rebind, Save/Save As, Export, or keyboard undo/redo (decision
+## superseding 20; phase 1 tabs_proof "forced_finish_ordering"). The common
+## case (nothing pending) resolves synchronously with no suspension, since
+## GSTInspectorColumn only awaits a frame while an open color popup's typed
+## text is actually being committed.
+func _finish_pending_edits() -> void:
+	await _inspector_column.finish_pending_edits()
+
+
 ## Wired-by: none (editor smoke seam)
 func get_stack() -> GSTStack:
 	return _stack
@@ -617,42 +617,41 @@ func get_stack() -> GSTStack:
 
 ## Installs new_stack (and new_path as the new _current_path, and
 ## new_recipe_open as the new _recipe_open) as an undoable "Replace stack"
-## action in the shared editor history, rather than mutating
+## action in this panel's one standalone UndoRedo, rather than mutating
 ## _stack/_current_path/_recipe_open directly: a structural edit made before
 ## New, Open, or Reopen Shader now stays undoable afterward instead of being
-## discarded along with the replaced GSTStack (docs/PLAN.md Cross-cutting
-## "EditorUndoRedoManager integration", phase 6 fix pass 2 item 1). The
+## discarded along with the replaced GSTStack (phase 6 fix pass 2 item 1). The
 ## recipe-open flag (decision 16's Randomize gate) is recorded and replayed
 ## the same way: undoing a New/Open/Reopen that closed an open recipe
 ## re-enables Randomize, and redoing it disables it again (fix pass 3, item
-## 3). custom_context is _history_context, the panel's path-less anchor
-## Resource: on 4.6.2, get_object_history_id routes a Resource with a res://
-## path to a different history than a path-less one (verified:
-## tests/gst_editor_smoke.gd phase 7 run 2), so the stack instance is never
-## used as context. _on_new_pressed, open_path, open_recipe, and
-## reopen_shader_path call this instead of mutating
-## _stack/_current_path/_recipe_open directly.
+## 3). Phase 2 removes the prior EditorUndoRedoManager custom_context/history
+## bucket concern entirely: this standalone UndoRedo has exactly one bucket,
+## so every action -- this one, every GSTUndo action, and Randomize -- always
+## lands in the same place regardless of what was opened in between.
+## _on_new_pressed, open_path, open_recipe, and reopen_shader_path call this
+## instead of mutating _stack/_current_path/_recipe_open directly.
 func replace_stack(new_stack: GSTStack, new_path: String, new_recipe_open: bool) -> void:
 	if is_picker_open() and not _applying_choice:
 		return
+	await _finish_pending_edits()
 	_dismiss_start_screen()
 	var old_stack: GSTStack = _stack
 	var old_undo: GSTUndo = _undo
 	var old_path: String = _current_path
 	var old_recipe_open: bool = _recipe_open
-	var new_undo: GSTUndo = GSTUndo.new(_undo_redo, new_stack, _library, _on_stack_changed, _history_context)
+	var new_undo: GSTUndo = GSTUndo.new(_undo_redo, new_stack, _library, _on_stack_changed, _on_property_changed)
 	_install_stack(new_stack, new_undo)
 	_raw_set_current_path(new_path)
 	_set_recipe_open(new_recipe_open)
-	_undo_redo.create_action("GST: Replace stack", UndoRedo.MERGE_DISABLE, _history_context)
-	_undo_redo.add_do_method(self, "_install_stack", new_stack, new_undo)
-	_undo_redo.add_undo_method(self, "_install_stack", old_stack, old_undo)
-	_undo_redo.add_do_method(self, "_raw_set_current_path", new_path)
-	_undo_redo.add_undo_method(self, "_raw_set_current_path", old_path)
-	_undo_redo.add_do_method(self, "_set_recipe_open", new_recipe_open)
-	_undo_redo.add_undo_method(self, "_set_recipe_open", old_recipe_open)
-	_undo_redo.add_do_method(self, "_notify_replace")
-	_undo_redo.add_undo_method(self, "_notify_replace")
+	_undo_redo.create_action("GST: Replace stack", UndoRedo.MERGE_DISABLE)
+	_undo_redo.add_do_method(_install_stack.bind(new_stack, new_undo))
+	_undo_redo.add_undo_method(_install_stack.bind(old_stack, old_undo))
+	_undo_redo.add_do_method(_raw_set_current_path.bind(new_path))
+	_undo_redo.add_undo_method(_raw_set_current_path.bind(old_path))
+	_undo_redo.add_do_method(_set_recipe_open.bind(new_recipe_open))
+	_undo_redo.add_undo_method(_set_recipe_open.bind(old_recipe_open))
+	_undo_redo.add_do_method(_notify_replace)
+	_undo_redo.add_undo_method(_notify_replace)
 	_undo_redo.commit_action(false)
 	_notify_replace()
 
@@ -731,15 +730,12 @@ func get_randomize_button() -> Button:
 	return _randomize_button
 
 
-## The UndoRedo bucket _watched_history currently points at (the same one
-## _get_history()/_history_context resolve to). Lets the phase 7 smoke drive
-## undo()/redo() directly against the exact history this panel watches,
-## instead of recomputing a bucket the smoke's own stack argument might not
-## share with GSTUndo's actions (docs/PLAN.md Cross-cutting
-## "EditorUndoRedoManager integration", "History anchor (phase 7)").
+## This panel's one standalone UndoRedo (phase 2). Lets editor smoke drive
+## undo()/redo() directly against the exact history every GSTUndo action,
+## Randomize, and "Replace stack" action commits to.
 ## Wired-by: none (editor smoke seam)
 func get_watched_history() -> UndoRedo:
-	return _watched_history
+	return _undo_redo
 
 
 ## The .tres this stack was last opened from or saved to, or "" for a new or
@@ -867,7 +863,10 @@ func _on_save_as_file_selected(path: String) -> void:
 ## Saves the open stack to `path` through GSTStackIO. This is both the Save
 ## button's own handler (when a current path already exists) and Save As's
 ## file-selected handler; public so the smoke can drive it directly too.
+## Finishes pending native gestures/popups first (decision superseding 20):
+## a save must never write before the pending edit reaches the stack.
 func save_to_path(path: String) -> void:
+	await _finish_pending_edits()
 	var result: Dictionary = GSTStackIO.save(_stack, path)
 	if not result["ok"]:
 		_set_operation_message("Save", result["reason"])
@@ -889,8 +888,10 @@ func _on_export_file_selected(path: String) -> void:
 ## `confirm` is false, shows the overwrite confirmation dialog and performs
 ## no write; confirming it re-calls this with `confirm = true`. This is the
 ## Export button's file-selected handler and the confirmation dialog's own
-## confirmed handler; public so the smoke can drive it directly too.
+## confirmed handler; public so the smoke can drive it directly too. Finishes
+## pending native gestures/popups first (decision superseding 20).
 func export_to_path(path: String, confirm: bool) -> void:
+	await _finish_pending_edits()
 	var result: Dictionary = GSTExport.write(_stack, _library, path, confirm)
 	if result["needs_confirmation"]:
 		_pending_export_path = path
@@ -974,6 +975,18 @@ func _on_stack_changed() -> void:
 	stack_changed.emit()
 
 
+## GSTUndo's on_property_changed callback: fires after every do and undo of
+## a native property edit specifically. Deliberately does not touch
+## _stack_list, _output_block, or _inspector_column: a property edit never
+## changes layer identity, slots, or references, and rebuilding the
+## inspector column here would free the very row a live gesture, an open
+## native color popup, or a test still holds a reference to (decision
+## superseding 20). gst_inspector_column.gd refreshes that one row's own
+## displayed value itself, bound by key, alongside this call.
+func _on_property_changed() -> void:
+	_resync_material()
+
+
 ## _resync_material runs first and always sets _message_label to the current
 ## codegen error (or "" on success): the screen_uv suggestion below is only
 ## applied on top of a clean sync, so a real codegen error is never masked
@@ -1033,18 +1046,6 @@ func _set_recipe_open(value: bool) -> void:
 	_randomize_button.disabled = not value or is_picker_open()
 
 
-## Registered as both the do and undo method of the randomize action,
-## alongside GSTRandomize.apply itself (docs/PLAN.md Phase 8 fix pass 2,
-## item 1): relays to GSTInspectorColumn.refresh() so the selected layer's
-## EditorProperty widgets re-read after apply, undo, and redo alike. Every
-## other structural edit already gets this for free from
-## _on_stack_changed's own _inspector_column.edit() call; the randomize
-## action bypasses GSTUndo/_on_stack_changed entirely, so it needs this
-## explicit pair.
-func _refresh_inspector() -> void:
-	_inspector_column.refresh()
-
-
 ## Injects the RNG _on_randomize_pressed draws from (docs/PLAN.md Phase 8 fix
 ## pass 4, item 2): tests/gst_editor_smoke.gd's GST_EDITOR_SMOKE=8 seeds a
 ## seeded RandomNumberGenerator here so the handler's change set is
@@ -1058,28 +1059,18 @@ func set_randomize_rng(rng: RandomNumberGenerator) -> void:
 
 ## Randomizes every slider on the open recipe (decision 16, docs/PLAN.md
 ## Phase 8 Build item 3): computes the change set with GSTRandomize.randomize,
-## then registers it as one undoable "Randomize sliders" EditorUndoRedoManager
-## action whose do/undo methods both call GSTRandomize.apply (fix pass 3,
-## item 2: apply is the live change-set writer, not add_do_property/
-## add_undo_property directly), each paired with a call to
-## _refresh_inspector (fix pass 2, item 1: GSTRandomize.apply's writes are
-## external to whatever EditorProperty widgets the inspector column already
-## built, so undo and redo of this action must force it to re-read, not only
-## the initial apply), with custom_context = _history_context, the
-## same anchor every other GST action uses so it lands in the one shared
-## watched history. `old_changes` mirrors `changes`' shape with each layer's
-## pre-randomize values, captured before GSTRandomize.apply(_stack, changes)
-## runs, so the undo method's GSTRandomize.apply(_stack, old_changes) call
-## restores them. A stack with nothing to randomize (GSTRandomize.randomize
-## returns an empty Dictionary) registers no action, matching every other
-## no-op guard in this file. commit_action() (execute = true, the default)
-## applies the do method immediately, which runs GSTRandomize.apply and
-## _refresh_inspector once, and fires the watched history's version_changed,
-## which resyncs the material (_on_history_version_changed) -- no further
-## call is needed here (fix pass 4, item 3: the prior explicit
-## _resync_material() and _refresh_inspector() calls after commit_action were
-## a duplicate of that do-method/signal path, not an additional step).
-## _randomize_rng, when set via set_randomize_rng, replaces the fresh
+## then hands it to GSTUndo.apply_randomize (phase 2: previously registered
+## directly on the shared EditorUndoRedoManager here, paired with an explicit
+## _refresh_inspector do/undo call; GSTUndo's own bound _notify pair now
+## covers that refresh the same way it covers every other GSTUndo action).
+## `old_changes` mirrors `changes`' shape with each layer's pre-randomize
+## values, captured before GSTRandomize.apply(_stack, changes) runs, so
+## GSTUndo's undo method can restore them. `unset_params` records which of
+## those values were implicit defaults, so undo erases them again instead of
+## leaving an explicit default that would change the serialized header. A
+## stack with nothing to randomize (GSTRandomize.randomize returns an empty
+## Dictionary) registers no action, matching every other no-op guard in this
+## file. _randomize_rng, when set via set_randomize_rng, replaces the fresh
 ## OS-seeded RandomNumberGenerator this handler otherwise draws from.
 func _on_randomize_pressed() -> void:
 	if is_picker_open() and not _applying_choice:
@@ -1106,58 +1097,7 @@ func _on_randomize_pressed() -> void:
 				unset_names.append(String(param_name))
 		old_changes[layer_id] = old_layer_changes
 		unset_params[layer_id] = unset_names
-	_undo_redo.create_action("GST: randomize sliders", UndoRedo.MERGE_DISABLE, _history_context)
-	_undo_redo.add_do_method(GSTRandomize, "apply", _stack, changes)
-	_undo_redo.add_do_method(self, "_refresh_inspector")
-	_undo_redo.add_undo_method(GSTRandomize, "apply", _stack, old_changes)
-	_undo_redo.add_undo_method(self, "_restore_unset_params", _stack, unset_params)
-	_undo_redo.add_undo_method(self, "_refresh_inspector")
-	_undo_redo.commit_action()
-
-
-## Explicit defaults change the serialized header even when values match.
-func _restore_unset_params(stack: GSTStack, unset_params: Dictionary) -> void:
-	for layer_id: Variant in unset_params:
-		var layer: GSTLayer = GSTStackOps.find_layer(stack, StringName(layer_id))
-		if layer != null:
-			for param_name: String in unset_params[layer_id]:
-				layer.params.erase(param_name)
-
-
-## The shared EditorUndoRedoManager history for _stack (same one GSTUndo's
-## _create_action commits to). version_changed on this history catches undo
-## and redo of a GSTUndo-authored structural action (stack_changed already
-## covers its initial do) and, when one lands here, undo/redo of an
-## inspector-driven property edit too: Object.set() during undo/redo fires
-## neither EditorInspector.property_edited nor Resource.changed, so
-## gst_inspector_column.gd's param_edited relay (the live-edit path) cannot
-## see it, and this is the only remaining hook for that case (fix pass 2,
-## item 1).
-func _get_history() -> UndoRedo:
-	if _undo_redo == null:
-		return null
-	var history_id: int = _undo_redo.get_object_history_id(_history_context)
-	return _undo_redo.get_history_undo_redo(history_id)
-
-
-func _rewatch_history() -> void:
-	if _watched_history != null and _watched_history.version_changed.is_connected(_on_history_version_changed):
-		_watched_history.version_changed.disconnect(_on_history_version_changed)
-	_watched_history = _get_history()
-	if _watched_history != null:
-		_watched_history.version_changed.connect(_on_history_version_changed)
-
-
-func _on_history_version_changed() -> void:
-	_resync_material()
-
-
-## gst_inspector_column.gd's param_edited relay (fix pass 2, item 1): the
-## direct path for a real, live EditorInspector-driven edit, independent of
-## which EditorUndoRedoManager history bucket its create_action() call landed
-## in.
-func _on_param_edited(_property: String) -> void:
-	_resync_material()
+	_undo.apply_randomize(changes, old_changes, unset_params)
 
 
 ## Diagnostic preview captures a stable layer ID without changing output.
@@ -1249,19 +1189,76 @@ func _set_picker_modality(blocked: bool) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not is_picker_open() or not is_visible_in_tree() or not event is InputEventKey:
+	if is_picker_open():
+		if not is_visible_in_tree() or not event is InputEventKey:
+			return
+		var key: InputEventKey = event as InputEventKey
+		if not key.pressed:
+			return
+		# Editor undo/redo is a stack mutation while a destination is captured.
+		if key.ctrl_pressed or key.meta_pressed:
+			if key.keycode in [KEY_Z, KEY_Y, KEY_N, KEY_O, KEY_DELETE]:
+				get_viewport().set_input_as_handled()
+		var focus: Control = get_viewport().gui_get_focus_owner()
+		if focus != null and _editing_content.is_ancestor_of(focus):
+			_picker.get_search_control().grab_focus()
+			get_viewport().set_input_as_handled()
+		return
+	await _handle_undo_redo_shortcut(event)
+
+
+## Scopes keyboard Undo/Redo to GoShade focus, including a native property
+## popup (decision superseding 20): this panel's standalone UndoRedo is no
+## longer reachable through the editor's own Edit > Undo/Redo, which only
+## drives EditorUndoRedoManager histories. Outside GoShade focus, this leaves
+## the event alone so Godot's own scene Undo keeps working unaffected
+## (docs/SHADER_TABS_reviewed-plan.md Cross-cutting "Never clear or rewrite
+## Godot scene/global history"). Only reachable through the root viewport:
+## a focused native color popup's own embedded-Window input never reaches
+## here at all (Godot's embedded-subwindow forwarding, scene/main/
+## viewport.cpp, claims it first), so gst_inspector_column.gd's own
+## color_popup_undo_redo_requested signal (connected in _ready() straight to
+## _apply_keyboard_undo_redo) is that case's own separate entry point.
+func _handle_undo_redo_shortcut(event: InputEvent) -> void:
+	if not is_visible_in_tree() or not event is InputEventKey:
 		return
 	var key: InputEventKey = event as InputEventKey
-	if not key.pressed:
+	if not key.pressed or not (key.ctrl_pressed or key.meta_pressed) or key.keycode != KEY_Z:
 		return
-	# Editor undo/redo is a stack mutation while a destination is captured.
-	if key.ctrl_pressed or key.meta_pressed:
-		if key.keycode in [KEY_Z, KEY_Y, KEY_N, KEY_O, KEY_DELETE]:
-			get_viewport().set_input_as_handled()
+	if not _owns_undo_focus():
+		return
+	# Consumed here, before the await below, so a later frame's input pass
+	# cannot also see this event as unhandled and let something else act on
+	# it too (phase 2 review round 1 fix pass: awaiting first left the event
+	# unhandled for as long as finish_pending_edits() itself yielded).
+	get_viewport().set_input_as_handled()
+	await _apply_keyboard_undo_redo(key.shift_pressed)
+
+
+## Finishes any pending native edit, then undoes (or redoes, if `redo`) this
+## panel's own standalone UndoRedo -- the shared body behind both keyboard
+## Undo/Redo entry points: _handle_undo_redo_shortcut above (a real Ctrl+Z/
+## Ctrl+Shift+Z reaching the root viewport's own _input()) and
+## gst_inspector_column.gd's color_popup_undo_redo_requested signal (the
+## same keys reaching a focused native color popup's own embedded Window
+## instead, forwarded here since the root viewport never sees them).
+func _apply_keyboard_undo_redo(redo: bool) -> void:
+	await _finish_pending_edits()
+	if redo:
+		if _undo_redo.has_redo():
+			_undo_redo.redo()
+	else:
+		if _undo_redo.has_undo():
+			_undo_redo.undo()
+
+
+func _owns_undo_focus() -> bool:
 	var focus: Control = get_viewport().gui_get_focus_owner()
-	if focus != null and _editing_content.is_ancestor_of(focus):
-		_picker.get_search_control().grab_focus()
-		get_viewport().set_input_as_handled()
+	if focus == null:
+		return false
+	if is_ancestor_of(focus):
+		return true
+	return _inspector_column.owns_popup_focus(focus)
 
 
 func _close_picker() -> void:

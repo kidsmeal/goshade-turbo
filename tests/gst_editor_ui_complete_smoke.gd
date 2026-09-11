@@ -150,7 +150,7 @@ func run(plugin: EditorPlugin) -> void:
 		await _replace_line_edit(gain_edit, str(new_gain))
 	await _frames(3)
 	var gain_uniform: String = GSTUniformNames.param_uniform(fbm.id, "fbm", "gain")
-	var gain_history: UndoRedo = _history_for(fbm)
+	var gain_history: UndoRedo = _history_for()
 	var gain_applied: bool = gain_property != null and gain_visible and is_equal_approx(float(fbm.get("gain")), new_gain) and is_equal_approx(float(panel.get_shader_material().get_shader_parameter(gain_uniform)), new_gain) and gain_history.has_undo()
 	_capture("recipe-edit")
 	if gain_applied:
@@ -170,7 +170,7 @@ func run(plugin: EditorPlugin) -> void:
 		await _replace_line_edit(offset_edit, str(new_offset.x))
 	await _frames(3)
 	var offset_uniform: String = GSTUniformNames.coord_offset(fbm.id)
-	var offset_history: UndoRedo = _history_for(fbm.coord)
+	var offset_history: UndoRedo = _history_for()
 	var offset_model_after: Vector2 = fbm.coord.offset
 	var offset_uniform_after: Vector2 = panel.get_shader_material().get_shader_parameter(offset_uniform) as Vector2
 	var offset_has_undo: bool = offset_history.has_undo()
@@ -185,14 +185,21 @@ func run(plugin: EditorPlugin) -> void:
 	var raw_params_before: Dictionary = _snapshot_raw_params(recipe_stack)
 	var random_code_before: String = panel.get_shader_material().shader.code
 	var uniforms_before: Dictionary = _snapshot_param_uniforms(recipe_stack, panel.get_shader_material(), library)
-	var random_history_before: int = history.get_history_count()
+	# get_current_action(), not get_history_count(): the two preceding
+	# undo() calls (native_param_undo, native_coord_undo) each leave their
+	# own action as a dangling redo-able tail entry. create_action()'s own
+	# discard_redo() drops that dangling entry before pushing the new
+	# randomize action, so get_history_count() (total array size) can read
+	# unchanged even though exactly one new action was genuinely committed;
+	# get_current_action() (the position index) still advances by one.
+	var random_history_before: int = history.get_current_action()
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 55291
 	panel.set_randomize_rng(rng)
 	panel.get_randomize_button().pressed.emit()
 	await _frames(3)
 	var randomized: bool = _snapshot_params(recipe_stack, library) != params_before
-	var one_random_action: bool = history.get_history_count() == random_history_before + 1
+	var one_random_action: bool = history.get_current_action() == random_history_before + 1
 	if randomized and one_random_action and history.has_undo():
 		history.undo()
 	await _frames(3)
@@ -458,9 +465,11 @@ func _find_layer(stack: GSTStack, entry_id: String) -> GSTLayer:
 	return null
 
 
-func _history_for(object: Object) -> UndoRedo:
-	var manager: EditorUndoRedoManager = _plugin.get_undo_redo()
-	return manager.get_history_undo_redo(manager.get_object_history_id(object))
+## Phase 2: every object shares the panel's one standalone UndoRedo now, so
+## this no longer needs an object-keyed EditorUndoRedoManager bucket lookup.
+func _history_for() -> UndoRedo:
+	var panel: GSTMainPanel = _plugin.get_panel() as GSTMainPanel
+	return panel.get_watched_history() if panel != null else null
 
 
 func _snapshot_params(stack: GSTStack, library: GSTLibrary) -> Dictionary:

@@ -3,6 +3,7 @@ extends RefCounted
 
 var _pass_count: int = 0
 var _fail_count: int = 0
+var _panel: GSTMainPanel = null
 
 
 func run(plugin: EditorPlugin) -> void:
@@ -13,6 +14,7 @@ func run(plugin: EditorPlugin) -> void:
 	if panel == null:
 		_finish(plugin)
 		return
+	_panel = panel
 
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	panel.get_create_empty_button().pressed.emit()
@@ -41,9 +43,9 @@ func run(plugin: EditorPlugin) -> void:
 	for i: int in range(2):
 		await plugin.get_tree().process_frame
 	var entry: GSTManifestEntry = panel.get_library().get_entry(layer.entry)
-	var parameter_inspector: EditorInspector = inspector.call("get_parameter_inspector") as EditorInspector
-	var coord_inspector: EditorInspector = inspector.call("get_coord_inspector") as EditorInspector
-	_check("inspector_targets", parameter_inspector.get_edited_object() == layer and coord_inspector.get_edited_object() == layer.coord, "parameter_target=%s coord_target=%s" % [parameter_inspector.get_edited_object() == layer, coord_inspector.get_edited_object() == layer.coord])
+	var parameter_inspector: VBoxContainer = inspector.call("get_parameter_inspector") as VBoxContainer
+	var coord_inspector: VBoxContainer = inspector.call("get_coord_inspector") as VBoxContainer
+	_check("inspector_targets", inspector.get_edited_object() == layer and inspector.find_editor_property(&"gain", layer) != null and inspector.find_coord_editor_property(&"scale") != null, "edited=%s param_row=%s coord_row=%s" % [inspector.get_edited_object() == layer, inspector.find_editor_property(&"gain", layer) != null, inspector.find_coord_editor_property(&"scale") != null])
 
 	var gain_schema: Dictionary = _find_schema(entry.params, "gain")
 	var gain_property: EditorProperty = inspector.find_editor_property(&"gain", layer)
@@ -149,7 +151,7 @@ func _check_inactive_controls(plugin: EditorPlugin, panel: GSTMainPanel, inspect
 	if not screenshot_path.is_empty() and gain != null:
 		inspector.get_settings_scroll().ensure_control_visible(gain)
 		await _save_screenshot(plugin, screenshot_path.get_basename() + "-inactive-gain.png", "screenshot_inactive_gain")
-	var history: UndoRedo = _history_for(source)
+	var history: UndoRedo = _history_for()
 	history.undo()
 	await _wait_context(plugin)
 	gain = inspector.find_editor_property(&"gain", source)
@@ -203,7 +205,7 @@ func _check_inactive_controls(plugin: EditorPlugin, panel: GSTMainPanel, inspect
 	await _wait_context(plugin)
 	rotation = inspector.find_coord_editor_property(&"rotation")
 	_check("circle_offset_removes_help", circle.coord.offset == Vector2(0.2, 0.0) and rotation != null and not rotation.is_read_only() and _context_text(rotation).is_empty(), "offset=%s hint='%s'" % [circle.coord.offset, _context_text(rotation)])
-	_history_for(circle.coord).undo()
+	_history_for().undo()
 	await _wait_context(plugin)
 	rotation = inspector.find_coord_editor_property(&"rotation")
 	_check("circle_help_undo", circle.coord.offset == Vector2.ZERO and _context_contains(rotation, "Rotation has no effect"), "offset=%s hint='%s'" % [circle.coord.offset, _context_text(rotation)])
@@ -219,7 +221,7 @@ func _check_inactive_controls(plugin: EditorPlugin, panel: GSTMainPanel, inspect
 		await _wait_context(plugin)
 		rotation = inspector.find_coord_editor_property(&"rotation")
 		_check("%s_movement_removes_help" % entry_id.get_file(), radial.coord.scroll == Vector2(0.1, 0.0) and rotation != null and not rotation.is_read_only() and _context_text(rotation).is_empty(), "entry=%s movement=%s hint='%s'" % [entry_id, radial.coord.scroll, _context_text(rotation)])
-		_history_for(radial.coord).undo()
+		_history_for().undo()
 		await _wait_context(plugin)
 		rotation = inspector.find_coord_editor_property(&"rotation")
 		_check("%s_help_undo" % entry_id.get_file(), radial.coord.scroll == Vector2.ZERO and _context_contains(rotation, "Rotation has no effect on this function"), "entry=%s movement=%s hint='%s'" % [entry_id, radial.coord.scroll, _context_text(rotation)])
@@ -233,7 +235,7 @@ func _check_inactive_controls(plugin: EditorPlugin, panel: GSTMainPanel, inspect
 	await _wait_context(plugin)
 	upper = inspector.find_editor_property(&"edge1", threshold)
 	_check("clamped_threshold_help", float(threshold.get(&"edge1")) < float(threshold.get(&"edge0")) and upper != null and not upper.is_read_only() and _context_contains(upper, "sharp threshold"), "lower=%s upper=%s hint='%s'" % [threshold.get(&"edge0"), threshold.get(&"edge1"), _context_text(upper)])
-	_history_for(threshold).undo()
+	_history_for().undo()
 	await _wait_context(plugin)
 	upper = inspector.find_editor_property(&"edge1", threshold)
 	_check("threshold_help_undo", _context_text(upper).is_empty() and float(threshold.get(&"edge1")) > float(threshold.get(&"edge0")), "hint='%s'" % _context_text(upper))
@@ -281,7 +283,7 @@ func _check_native_param_edit(plugin: EditorPlugin, panel: GSTMainPanel, inspect
 		await plugin.get_tree().process_frame
 	var uniform_name: String = GSTUniformNames.param_uniform(layer.id, entry.function, "gain")
 	var uniform_value: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
-	var history: UndoRedo = _history_for(layer)
+	var history: UndoRedo = _history_for()
 	var value_ok: bool = is_equal_approx(float(layer.get("gain")), new_value)
 	var uniform_ok: bool = uniform_value is float and is_equal_approx(float(uniform_value), new_value)
 	var identity_ok: bool = layer.id == id_before and layer.entry == entry_before
@@ -306,7 +308,7 @@ func _check_native_coord_edit(plugin: EditorPlugin, panel: GSTMainPanel, inspect
 		await plugin.get_tree().process_frame
 	var uniform_name: String = GSTUniformNames.coord_offset(layer.id)
 	var uniform_value: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
-	var history: UndoRedo = _history_for(layer.coord)
+	var history: UndoRedo = _history_for()
 	_check("native_coord_edit", property != null and layer.coord.offset.is_equal_approx(new_value) and uniform_value is Vector2 and (uniform_value as Vector2).is_equal_approx(new_value) and history.has_undo(), "property=%s value=%s uniform=%s history_has_undo=%s" % [property != null, layer.coord.offset, uniform_value, history.has_undo()])
 	history.undo()
 	for i: int in range(3):
@@ -387,7 +389,7 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	var expected_raw: Vector3 = Vector3(expected_color.r, expected_color.g, expected_color.b)
 	var uniform_name: String = GSTUniformNames.param_uniform(palette.id, "palette", "a")
 	var uniform_value: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
-	var history: UndoRedo = _history_for(palette)
+	var history: UndoRedo = _history_for()
 	var edit_applied: bool = close_complete and popup_ready and actual_hex_control and palette.params.get("a") is Vector3 and (palette.params.get("a") as Vector3).is_equal_approx(expected_raw) and palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(expected_color) and uniform_value is Vector3 and (uniform_value as Vector3).is_equal_approx(expected_raw) and history.has_undo()
 	_check("palette_color_edit", edit_applied, "popup=%s hex=%s initial_fields=%s raw=%s displayed=%s uniform=%s history=%s" % [popup_ready, actual_hex_control, initial_fields, palette.params.get("a"), color_button.color, uniform_value, history.has_undo()])
 	if not edit_applied:
@@ -400,7 +402,14 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	var undo_displayed: Color = undo_button.color if undo_button != null else Color.TRANSPARENT
 	var undo_raw: Variant = palette.params.get("a")
 	var undo_uniform: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
-	var undo_ok: bool = undo_button != null and undo_raw is Vector3 and undo_uniform is Vector3 and (undo_button.color as Color).is_equal_approx(Color(0.5, 0.5, 0.5, 1.0)) and (undo_raw as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5)) and (undo_uniform as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5))
+	# sprite_holographic.tres never sets an explicit "a" param (its palette
+	# layer's params hold only "t"): undo must restore that exact absence,
+	# not an explicit entry equal to the manifest default (phase 2 review
+	# round 2 fix pass: gst_inspector_column.gd now captures original param
+	# presence before the popup ever opens, so this reads the true pre-edit
+	# state instead of a key EditorPropertyColor's own close handler had
+	# already created by the time old_present used to be queried).
+	var undo_ok: bool = undo_button != null and not palette.params.has("a") and undo_uniform is Vector3 and (undo_button.color as Color).is_equal_approx(Color(0.5, 0.5, 0.5, 1.0)) and (undo_uniform as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5))
 	history.redo()
 	for i: int in range(3):
 		await plugin.get_tree().process_frame
@@ -520,9 +529,9 @@ func _find_layer_by_entry(stack: GSTStack, entry_id: String) -> GSTLayer:
 	return null
 
 
-func _history_for(object: Object) -> UndoRedo:
-	var manager: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
-	return manager.get_history_undo_redo(manager.get_object_history_id(object))
+## Phase 2: every object shares the panel's one standalone UndoRedo now.
+func _history_for() -> UndoRedo:
+	return _panel.get_watched_history()
 
 
 func _find_schema(schema: Array[Dictionary], name: String) -> Dictionary:

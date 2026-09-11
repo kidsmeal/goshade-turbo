@@ -97,7 +97,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 
 ## Phase 2: Route stack edits through standalone UndoRedo
 
-**Status:** pending
+**Status:** committed (2026-09-10) (review PASS-WITH-NOTES round 5, deferred notes logged, 2026-09-10)
 
 **Goal:** Route structural and native property edits through the standalone history mechanism proved in phase `1`.
 
@@ -116,6 +116,9 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 - `tests/gst_editor_ui_complete_smoke.gd`.
 - `tests/gst_editor_native_undo_smoke.gd` (new).
 - `docs/EDITOR_SMOKE.md`.
+- `NOW.md` (ClauDHD build bookkeeping only: the Active thread next-action lines; no phase content).
+- `tests/gst_editor_native_undo_smoke.gd.uid` (Godot-generated companion for the new test script).
+- `addons/goshade_turbo/model/gst_layer.gd` (param-key presence/erase accessors needed by absent-key undo restoration; added at review round 1).
 
 **Implementation:**
 

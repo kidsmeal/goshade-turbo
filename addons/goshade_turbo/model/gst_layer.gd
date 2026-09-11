@@ -124,6 +124,21 @@ func get_param_schema(property: StringName) -> Dictionary:
 	return param as Dictionary if param is Dictionary else {}
 
 
+## True if property currently has an explicit stored entry in params, as
+## opposed to falling back to the manifest default through _get (phase 2
+## review round 1 fix pass: undo must restore this exact absence rather than
+## writing an explicit default, since the dirty fingerprint includes
+## serialized params keys).
+func has_param_value(property_name: StringName) -> bool:
+	return params.has(String(property_name))
+
+
+## Restores property_name to its implicit manifest default by erasing its
+## explicit params entry, the counterpart to has_param_value.
+func erase_param_value(property_name: StringName) -> void:
+	params.erase(String(property_name))
+
+
 ## Unknown param types are a manifest data bug, not a script error: they fall
 ## through to TYPE_FLOAT with a push_warning naming the offending entry and
 ## param, rather than failing the inspector build (docs/PLAN.md phase 4 fix

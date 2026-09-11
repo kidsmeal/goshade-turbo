@@ -2,12 +2,7 @@
 
 # ClauDHD local session state
 .now/
-.gantry/active-phase.json
-.gantry/models.json
-.gantry/models.codex.json
-.gantry/codex-run.json
-.gantry/headless-implementer-settings.json
-.gantry/review-round.json
+.gantry/
 
 # Local Claude Code permissions (machine paths)
 .claude/settings.local.json

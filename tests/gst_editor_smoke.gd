@@ -25,6 +25,9 @@ func run(plugin: EditorPlugin) -> void:
 	if flag == "tabs_proof":
 		var document_proof: RefCounted = load("res://tests/gst_editor_document_proof.gd").new()
 		await document_proof.run(plugin)
+	elif flag == "tabs_native":
+		var native_undo_smoke: RefCounted = load("res://tests/gst_editor_native_undo_smoke.gd").new()
+		await native_undo_smoke.run(plugin)
 	elif flag == "ui_complete":
 		var complete_smoke: RefCounted = load("res://tests/gst_editor_ui_complete_smoke.gd").new()
 		await complete_smoke.run(plugin)
@@ -72,7 +75,7 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	var undo: GSTUndo = panel.get_undo()
 	var library: GSTLibrary = panel.get_library()
 	var stack: GSTStack = panel.get_stack()
-	var history: UndoRedo = _get_history(stack)
+	var history: UndoRedo = _get_history(panel)
 
 	var fbm: GSTLayer = stack_list.add_layer_by_entry_id("generative/fbm")
 	var invert: GSTLayer = stack_list.add_layer_by_entry_id("fieldops/invert")
@@ -159,10 +162,13 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-func _get_history(stack: GSTStack) -> UndoRedo:
-	var undo_redo: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
-	var history_id: int = undo_redo.get_object_history_id(stack)
-	return undo_redo.get_history_undo_redo(history_id)
+## Phase 2 (docs/SHADER_TABS_reviewed-plan.md): the panel owns one standalone
+## UndoRedo directly; there is no EditorUndoRedoManager bucket to resolve
+## per-stack anymore, so this is just panel.get_watched_history() under its
+## prior name. Kept as a helper so existing call sites below do not all need
+## renaming to panel.get_watched_history() individually.
+func _get_history(panel: GSTMainPanel) -> UndoRedo:
+	return panel.get_watched_history()
 
 
 func _dismiss_initial_start(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
@@ -335,7 +341,7 @@ func _run_add_for_slot_excursion(plugin: EditorPlugin, panel: GSTMainPanel, stac
 ## exist to undo: add fbm, add invert, add hash, wire the slot, reorder
 ## hash, set output color, set output alpha.
 func _run_undo_sequence(plugin: EditorPlugin, stack: GSTStack, stack_list: GSTStackList, panel: GSTMainPanel, fbm: GSTLayer, invert: GSTLayer, hash_layer: GSTLayer, hash_original_index: int) -> void:
-	var history: UndoRedo = _get_history(stack)
+	var history: UndoRedo = _get_history(panel)
 
 	history.undo()
 	await plugin.get_tree().process_frame
@@ -382,7 +388,7 @@ func _run_undo_sequence(plugin: EditorPlugin, stack: GSTStack, stack_list: GSTSt
 ## end, self-canceling like the two excursions earlier in run().
 func _run_output_referenced_removal_excursion(plugin: EditorPlugin, panel: GSTMainPanel, undo: GSTUndo, library: GSTLibrary) -> void:
 	var stack: GSTStack = panel.get_stack()
-	var history: UndoRedo = _get_history(stack)
+	var history: UndoRedo = _get_history(panel)
 
 	var color_layer: GSTLayer = undo.add_layer("color/fill", GSTLayer.Kind.COLOR, false)
 	await plugin.get_tree().process_frame
@@ -431,19 +437,20 @@ func _run_output_referenced_removal_excursion(plugin: EditorPlugin, panel: GSTMa
 	_check("14h", not history.has_undo() and stack.layers.is_empty() and stack.output_color == &"" and stack.output_alpha == &"", "excursion fully unwound: has_undo=%s layers=%d output_color='%s' output_alpha='%s'" % [history.has_undo(), stack.layers.size(), String(stack.output_color), String(stack.output_alpha)])
 
 
-## Regression for phase 4 fix pass 3, item 1: an inspector slider edit
+## Regression for phase 4 fix pass 3, item 1: a native property edit
 ## registers a property-undo action pointed at the layer's own GSTLayer
-## instance (the same path EditorInspector uses, decision 20's "slider edits
-## come from the inspector" carve-out). A structural remove committed after
-## it, then undone, must reinsert that same instance rather than a duplicate,
-## so the earlier slider undo still lands on it, and the EditorInspector must
-## still edit that instance after the remove-undo. Self-canceling: unwinds
-## back to an empty stack like the excursions above.
+## instance (decision superseding 20: GSTUndo.commit_property_change, the
+## same front door gst_inspector_column.gd's own native rows call once a
+## gesture finishes, replaces the removed embedded-EditorInspector carve-out).
+## A structural remove committed after it, then undone, must reinsert that
+## same instance rather than a duplicate, so the earlier property-edit undo
+## still lands on it, and the inspector column must still edit that instance
+## after the remove-undo. Self-canceling: unwinds back to an empty stack like
+## the excursions above.
 func _run_slider_remove_undo_identity_excursion(plugin: EditorPlugin, panel: GSTMainPanel, undo: GSTUndo) -> void:
 	var stack: GSTStack = panel.get_stack()
-	var history: UndoRedo = _get_history(stack)
+	var history: UndoRedo = _get_history(panel)
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
-	var editor_undo_redo: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
 
 	var layer: GSTLayer = undo.add_layer("generative/fbm", GSTLayer.Kind.FIELD, true)
 	await plugin.get_tree().process_frame
@@ -451,10 +458,8 @@ func _run_slider_remove_undo_identity_excursion(plugin: EditorPlugin, panel: GST
 
 	var old_gain: float = float(layer.get("gain"))
 	var new_gain: float = 0.75
-	editor_undo_redo.create_action("slider", UndoRedo.MERGE_DISABLE, stack)
-	editor_undo_redo.add_do_property(layer, "gain", new_gain)
-	editor_undo_redo.add_undo_property(layer, "gain", old_gain)
-	editor_undo_redo.commit_action()
+	layer.set(&"gain", new_gain)
+	undo.commit_property_change(layer, &"gain", old_gain, new_gain)
 	await plugin.get_tree().process_frame
 	_check("16a", is_equal_approx(float(layer.get("gain")), new_gain), "slider commit gain=%s (expect %s)" % [layer.get("gain"), new_gain])
 
@@ -521,7 +526,7 @@ func _run_phase5(plugin: EditorPlugin) -> void:
 	var library: GSTLibrary = panel.get_library()
 	var stack: GSTStack = panel.get_stack()
 	var preview: GSTPreview = panel.get_preview()
-	var history: UndoRedo = _get_history(stack)
+	var history: UndoRedo = _get_history(panel)
 
 	var checker: GSTLayer = await _run_phase5_checker_render(plugin, panel, stack_list, undo, preview)
 	await _run_phase5_preset_switch(plugin, panel)
@@ -538,25 +543,18 @@ func _run_phase5(plugin: EditorPlugin) -> void:
 ## inherently maximal-contrast at its default cells = 8, docs/PLAN.md Phase 8:
 ## a "cells" int param was added so the default render is not one uniform
 ## cell) renders non-uniform pixels.
-## Item 2 (fix pass 2, item 1): editing checker's coord.scale through a real
-## EditorProperty widget's own emit_changed(), the way a real slider drag
-## would, exercising gst_inspector_column.gd's GSTCoordBlock.changed relay
-## end to end. Not driven through gst_inspector_column.gd's own
-## EditorInspector directly: that column shows coord as a collapsed
-## EditorPropertyResource row with no nested EditorProperty children built
-## at all until a user expands it by hand (confirmed by walking that live
-## tree: the row holds only an EditorResourcePicker's own buttons), so a
-## throwaway EditorInspector pointed directly at the coord object is used
-## instead -- coord is then the top-level edited object, the same
-## EditorProperty/property_edited machinery gst_inspector_column.gd's own
-## EditorInspector already uses for GSTLayer's own top-level properties,
-## with no expand step needed. A prior version of this check forced
-## EditorUndoRedoManager.create_action(..., custom_context = stack) directly,
-## which artificially bound the action to the stack's own undo history
-## bucket and never proved a real inspector-driven edit (whose
-## create_action() call does not pass that context) reaches the material at
-## all. Asserts the material's uniform and the rendered image both change
-## within one frame of the real widget's own edit.
+## Item 2 (fix pass 2, item 1; migrated to the production native-row route
+## in the phase 2 review round 1 fix pass): editing checker's coord.scale
+## through the real production gst_inspector_column.gd row's own
+## EditorProperty.emit_changed(), the way a real slider drag would,
+## exercising the panel's own coord-row/GSTUndo wiring end to end -- not a
+## throwaway EditorInspector pointed directly at the coord object (removed;
+## docs/SHADER_TABS_reviewed-plan.md phase 2: "Remove throwaway
+## shared-history inspector fixtures used to simulate GoShade edits").
+## Selecting checker makes gst_inspector_column.gd build its own coord rows
+## for it, the same rows a real user's slider drag would land on. Asserts
+## the material's uniform and the rendered image both change within one
+## frame of the real widget's own edit.
 func _run_phase5_checker_render(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview) -> GSTLayer:
 	var checker: GSTLayer = stack_list.add_layer_by_entry_id("generative/checker")
 	undo.set_output_color(checker.id)
@@ -570,35 +568,24 @@ func _run_phase5_checker_render(plugin: EditorPlugin, panel: GSTMainPanel, stack
 	var coord: GSTCoordBlock = checker.coord
 	var old_scale: Vector2 = coord.scale
 	var new_scale: Vector2 = old_scale * 6.0
-	var found_prop: bool = await _drive_real_property_edit(plugin, coord, &"scale", new_scale)
+	stack_list.select_layer(checker.id)
+	await plugin.get_tree().process_frame
+	await plugin.get_tree().process_frame
+	var inspector: GSTInspectorColumn = panel.get_inspector_column()
+	var ep: EditorProperty = inspector.find_coord_editor_property(&"scale")
+	var found_prop: bool = ep != null
+	if found_prop:
+		ep.emit_changed(&"scale", new_scale)
+		await plugin.get_tree().process_frame
+		await plugin.get_tree().process_frame
 
 	var uniform_name: String = GSTUniformNames.coord_scale(checker.id)
 	var uniform_value: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
 	var uniform_changed: bool = uniform_value is Vector2 and (uniform_value as Vector2).is_equal_approx(new_scale)
 	var img2: Image = preview.get_viewport_image()
 	var image_changed: bool = img2 != null and not _images_equal(img1, img2)
-	_check("2", found_prop and uniform_changed and image_changed, "checker scale via real EditorProperty widget found=%s coord.scale=%s uniform=%s (expect %s) image_changed=%s" % [found_prop, coord.scale, uniform_value, new_scale, image_changed])
+	_check("2", found_prop and uniform_changed and image_changed, "checker scale via real production EditorProperty row found=%s coord.scale=%s uniform=%s (expect %s) image_changed=%s" % [found_prop, coord.scale, uniform_value, new_scale, image_changed])
 	return checker
-
-
-## Edits target_object.property_name to value through a real EditorProperty
-## widget's own emit_changed(), the same call an EditorProperty subclass
-## (e.g. a Vector2 slider) makes internally on an actual drag, via a
-## throwaway EditorInspector pointed directly at target_object so the widget
-## exists as a top-level property with no fold/expand step needed. Frees the
-## throwaway inspector afterward. Returns whether the widget was found.
-func _drive_real_property_edit(plugin: EditorPlugin, target_object: Object, property_name: StringName, value: Variant) -> bool:
-	var temp_inspector: EditorInspector = EditorInspector.new()
-	plugin.get_tree().root.add_child(temp_inspector)
-	temp_inspector.edit(target_object)
-	await plugin.get_tree().process_frame
-	var ep: EditorProperty = GSTInspectorColumn.find_editor_property_in(temp_inspector, property_name, target_object)
-	var found: bool = ep != null
-	if ep != null:
-		ep.emit_changed(property_name, value)
-		await plugin.get_tree().process_frame
-	temp_inspector.queue_free()
-	return found
 
 
 ## Item 3: switching to the text preset keeps the same ShaderMaterial
@@ -809,8 +796,6 @@ func _run_phase5_local_resize(plugin: EditorPlugin, panel: GSTMainPanel, stack_l
 ## inside the target node (previously a quarter-rect sample under the
 ## sprite preset read alpha 0, outside the node, per the fix request).
 func _run_phase5_checker_grid_evidence(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview) -> void:
-	var stack: GSTStack = panel.get_stack()
-
 	panel._on_preset_selected(2) # "full_rect"
 	for i: int in range(3):
 		await plugin.get_tree().process_frame
@@ -820,7 +805,7 @@ func _run_phase5_checker_grid_evidence(plugin: EditorPlugin, panel: GSTMainPanel
 
 	var grid: GSTLayer = stack_list.add_layer_by_entry_id("generative/checker")
 	undo.set_output_color(grid.id)
-	_set_coord_property(grid.coord, stack, &"offset", Vector2(0.5, 0.5))
+	_set_coord_property(panel, grid.coord, &"offset", Vector2(0.5, 0.5))
 	for i: int in range(2):
 		await plugin.get_tree().process_frame
 
@@ -842,7 +827,7 @@ func _run_phase5_checker_grid_evidence(plugin: EditorPlugin, panel: GSTMainPanel
 	# fraction of the rendered frame. Corner parity is an invalid oracle for a
 	# checker because a rotated grid can still produce the same four values.
 	var local_unrotated_image: Image = preview.get_viewport_image()
-	_set_coord_property(grid.coord, stack, &"rotation", 0.4)
+	_set_coord_property(panel, grid.coord, &"rotation", 0.4)
 	var local_rotated_image: Image = null
 	var changed_fraction: float = 0.0
 	for i: int in range(8):
@@ -985,7 +970,7 @@ func _run_phase6_new(plugin: EditorPlugin, panel: GSTMainPanel, ids: Dictionary)
 	await plugin.get_tree().process_frame
 	await _cancel_picker(plugin, panel)
 	var new_stack: GSTStack = panel.get_stack()
-	var history: UndoRedo = _get_history(new_stack)
+	var history: UndoRedo = _get_history(panel)
 	var new_ok: bool = new_stack.layers.is_empty() and panel.get_current_path().is_empty() and not is_same(new_stack, old_stack)
 	var has_undo_now: bool = history != null and history.has_undo()
 	_check("3a", new_ok and has_undo_now, "New: layers=%d current_path='%s' new_instance=%s has_undo=%s" % [new_stack.layers.size(), panel.get_current_path(), not is_same(new_stack, old_stack), has_undo_now])
@@ -1143,7 +1128,7 @@ func _run_phase7(plugin: EditorPlugin) -> void:
 	# to the same UndoRedo regardless of which bare GSTStack instance is
 	# passed, so this one reference stays valid across every New/open_recipe
 	# replace_stack below.
-	var history: UndoRedo = _get_history(panel.get_stack())
+	var history: UndoRedo = _get_history(panel)
 
 	await _run_phase7_dissolve(plugin, panel, history, library)
 	await _run_phase7_sprite_holographic(plugin, panel, history, library)
@@ -1453,7 +1438,7 @@ func _run_phase7_dissolve(plugin: EditorPlugin, panel: GSTMainPanel, history: Un
 	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
 
 	var fbm: GSTLayer = undo.add_layer("generative/fbm", GSTLayer.Kind.FIELD, true)
-	_set_coord_property(fbm.coord, panel.get_stack(), &"scale", Vector2(4.0, 4.0))
+	_set_coord_property(panel, fbm.coord, &"scale", Vector2(4.0, 4.0))
 
 	var threshold: GSTLayer = undo.add_layer("fieldops/smoothstep", GSTLayer.Kind.FIELD, false)
 	undo.assign_slot(threshold.id, "x", fbm.id)
@@ -1511,9 +1496,9 @@ func _run_phase7_sprite_holographic(plugin: EditorPlugin, panel: GSTMainPanel, h
 	var texture: GSTLayer = undo.add_layer("source/texture", GSTLayer.Kind.COLOR, false)
 
 	var band: GSTLayer = undo.add_layer("generative/stripes", GSTLayer.Kind.FIELD, true)
-	_set_coord_property(band.coord, panel.get_stack(), &"scale", Vector2(2.83, 2.83))
-	_set_coord_property(band.coord, panel.get_stack(), &"rotation", -0.7853982)
-	_set_coord_property(band.coord, panel.get_stack(), &"scroll", Vector2(0.4, 0.0))
+	_set_coord_property(panel, band.coord, &"scale", Vector2(2.83, 2.83))
+	_set_coord_property(panel, band.coord, &"rotation", -0.7853982)
+	_set_coord_property(panel, band.coord, &"scroll", Vector2(0.4, 0.0))
 
 	var palette: GSTLayer = undo.add_layer("color/palette", GSTLayer.Kind.COLOR, false)
 	undo.assign_slot(palette.id, "t", band.id)
@@ -1615,23 +1600,22 @@ func _run_phase7_recipe_checks(plugin: EditorPlugin, panel: GSTMainPanel, histor
 
 
 ## History anchor regression (docs/PLAN.md Cross-cutting "EditorUndoRedoManager
-## integration", "History anchor (phase 7)"): a GSTUndo action committed while
-## the open stack carries a real res:// path (open_recipe / reopen_shader_path
-## both load through GSTStackIO, which sets resource_path on the returned
-## Resource) must land in the same UndoRedo bucket panel.get_watched_history()
-## resolves, not a bucket keyed off the path-bearing stack instance itself.
-## Drives panel.get_watched_history() directly (rather than the smoke's own
-## _get_history(stack) helper, which recomputes get_object_history_id(stack)
-## and would silently pass even if GSTUndo's own custom_context landed
-## elsewhere, since a fresh lookup off the same stack instance always agrees
-## with itself). The layer-gone-and-text-matches-post-open check after undo is
-## the real differentiator: add_layer's own commit_action(false) always
-## applies the mutation and calls _notify() synchronously regardless of which
-## bucket the action registers to, so has_undo()/resync alone would pass even
-## on the wrong bucket -- only calling undo() on the panel's actual watched
-## history and checking it removes the add (not some other action, e.g.
-## re-undoing the open_recipe/reopen_shader_path replace itself) proves the
-## anchor is shared.
+## integration", "History anchor (phase 7)"): a GSTUndo action committed
+## while the open stack carries a real res:// path (open_recipe /
+## reopen_shader_path both load through GSTStackIO, which sets
+## resource_path on the returned Resource) must still land in
+## panel.get_watched_history() -- this panel's one standalone UndoRedo
+## (phase 2 removed the prior EditorUndoRedoManager per-stack bucket this
+## regression originally guarded; a path-bearing stack has no separate
+## bucket left to be misrouted into). Drives panel.get_watched_history()
+## directly, the same instance _get_history(panel) returns. The
+## layer-gone-and-text-matches-post-open check after undo is the real
+## differentiator: add_layer's own commit_action(false) always applies the
+## mutation and calls _notify() synchronously, so has_undo()/resync alone
+## would pass even if the action had landed somewhere else -- only calling
+## undo() on the panel's actual watched history and checking it removes the
+## add (not some other action, e.g. re-undoing the open_recipe/
+## reopen_shader_path replace itself) proves the anchor is shared.
 func _run_phase7_history_anchor(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	await _run_phase7_history_anchor_open_recipe(plugin, panel)
 	await _run_phase7_history_anchor_reopen_shader(plugin, panel)
@@ -1840,37 +1824,28 @@ func _colors_all_close(a: Array[Color], b: Array[Color], tolerance: float) -> bo
 	return true
 
 
-## Sets a GSTCoordBlock property through the same EditorUndoRedoManager
-## create_action/add_do_property/commit_action() (default execute = true)
-## path item 2 above uses for coord.scale: a real property-undo action, the
-## same shape an inspector slider drag registers, that actually applies the
-## do value on this initial commit (unlike GSTUndo's own commit_action(false)
-## + manual _notify(), which is a different call shape for a different
-## purpose -- routing structural edits through GSTUndo's one history bucket).
-func _set_coord_property(coord: GSTCoordBlock, stack: GSTStack, property: StringName, value: Variant) -> void:
+## Sets a GSTCoordBlock property through GSTUndo.commit_property_change
+## (decision superseding 20): a real property-undo action registered on the
+## panel's own standalone UndoRedo, the same call gst_inspector_column.gd's
+## own native rows make once a gesture finishes, rather than a raw write
+## straight into the coord block.
+func _set_coord_property(panel: GSTMainPanel, coord: GSTCoordBlock, property: StringName, value: Variant) -> void:
 	var old_value: Variant = coord.get(property)
-	var editor_undo_redo: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
-	editor_undo_redo.create_action("set coord %s" % property, UndoRedo.MERGE_DISABLE, stack)
-	editor_undo_redo.add_do_property(coord, property, value)
-	editor_undo_redo.add_undo_property(coord, property, old_value)
-	editor_undo_redo.commit_action()
+	coord.set(property, value)
+	panel.get_undo().commit_property_change(coord, property, old_value, value)
 
 
 ## Sets layer.<property_name> -- a manifest param, dynamic via
-## GSTLayer._get/_set -- through a real EditorUndoRedoManager property
-## action, the same shape a real inspector slider commit uses (item 2 and
-## item 16a above), rather than a raw Dictionary write straight into
-## layer.params (docs/PLAN.md Phase 7 Build: "set params via the layer
-## resources with undoable property actions"), so the phase 7 recipe builds
-## register real, undoable history for every param the same way a live edit
-## would.
+## GSTLayer._get/_set -- through GSTUndo.commit_property_change, the same
+## call a real native property row commit uses (item 2 and item 16a above),
+## rather than a raw Dictionary write straight into layer.params
+## (docs/PLAN.md Phase 7 Build: "set params via the layer resources with
+## undoable property actions"), so the phase 7 recipe builds register real,
+## undoable history for every param the same way a live edit would.
 func _set_layer_param(panel: GSTMainPanel, layer: GSTLayer, property_name: StringName, value: Variant) -> void:
 	var old_value: Variant = layer.get(property_name)
-	var editor_undo_redo: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
-	editor_undo_redo.create_action("set %s" % property_name, UndoRedo.MERGE_DISABLE, panel.get_stack())
-	editor_undo_redo.add_do_property(layer, property_name, value)
-	editor_undo_redo.add_undo_property(layer, property_name, old_value)
-	editor_undo_redo.commit_action()
+	layer.set(property_name, value)
+	panel.get_undo().commit_property_change(layer, property_name, old_value, value)
 
 
 func _check(item: String, ok: bool, detail: String) -> void:

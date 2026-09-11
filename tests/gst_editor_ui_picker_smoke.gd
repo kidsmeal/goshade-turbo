@@ -230,7 +230,7 @@ func run(plugin: EditorPlugin) -> void:
 	var frozen: Dictionary = panel.get_picker_context()
 	var alternate: GSTStack = GSTStack.new()
 	var old_undo: GSTUndo = panel.get_undo()
-	panel._install_stack(alternate, GSTUndo.new(plugin.get_undo_redo(), alternate, panel.get_library(), panel._on_stack_changed, panel._history_context))
+	panel._install_stack(alternate, GSTUndo.new(panel.get_watched_history(), alternate, panel.get_library(), panel._on_stack_changed, panel._on_property_changed))
 	var stale_history: int = history.get_history_count()
 	picker.activate_value("color/fill")
 	_check("stale_stack", panel.is_picker_open() and panel.get_picker_context() == frozen and alternate.layers.is_empty() and history.get_history_count() == stale_history, "stale stack refused without mutation")
