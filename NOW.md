@@ -13,7 +13,7 @@ Position: idle - pick a mode with /claudhd:start or /claudhd:design
 from: (unplanned work)
 Counts: queue 0 · quick fixes 3 · ideas untriaged 6
 
-Last touched: 2026-09-10
+Last touched: 2026-09-11
 
 ## Active thread (only one)
 
@@ -21,7 +21,7 @@ Last touched: 2026-09-10
 
 Next physical action:
 
-- [ ] Phase 1 committed 979e835 and pushed; next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 2 (session documents, per-document UndoRedo) when you say go
+- [ ] Phase 2 committed 9cb490d (not pushed); next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 3 (per-document history ownership) when you say go
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
