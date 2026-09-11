@@ -21,7 +21,7 @@ Last touched: 2026-09-11
 
 Next physical action:
 
-- [ ] Phase 3 review PASS-WITH-NOTES round 3, ready to commit (gate: say go); then /claudhd:build docs/SHADER_TABS_reviewed-plan.md 4 (visible tabs)
+- [ ] Phase 3 committed ee17cf4; next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 4 (visible shader tabs) when you say go
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
