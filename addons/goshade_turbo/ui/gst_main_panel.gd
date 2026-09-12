@@ -81,7 +81,7 @@ const FILE_REOPEN_SHADER: int = 3
 var _stack: GSTStack = null
 var _library: GSTLibrary = null
 ## Every open GSTDocument (phase 3, docs/SHADER_TABS_reviewed-plan.md), in
-## creation order. Never pruned in this phase (document close is phase 6).
+## creation order. _close_document_now is the only pruner (_documents.remove_at).
 var _documents: Array[GSTDocument] = []
 ## The document currently bound to the shared UI (stack list, inspector
 ## column, output block, coord-space dropdown, preview). Changed by
@@ -116,6 +116,15 @@ var _save_as_dialog: EditorFileDialog = null
 var _export_dialog: EditorFileDialog = null
 var _reopen_shader_dialog: EditorFileDialog = null
 var _overwrite_dialog: ConfirmationDialog = null
+## Phase 6 (docs/SHADER_TABS_reviewed-plan.md): Save/Discard/Cancel prompt for
+## closing a dirty document (decision 9). ok_button_text is overridden to
+## "Save"; the constructor's own Cancel button is kept as-is; a third
+## "Discard" button is added via add_button (native AcceptDialog API), which
+## never auto-hides the dialog on press (dialogs.cpp AcceptDialog::
+## _custom_action never calls hide()) -- _on_close_custom_action hides it
+## explicitly.
+var _close_dialog: ConfirmationDialog = null
+var _close_discard_button: Button = null
 
 ## Phase 5 (docs/SHADER_TABS_reviewed-plan.md): "capture stable document ID
 ## and request identity for Save As, Export, overwrite confirmation,
@@ -145,6 +154,13 @@ var _pending_overwrite: Dictionary = {}
 var _pending_open: Dictionary = {}
 var _pending_reopen: Dictionary = {}
 var _pending_image: Dictionary = {}
+## Phase 6: captures the document a close request's own Save/Discard/Cancel
+## prompt is asking about, the same shape as every *_pending_* Dictionary
+## above -- so a stale response (the document closed some other way while the
+## prompt was up) resolves to null through _resolve_pending_document instead
+## of acting on whatever document happens to be active when the dialog
+## answers.
+var _pending_close: Dictionary = {}
 
 ## True only right after open_recipe() installs a shipped recipe (docs/PLAN.md
 ## Phase 8 Build item 3, design decision 16): gates the Randomize button.
@@ -175,6 +191,9 @@ var _control_refusals: Dictionary = {}
 ## gst_stack_list.gd's own full-rebuild-per-change convention). An editor
 ## smoke seam (get_tab_button); production code never reads this map.
 var _tab_buttons: Dictionary = {}
+## GSTDocument.session_id -> its own tab close Button (phase 6), rebuilt
+## alongside _tab_buttons on every _refresh_tabs() call.
+var _tab_close_buttons: Dictionary = {}
 ## Shared by every tab Button (phase 4 review round 1 fix 1): a plain
 ## toggle_mode Button with no group reverts status.pressed to false on a
 ## second click (BaseButton::on_action_event unconditionally toggles, then
@@ -333,6 +352,20 @@ func _ready() -> void:
 	_overwrite_dialog.confirmed.connect(_on_overwrite_confirmed)
 	_overwrite_dialog.canceled.connect(func() -> void: _pending_overwrite = {})
 	add_child(_overwrite_dialog)
+
+	# Phase 6: Save/Discard/Cancel prompt for closing a dirty document
+	# (decision 9). confirmed (the native OK button, relabeled "Save") and
+	# canceled (the native Cancel button, unchanged) are AcceptDialog's own
+	# signals; "Discard" is a third button added via add_button, whose own
+	# press never auto-hides the dialog (dialogs.cpp AcceptDialog::
+	# _custom_action), so _on_close_custom_action hides it explicitly.
+	_close_dialog = ConfirmationDialog.new()
+	_close_dialog.ok_button_text = "Save"
+	_close_discard_button = _close_dialog.add_button("Discard", true, "discard")
+	_close_dialog.confirmed.connect(_on_close_save_requested)
+	_close_dialog.canceled.connect(func() -> void: _pending_close = {})
+	_close_dialog.custom_action.connect(_on_close_custom_action)
+	add_child(_close_dialog)
 	_build_start_screen()
 	_apply_default_layout.call_deferred()
 
@@ -919,10 +952,9 @@ func _restore_document_preview_controls(doc: GSTDocument) -> void:
 ## activation/creation (_activate_document) and every active-document stack
 ## or property edit (_on_stack_changed/_on_property_changed) and successful
 ## save (_save_stack_to_path, :1622), so titles and dirty stars stay current
-## without a separate per-document watcher. No close button is built here:
-## phase 6 wires the close affordance (docs/SHADER_TABS_reviewed-plan.md phase 4
-## "Wire the tab-close affordance in phase 6; do not expose an unguarded
-## close path in this phase").
+## without a separate per-document watcher. Each tab's own close Button is
+## rebuilt here alongside its title Button (below, close_document.bind(doc)),
+## per phase 6 (docs/SHADER_TABS_reviewed-plan.md).
 ##
 ## Round 1 fix 2: every rebuild frees and recreates every tab Button, which
 ## would silently drop keyboard undo focus (_owns_undo_focus() reads
@@ -937,11 +969,12 @@ func _restore_document_preview_controls(doc: GSTDocument) -> void:
 ## that focus alone.
 func _refresh_tabs() -> void:
 	var current_focus: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	var focus_was_tab_button: bool = current_focus != null and _tab_buttons.values().has(current_focus)
+	var focus_was_tab_button: bool = current_focus != null and (_tab_buttons.values().has(current_focus) or _tab_close_buttons.values().has(current_focus))
 	for child: Node in _shader_tabs.get_children():
 		_shader_tabs.remove_child(child)
 		child.queue_free()
 	_tab_buttons.clear()
+	_tab_close_buttons.clear()
 	var untitled_index: int = 0
 	var active_button: Button = null
 	for doc: GSTDocument in _documents:
@@ -960,6 +993,18 @@ func _refresh_tabs() -> void:
 		_tab_buttons[doc.session_id] = button
 		if doc == _active_document:
 			active_button = button
+		# Phase 6 (docs/SHADER_TABS_reviewed-plan.md): "Wire close buttons".
+		# A real native Button, not a plain-text glyph on the title button
+		# itself, so the close gesture has its own hit target and its own
+		# tooltip separate from the title's full-path tooltip.
+		var close_button: Button = Button.new()
+		close_button.text = "x"
+		close_button.tooltip_text = "Close tab"
+		close_button.flat = true
+		close_button.custom_minimum_size.x = 24.0
+		close_button.pressed.connect(close_document.bind(doc))
+		_shader_tabs.add_child(close_button)
+		_tab_close_buttons[doc.session_id] = close_button
 	if focus_was_tab_button and active_button != null:
 		active_button.grab_focus()
 	# Fix 3 (round 1): keep the active tab scrolled into view under overflow,
@@ -1055,6 +1100,12 @@ func get_tab_button(doc: GSTDocument) -> Button:
 	return _tab_buttons.get(doc.session_id) as Button
 
 
+## doc's own tab close Button, or null if doc is not open (phase 6).
+## Wired-by: none (editor smoke seam)
+func get_tab_close_button(doc: GSTDocument) -> Button:
+	return _tab_close_buttons.get(doc.session_id) as Button
+
+
 ## Wired-by: none (editor smoke seam)
 func get_new_tab_button() -> Button:
 	return _new_tab_button
@@ -1127,10 +1178,10 @@ func _find_reusable_pristine_document() -> GSTDocument:
 
 ## Looks up an already-open document by its stable session id (phase 5).
 ## Returns null when no open document carries that id -- it belonged to a
-## document that has since closed (phase 6 adds the close path this guards
-## against; tests/gst_editor_document_files_smoke.gd simulates it in the
-## meantime by removing a document from _documents directly, since real
-## close does not exist yet).
+## document that has since closed through _close_document_now (phase 6);
+## tests/gst_editor_document_files_smoke.gd still isolates the resolution
+## guard by removing a document from _documents directly instead of driving
+## a real close.
 func _find_document_by_session_id(session_id: int) -> GSTDocument:
 	for doc: GSTDocument in _documents:
 		if doc.session_id == session_id:
@@ -1161,10 +1212,20 @@ func _resolve_pending_document(pending: Dictionary) -> GSTDocument:
 ## active document to capture (never observed in practice: _ready() always
 ## installs a first document before any dialog can open).
 func _capture_active_document_request() -> Dictionary:
-	if _active_document == null:
+	return _capture_document_request(_active_document)
+
+
+## Same capture shape as _capture_active_document_request, parameterized by
+## doc instead of always _active_document (phase 6): a close request, and the
+## Save As it may trigger for an untitled document, binds to the document the
+## close button actually belongs to -- not necessarily the active one, since
+## an inactive tab's own close button closes that tab whether or not it is
+## on screen right now.
+func _capture_document_request(doc: GSTDocument) -> Dictionary:
+	if doc == null:
 		return {}
 	_next_file_request_id += 1
-	return {"request_id": _next_file_request_id, "doc_id": _active_document.session_id}
+	return {"request_id": _next_file_request_id, "doc_id": doc.session_id}
 
 
 ## Creates a new GSTDocument for new_stack and activates it (decision
@@ -1195,6 +1256,132 @@ func open_document(new_stack: GSTStack, new_path: String, new_recipe_open: bool,
 	var doc: GSTDocument = _create_document(new_stack, new_path, new_recipe_open, new_recipe_name, new_reopened_import)
 	_activate_document(doc)
 	return doc
+
+
+## Public close entry point (decision 9, docs/SHADER_TABS_reviewed-plan.md
+## phase 6): wired by each tab's own close Button (_refresh_tabs). A clean
+## (non-dirty) document closes immediately; a dirty one is offered
+## Save/Discard/Cancel through _close_dialog. Finishes any active native
+## gesture on doc first, but only when doc is the active document -- an
+## inactive document can hold no live gesture of its own (every past edit on
+## it was already committed before ownership moved away,
+## activate_document/open_document's own await _finish_pending_edits()
+## before switching, the same rule _save_stack_to_path/_export_stack_to_path
+## already follow) -- before evaluating GSTDocument.is_dirty(), since a
+## pending edit's fingerprint has not landed on the stack yet (Cross-cutting
+## "Finish continuous native edits before evaluating dirty state"). Registers
+## no undo action anywhere (Cross-cutting "Keep closing and entry navigation
+## outside stack undo").
+## Wired-by: _refresh_tabs()'s own per-tab close Button.pressed connection.
+func close_document(doc: GSTDocument) -> void:
+	if doc == null or not _documents.has(doc):
+		return
+	if doc == _active_document:
+		await _finish_pending_edits()
+	# A stale close continuation (doc closed some other way while the above
+	# await suspended) must not fall through to the dialog below.
+	if not _documents.has(doc):
+		return
+	if not doc.is_dirty():
+		_close_document_now(doc)
+		return
+	_pending_close = _capture_document_request(doc)
+	_close_dialog.dialog_text = "%s has unsaved changes. Save before closing?" % _describe_document(doc)
+	_close_dialog.popup_centered()
+
+
+## Short display name for the close-confirmation dialog's own text; not the
+## tab title (_tab_title), which also carries the dirty star and an
+## untitled_index this message does not need.
+func _describe_document(doc: GSTDocument) -> String:
+	if not doc.current_path.is_empty():
+		return doc.current_path.get_file().get_basename()
+	if not doc.recipe_name.is_empty():
+		return doc.recipe_name.replace("_", " ").capitalize()
+	return "This shader"
+
+
+## _close_dialog.confirmed ("Save"). Resolves against the document captured
+## when the prompt opened, not whichever document is active now, the same
+## resolve-by-session-id pattern as every other pending file/dialog response
+## (Cross-cutting "resolve every response against its pending request and
+## owning document; reject closed/stale targets without touching another
+## document") -- a stale/closed target (doc == null) does nothing. An
+## untitled document (decision 9: "Save on an untitled document runs Save As
+## and closes only after success") routes through the real Save As dialog
+## with close_after=true in its own pending capture, so _on_save_as_file_
+## selected finishes the close once that write actually succeeds. A named
+## document saves directly to its own current_path and closes only if that
+## write succeeds; a failed save leaves it dirty and open with its own
+## failure message already set by _save_stack_to_path.
+## Wired-by: _close_dialog.confirmed (_ready()).
+func _on_close_save_requested() -> void:
+	var doc: GSTDocument = _resolve_pending_document(_pending_close)
+	_pending_close = {}
+	if doc == null:
+		return
+	if doc.current_path.is_empty():
+		var pending: Dictionary = _capture_document_request(doc)
+		pending["close_after"] = true
+		_pending_save_as = pending
+		_save_as_dialog.popup_centered_ratio()
+		return
+	var result: Dictionary = await _save_stack_to_path(doc, doc.current_path)
+	if bool(result.get("ok", false)) and _documents.has(doc):
+		_close_document_now(doc)
+
+
+## _close_dialog.custom_action ("Discard"; every other action string is
+## ignored). Discard releases only the selected document's own
+## resources/history (Cross-cutting), never any other open document's.
+## Wired-by: _close_dialog.custom_action (_ready()).
+func _on_close_custom_action(action: String) -> void:
+	if action != "discard":
+		return
+	_close_dialog.hide()
+	var doc: GSTDocument = _resolve_pending_document(_pending_close)
+	_pending_close = {}
+	if doc == null:
+		return
+	_close_document_now(doc)
+
+
+## Removes doc from _documents and tears down its own UndoRedo/GSTUndo (the
+## only place that actually detaches a document from this panel). Every
+## *_pending_* Dictionary above already resolves through
+## _find_document_by_session_id, so once doc is removed here every in-flight
+## file/picker/property callback captured against its session id resolves to
+## null on its own -- no separate invalidation pass is needed. Closing the
+## active document selects the adjacent remaining tab (decision 9, clamped to
+## the same index the closed tab occupied); closing the last document
+## recreates the exact bootstrap condition _ready() itself installs (one
+## fresh pristine document, hidden behind the entry surface) instead of
+## leaving the panel with no document at all, so every existing invariant
+## that assumes an active document always exists stays intact. Registers no
+## undo action anywhere (Cross-cutting "Keep closing and entry navigation
+## outside stack undo").
+func _close_document_now(doc: GSTDocument) -> void:
+	if not _documents.has(doc):
+		return
+	var index: int = _documents.find(doc)
+	var was_active: bool = doc == _active_document
+	if was_active:
+		# Decision 5's own switch-time rule applies to close too: a picker
+		# open against the document being closed must not survive pointed at
+		# a stack this panel is about to stop showing.
+		_close_picker(false)
+	_documents.remove_at(index)
+	doc.teardown()
+	if not was_active:
+		_refresh_tabs()
+		return
+	if _documents.is_empty():
+		_activate_document(_create_document(GSTStack.new(), "", false))
+		_start_screen.show()
+		_editing_content.hide()
+		_set_picker_modality(false)
+		return
+	_activate_document(_documents[clampi(index, 0, _documents.size() - 1)])
 
 
 ## Finishes any active native gesture and closes any open native color popup
@@ -1375,10 +1562,37 @@ func is_export_dialog_visible() -> bool:
 	return _export_dialog != null and _export_dialog.visible
 
 
+## Deferred note (phase 5 review round 1, resolved phase 6): a force-hide
+## with no resolution coming (the default, abandon=true) now also clears
+## _pending_export itself, matching every real abandonment path (the real
+## dialog's own Cancel/Esc already clears it through its own canceled
+## signal), instead of leaving that job to each caller. abandon=false
+## preserves _pending_export for the one existing caller shape that
+## immediately follows this call with its own resolution of the very request
+## that opened the dialog (tests/gst_editor_document_files_smoke.gd's
+## _run_export_second_confirmation, simulating a real EditorFileDialog's own
+## auto-hide-on-file_selected, which never emits canceled either).
 ## Wired-by: none (editor smoke seam)
-func hide_export_dialog() -> void:
+func hide_export_dialog(abandon: bool = true) -> void:
 	if _export_dialog != null:
 		_export_dialog.hide()
+	if abandon:
+		_pending_export = {}
+
+
+## Wired-by: none (editor smoke seam)
+func get_close_dialog() -> ConfirmationDialog:
+	return _close_dialog
+
+
+## Wired-by: none (editor smoke seam)
+func is_close_dialog_visible() -> bool:
+	return _close_dialog != null and _close_dialog.visible
+
+
+## Wired-by: none (editor smoke seam)
+func get_close_dialog_discard_button() -> Button:
+	return _close_discard_button
 
 
 func _on_new_pressed() -> void:
@@ -1567,11 +1781,22 @@ func _on_save_as_pressed() -> void:
 ## open" failure only when a request *was* captured and its document is
 ## gone; _resolve_pending_document already folds the "never captured" case
 ## into _active_document, so this only ever sees null for a genuinely
-## closed/stale target.
+## closed/stale target -- surfaced on whichever document is active now
+## (deferred note, phase 5 review round 1, resolved phase 6: a closed target
+## used to leave this silently discarded). close_after (phase 6: set only by
+## the close lifecycle's own Save-on-untitled-document path) closes doc once
+## its own save actually succeeds; a still-open failed save leaves it dirty
+## and open, matching the same rule a plain Save As failure already follows.
 func _on_save_as_file_selected(path: String) -> void:
 	var doc: GSTDocument = _resolve_pending_document(_pending_save_as)
+	var close_after: bool = bool(_pending_save_as.get("close_after", false))
 	_pending_save_as = {}
-	await _save_stack_to_path(doc, path)
+	var result: Dictionary = await _save_stack_to_path(doc, path)
+	if doc == null:
+		_set_operation_message("Save", String(result.get("reason", "")))
+		return
+	if close_after and bool(result.get("ok", false)) and _documents.has(doc):
+		_close_document_now(doc)
 
 
 ## Saves the open stack to `path` through GSTStackIO. This is both the Save
@@ -1630,11 +1855,16 @@ func _on_export_pressed() -> void:
 
 
 ## Phase 5: resolves against _pending_export (the document active when the
-## Export dialog was opened), not whichever document is active now.
+## Export dialog was opened), not whichever document is active now. A
+## closed target surfaces its reason on whichever document is active now
+## (deferred note, phase 5 review round 1, resolved phase 6), instead of
+## being silently discarded.
 func _on_export_file_selected(path: String) -> void:
 	var doc: GSTDocument = _resolve_pending_document(_pending_export)
 	_pending_export = {}
-	await _export_stack_to_path(doc, path, false)
+	var result: Dictionary = await _export_stack_to_path(doc, path, false)
+	if doc == null:
+		_set_operation_message("Export", String(result.get("reason", "")))
 
 
 ## Exports the currently active document's stack to `path`. Production/test

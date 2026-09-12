@@ -16,12 +16,13 @@ extends RefCounted
 ## originating document's own stack, never by trusting current_path/message
 ## state alone.
 ##
-## "Stale/closed target" is simulated here by removing a document from
+## "Stale/closed target" is mostly simulated here by removing a document from
 ## _documents (and tearing it down) directly, the same bypass-the-guarded-UI
 ## technique tests/gst_editor_ui_picker_smoke.gd already uses for a stale
-## picker-context installation: real document close does not exist until
-## phase 6 (plan Blockers: "Closed-document callbacks receive their full
-## runtime check after phase 6 adds closure").
+## picker-context installation (real document close landed in phase 6:
+## _run_real_close_then_stale_save_as_rejected below covers the same shape
+## through panel.close_document itself, plan Blockers: "Closed-document
+## callbacks receive their full runtime check after phase 6 adds closure").
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -66,6 +67,8 @@ func run(plugin: EditorPlugin) -> void:
 	await _run_save_as_path_conflict(plugin, panel, doc_a, doc_b, fingerprint_a)
 	await _run_export_second_confirmation(plugin, panel, doc_a, doc_b)
 	await _run_stale_closed_save_as_rejected(plugin, panel, doc_a)
+	await _run_real_close_then_stale_save_as_rejected(plugin, panel, doc_a)
+	await _run_stale_closed_export_rejected(plugin, panel, doc_a)
 	await _run_delayed_preview_image(plugin, panel, doc_a, doc_b)
 	await _run_open_message_routing(plugin, panel, doc_a, doc_b)
 	await _run_reopen_message_routing(plugin, panel, doc_a, doc_b)
@@ -173,7 +176,11 @@ func _run_export_second_confirmation(plugin: EditorPlugin, panel: GSTMainPanel, 
 	# dialog's own popup_centered*() call (Window's "already has another
 	# exclusive child" otherwise).
 	panel._on_export_pressed()
-	panel.hide_export_dialog()
+	# abandon=false (phase 6): this call's own request must survive into the
+	# _on_export_file_selected call immediately below, not be cleared here --
+	# unlike a genuine abandonment (no resolution coming), which is
+	# hide_export_dialog()'s own default.
+	panel.hide_export_dialog(false)
 	panel._on_export_file_selected(export_path)
 	await plugin.get_tree().process_frame
 	var first_write_ok: bool = _read_file(export_path) == expected_code
@@ -184,7 +191,7 @@ func _run_export_second_confirmation(plugin: EditorPlugin, panel: GSTMainPanel, 
 	var mutated_text: String = _read_file(export_path)
 
 	panel._on_export_pressed()
-	panel.hide_export_dialog()
+	panel.hide_export_dialog(false)
 	panel.activate_document(doc_b)
 	await plugin.get_tree().process_frame
 	panel._on_export_file_selected(export_path)
@@ -200,12 +207,18 @@ func _run_export_second_confirmation(plugin: EditorPlugin, panel: GSTMainPanel, 
 	_cleanup([export_path])
 
 
-## Simulates a closed target (real close does not exist until phase 6): a
-## throwaway document captures a Save As request, is then removed from
-## _documents and torn down before the dialog's response arrives. The
-## response must be rejected outright -- no file written, no message placed
-## on the document that is actually active, and the active document itself
-## left untouched.
+## Simulates a closed target via the same low-level bypass
+## tests/gst_editor_ui_picker_smoke.gd already uses for a stale
+## picker-context installation (a throwaway document captures a Save As
+## request, is then removed from _documents and torn down before the
+## dialog's response arrives), exercising _resolve_pending_document's own
+## rejection directly. _run_real_close_then_stale_save_as_rejected below
+## covers the same shape through the real, now-existing close path (phase 6).
+## The response must be rejected outright -- no file written, the active
+## document's own identity/content left untouched -- but (deferred note,
+## phase 5 review round 1, resolved phase 6) its own operation_messages now
+## does carry the closed-target diagnostic, surfaced instead of silently
+## discarded.
 func _run_stale_closed_save_as_rejected(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument) -> void:
 	var doc_c: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
@@ -213,6 +226,7 @@ func _run_stale_closed_save_as_rejected(plugin: EditorPlugin, panel: GSTMainPane
 	panel._save_as_dialog.hide()
 	panel.activate_document(doc_a)
 	await plugin.get_tree().process_frame
+	doc_a.operation_messages.clear()
 	panel._documents.erase(doc_c)
 	doc_c.teardown()
 
@@ -222,8 +236,75 @@ func _run_stale_closed_save_as_rejected(plugin: EditorPlugin, panel: GSTMainPane
 	await plugin.get_tree().process_frame
 
 	var nothing_written: bool = not FileAccess.file_exists(stale_path)
-	var active_untouched: bool = panel.get_active_document() == doc_a and not doc_a.operation_messages.has("Save")
-	_check("stale_closed_save_as_rejected", nothing_written and active_untouched, "file_exists=%s active_is_a=%s doc_a_has_save_message=%s" % [FileAccess.file_exists(stale_path), panel.get_active_document() == doc_a, doc_a.operation_messages.has("Save")])
+	var active_untouched: bool = panel.get_active_document() == doc_a
+	var message_surfaced: bool = String(doc_a.operation_messages.get("Save", "")).contains("no longer open")
+	_check("stale_closed_save_as_rejected", nothing_written and active_untouched and message_surfaced, "file_exists=%s active_is_a=%s doc_a_message='%s'" % [FileAccess.file_exists(stale_path), panel.get_active_document() == doc_a, doc_a.operation_messages.get("Save", "")])
+
+
+## Regression (phase 6 review round 1, fix-now note 2): _on_export_file_
+## selected's own doc == null branch (gst_main_panel.gd, reached when
+## _resolve_pending_document finds no match for _pending_export) was
+## unexecuted by any test, even though docs/CURRENTNESS_AUDIT.md ticks it
+## alongside the runtime-verified Save As branch above. Same bypass shape as
+## _run_stale_closed_save_as_rejected: doc_c (opened, and so already active)
+## captures the Export request, is then removed from _documents and torn
+## down before the dialog's response arrives, so _resolve_pending_document
+## resolves null and the diagnostic must land on doc_a (active when the
+## response resolves), not be silently discarded.
+func _run_stale_closed_export_rejected(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument) -> void:
+	var doc_c: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
+	await plugin.get_tree().process_frame
+	panel._on_export_pressed()
+	# abandon=false: this call's own request must survive into the
+	# _on_export_file_selected call below (same reasoning as
+	# _run_export_second_confirmation's own hide_export_dialog(false) call).
+	panel.hide_export_dialog(false)
+	panel.activate_document(doc_a)
+	await plugin.get_tree().process_frame
+	doc_a.operation_messages.clear()
+	panel._documents.erase(doc_c)
+	doc_c.teardown()
+
+	var stale_path: String = "user://gst_tabs_files_export_stale.gdshader"
+	_cleanup([stale_path])
+	panel._on_export_file_selected(stale_path)
+	await plugin.get_tree().process_frame
+
+	var nothing_written: bool = not FileAccess.file_exists(stale_path)
+	var active_untouched: bool = panel.get_active_document() == doc_a
+	var message_surfaced: bool = String(doc_a.operation_messages.get("Export", "")).contains("no longer open")
+	_check("stale_closed_export_rejected", nothing_written and active_untouched and message_surfaced, "file_exists=%s active_is_a=%s doc_a_message='%s'" % [FileAccess.file_exists(stale_path), panel.get_active_document() == doc_a, doc_a.operation_messages.get("Export", "")])
+
+
+## Same shape as above, through the real close path (phase 6) instead of the
+## direct _documents.erase/teardown bypass: doc_c is pristine (clean), so
+## panel.close_document closes it immediately with no dialog. Proves the
+## close lifecycle's own teardown invalidates a pending Save As request the
+## same way the bypass above does, without a separate invalidation pass
+## (Cross-cutting "Invalidate pending file/picker/property callbacks for a
+## closed document").
+func _run_real_close_then_stale_save_as_rejected(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument) -> void:
+	var doc_c: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
+	await plugin.get_tree().process_frame
+	panel._on_save_as_pressed()
+	panel._save_as_dialog.hide()
+	panel.activate_document(doc_a)
+	await plugin.get_tree().process_frame
+	doc_a.operation_messages.clear()
+	var doc_c_was_open: bool = panel.get_documents().has(doc_c)
+	await panel.close_document(doc_c)
+	var doc_c_closed: bool = not panel.get_documents().has(doc_c)
+
+	var stale_path: String = "user://gst_tabs_files_close_stale.tres"
+	_cleanup([stale_path])
+	panel._on_save_as_file_selected(stale_path)
+	await plugin.get_tree().process_frame
+
+	var nothing_written: bool = not FileAccess.file_exists(stale_path)
+	var active_untouched: bool = panel.get_active_document() == doc_a
+	var message_surfaced: bool = String(doc_a.operation_messages.get("Save", "")).contains("no longer open")
+	_check("real_close_then_stale_save_as_rejected", doc_c_was_open and doc_c_closed and nothing_written and active_untouched and message_surfaced, "doc_c_was_open=%s doc_c_closed=%s file_exists=%s active_is_a=%s doc_a_message='%s'" % [doc_c_was_open, doc_c_closed, FileAccess.file_exists(stale_path), panel.get_active_document() == doc_a, doc_a.operation_messages.get("Save", "")])
+	_cleanup([stale_path])
 
 
 ## Opens the preview-image dialog while doc_a is active, switches to doc_b,

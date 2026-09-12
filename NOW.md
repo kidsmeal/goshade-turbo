@@ -21,7 +21,7 @@ Last touched: 2026-09-11
 
 Next physical action:
 
-- [ ] Phase 5 committed (file ops bound to initiating document); next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 6 (protect document close), auto-commit granted, native reviewer (Codex cap until Sep 16)
+- [ ] Phase 6 committed (protected close); next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 7 (save dirty documents on confirmed shutdown), auto-commit granted, native reviewer (Codex cap until Sep 16)
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

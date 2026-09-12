@@ -261,7 +261,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 
 ## Phase 6: Protect document close
 
-**Status:** pending
+**Status:** committed (2026-09-11) (fix-now round 2 applied, 2026-09-11)
 
 **Goal:** Close shader tabs through a document-bound Save, Discard, or Cancel lifecycle.
 

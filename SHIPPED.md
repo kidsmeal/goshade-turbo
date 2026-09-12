@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9f765a96026d938e415ae85be1e66eb0a24fa25e -->
 
 ### 2026-09-11
+- Shader tabs phase 6: protect document close with a document-bound Save, Discard, or Cancel lifecycle
 - Shader tabs phase 5: bind Save, Save As, Export, and dialog responses to their initiating document
 - Shader tabs phase 4: add the shader tab row with stable-ID activation, state restoration, and active-only preview rendering
 - Logo: render the README wordmark through the plugin's own export, README cleanup, roster generator

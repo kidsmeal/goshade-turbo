@@ -3210,3 +3210,152 @@ Command shape unchanged: `GST_EDITOR_SMOKE=<selector> APPDATA=<isolated> LOCALAP
 ### Scope
 
 - Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (note 1's four-site `await`/target-capture fix plus their four callers' own `await`; note 2's two doc-comment corrections), `tests/gst_editor_document_files_smoke.gd` (note 1's new `_run_open_path_finishes_pending_color_edit` regression plus its own `_find_layer_by_entry`/`_find_color_button`/`_find_hex_line_edit`/`_type_into_line_edit`/`_push_key` helpers), `docs/EDITOR_SMOKE.md` (this section). All are in the plan's phase 5 Files list. No file outside it was touched. `sandbox/**` not touched. No git worktree created. The isolated-project copies under `.now/tabs-validation/` were re-synced (copied), not committed.
+
+## Shader tabs phase 6: protect document close (2026-09-11)
+
+Implementer pass (not yet independently reviewed). Isolated projects synced from the repo before each run: `.now/tabs-validation/project` (4.4), `.now/tabs-validation/project-462` (4.6.2), both with isolated APPDATA/LOCALAPPDATA (`.now/tabs-validation/appdata-4.4`, `appdata-4.6.2`), matching every prior pass in this section.
+
+- `addons/goshade_turbo/ui/gst_main_panel.gd`:
+  - `_refresh_tabs()`: each tab now builds a real native close Button ("x", flat, `custom_minimum_size.x = 24.0`, `pressed` bound to `close_document.bind(doc)`) alongside the existing title toggle Button, tracked in a new `_tab_close_buttons` map (session_id to Button, editor smoke seam) rebuilt alongside `_tab_buttons` on every call. `focus_was_tab_button`'s own re-check now also covers `_tab_close_buttons.values()`.
+  - New `_close_dialog: ConfirmationDialog` (built in `_ready()`, added as a panel child): `ok_button_text = "Save"`, a third "Discard" button added via the native `AcceptDialog.add_button(text, right, action)` (captured as `_close_discard_button`), `confirmed` -> `_on_close_save_requested`, `canceled` -> clears `_pending_close`, `custom_action` -> `_on_close_custom_action` (hides the dialog itself, since `add_button`'s own press never auto-hides it -- confirmed against `scene/gui/dialogs.cpp`'s `AcceptDialog::_custom_action`/`_ok_pressed`/`_cancel_pressed`).
+  - New public `close_document(doc)` (wired by each tab's own close Button): finishes pending native edits only when doc is the active document (an inactive document can hold no live gesture of its own, the same rule `_save_stack_to_path`/`_export_stack_to_path` already follow), re-checks doc is still open after that await (a stale close continuation guard), then either closes immediately (`doc.is_dirty() == false`) or captures a `_pending_close` request (same request_id/doc_id shape as every other pending field) and pops `_close_dialog`.
+  - New `_on_close_save_requested()` (`_close_dialog.confirmed`): resolves against `_pending_close` via `_resolve_pending_document`; an untitled document (current_path empty) captures a `_pending_save_as` request with a new `close_after: true` flag and pops the real Save As dialog; a named document saves directly to its own current_path and closes only if that write succeeds.
+  - New `_on_close_custom_action(action)` (`_close_dialog.custom_action`, "discard" only): resolves against `_pending_close` and closes the document immediately with no write.
+  - New `_close_document_now(doc)`: removes doc from `_documents` and calls `doc.teardown()` (already existing, per-document: frees only that document's own UndoRedo). Closing the active document first cancels any open picker against it (`_close_picker(false)`, decision 5's own switch-time rule applied to close too), then either activates the tab that shifts into the closed tab's old array index (decision 9's adjacent-tab selection) or, if that was the last open document, creates and activates a brand-new pristine GSTDocument and re-shows the entry surface -- mirroring `_ready()`'s own bootstrap condition instead of ever leaving the panel with zero documents. No `UndoRedo.create_action` call anywhere in the close path (Cross-cutting "Keep closing and entry navigation outside stack undo").
+  - `_on_save_as_file_selected(path)`: now captures the `_save_stack_to_path` result and, when `close_after` was set and the save succeeded, calls `_close_document_now(doc)` -- closing only the document that actually requested the close.
+  - New `_capture_document_request(doc)` (phase 6): the same capture shape as `_capture_active_document_request`, parameterized by an explicit document instead of always `_active_document`. `_capture_active_document_request` is now a thin wrapper over it.
+  - Deferred note (phase 5 review round 1, resolved here): `hide_export_dialog(abandon: bool = true)` now clears `_pending_export` itself by default (a force-hide with no resolution coming is a genuine abandonment); the one existing caller shape that needs the request to survive into its own immediately-following resolution (`tests/gst_editor_document_files_smoke.gd`'s `_run_export_second_confirmation`) opts out with `abandon=false`.
+  - Deferred note (phase 5 review round 1, resolved here): `_on_save_as_file_selected`/`_on_export_file_selected` now capture their own save/export result and, when the resolved document is null (a closed/stale target), surface that result's own reason through `_set_operation_message` onto whichever document is active now, instead of discarding it silently.
+- `addons/goshade_turbo/ui/gst_document.gd`: not modified. `teardown()` and `is_dirty()`/`mark_baseline()` (both phase 3) already provide exactly what phase 6's close lifecycle needs; no new field or method was required.
+- New `tests/gst_editor_document_close_smoke.gd` (selector `tabs_close`): clean-close-immediate, dirty-named Save (writes to the existing path and closes only after success), dirty-named Discard (no write, `is_instance_valid(history) == false` after teardown), a real Ctrl+Z after a Discard cannot reopen the closed document (Cross-cutting "undo cannot reopen a closed document"), dirty Cancel (document/tab/content untouched), untitled Save-As-on-close success/failure/cancel (a failed or cancelled Save As leaves the document open and dirty; success closes only the originating document), inactive-document close, adjacent-tab selection after closing a middle then a last tab, a stale close continuation rejected without touching a distinct replacement document, and the last close restoring the entry surface behind a freshly created pristine document. Every tab close Button and every `_close_dialog` Save/Discard/Cancel Button is driven with a real InputEventMouseButton press/release at its own global rect through its own Viewport (`_click_button`), including buttons inside the popped-up ConfirmationDialog's own embedded Window -- never `Button.pressed.emit()`, never the production handlers called directly.
+- `tests/gst_editor_document_files_smoke.gd`: two `hide_export_dialog()` call sites in `_run_export_second_confirmation` changed to `hide_export_dialog(false)`. `_run_stale_closed_save_as_rejected`'s own assertion updated to match the corrected closed-target behavior: it now asserts the surfaced "no longer open" message on the active document instead of asserting no message was written. New `_run_real_close_then_stale_save_as_rejected`: the same shape through the real `panel.close_document()` instead of the direct `_documents.erase`/`teardown()` bypass.
+- `tests/gst_editor_smoke.gd`: added the `tabs_close` dispatch case. The old caller-side `panel._pending_export = {}` workaround is removed: `hide_export_dialog()`'s own new default now does that clear itself.
+- `docs/CURRENTNESS_AUDIT.md`: ticked both phase-5-review-round-1 deferred notes with a one-clause resolution note each.
+
+### Bugs found and fixed during self-verification (before any independent review)
+
+1. First-click-of-session absorption, same class as phase 4 round 1's own finding: the very first real click in `tabs_close`'s own fresh editor session was silently absorbed (`clean_close_immediate` failed with `closed=false` on the first run, 4.4). Fixed the same way `tests/gst_editor_tabs_smoke.gd` already does: one harmless warm-up click on the initial document's own already-active tab title Button before any assertion-bearing click.
+2. A tab scrolled out of the tab row's own visible range can sit directly under the fixed trailing New control at the same on-screen position. First surfaced as `_run_last_close_restores_entry_surface`'s own drain loop getting stuck indefinitely on 4.6.2 (`drained_to_one=false`), reproduced only there, not on 4.4; diagnosed by dumping every tab's own global rect, which showed the active (rightmost) tab's close Button and NewTabButton (docked immediately outside the scrollable region, phase 4) sharing the identical global position once enough tabs had accumulated to overflow the row and that tab was not currently scrolled into view -- a click aimed at the close Button's own logical rect landed on New instead. A second, independent occurrence of the identical mechanism then surfaced later in the same file, in `_run_stale_close_continuation_cannot_close_replacement` (a `SCRIPT ERROR: Invalid access to property or key 'stack' on a base object of type 'Nil'` on 4.6.2, root-caused via diagnostic prints bracketing each step to a close-button click that landed on NewTabButton and opened the Add-Layer picker instead of the close dialog, confirmed by `is_picker_open()` turning `true` immediately after that one click) -- proving this is not confined to the drain loop but to any close-button click once enough tabs have accumulated. Fixed generally, in the test only (production's own `_refresh_tabs()`/`_await_scroll_active_tab_into_view` already auto-scrolls the active tab into view on every rebuild; this file's own rapid succession of document opens/closes can outrun that single-frame-deferred call before a later click runs): `_click_button` now walks up from its own target through `_find_scroll_ancestor` and, when the target lives inside a `ScrollContainer`, calls `ensure_control_visible` on it and awaits a settle frame before every click in this file, not only inside the drain loop. Not chased into production since no verification requirement here calls for changing `_refresh_tabs()`'s own scroll timing.
+
+Neither is a current, unresolved limitation: both were reproduced, root-caused, fixed, and re-verified in this same pass.
+
+### Verification commands and results
+
+Each selector below was run as its own process, serially, with isolated APPDATA/LOCALAPPDATA set on that process only (never the real user profile), from Git Bash on Windows 11. Command shape: `GST_EDITOR_SMOKE=<selector> APPDATA=<isolated> LOCALAPPDATA=<isolated> <godot> --editor --path <isolated-project> --rendering-method gl_compatibility`.
+
+- Import (isolated 4.4): exit 0. Stderr held only the documented Godot 4.4.0 first-import progress-dialog diagnostic plus the pre-existing LayerPane/SettingsPane owner warnings; no script error. The new test script's own .uid companion was generated by this import and copied back into the repo verbatim.
+- `tabs_close` (4.4), run 1 (before the warm-up-click fix): exit 1, SMOKE SUMMARY pass=11 fail=1 (`clean_close_immediate`, bug 1 above).
+- `tabs_close` (4.4), run 2 (after the fix, before the undo-cannot-reopen check and the general scroll-into-view fix were added): exit 0, SMOKE SUMMARY pass=12 fail=0.
+- `tabs_close` (4.4), run 3 (repeated per this plan's own "serial runs" instruction): exit 0, SMOKE SUMMARY pass=12 fail=0, identical.
+- `tabs_close` (4.4), run 4 (after adding `undo_cannot_reopen_closed_document`, before it was corrected to allow for the last-document-replacement rule): exit 1, SMOKE SUMMARY pass=12 fail=1 (`undo_cannot_reopen_closed_document` itself asserted a document-count invariant that does not hold when the closed document happened to be the only one open; corrected to open a second, independent document first and assert non-reopening directly instead).
+- `tabs_close` (4.4), run 5 (after that correction and the general `_click_button`/`_find_scroll_ancestor` scroll-into-view fix): exit 0, SMOKE SUMMARY pass=13 fail=0.
+- `tabs_close` (4.4), run 6 and 7 (repeated per this plan's own "serial runs" instruction): exit 0, SMOKE SUMMARY pass=13 fail=0, identical both times.
+- `tabs_files` (4.4): exit 0, SMOKE SUMMARY pass=23 fail=0 (21 prior baseline checks plus the 2 new closed-target-via-real-close cases).
+- `tabs_ui` (4.4): exit 0, SMOKE SUMMARY pass=18 fail=0, matching the phase 5 baseline exactly.
+- `tabs_documents` (4.4): exit 0, SMOKE SUMMARY pass=22 fail=0, matching baseline.
+- `tabs_native` (4.4): exit 0, SMOKE SUMMARY pass=31 fail=0, matching baseline.
+- Headless unit wrapper (isolated 4.4): GST tests: 21 file(s), 145 test method(s), 20 failure(s) -- identical to every documented prior-phase baseline; none of the 20 pre-existing failures touch a file this phase modified.
+- Import (isolated 4.6.2): exit 0, no script errors.
+- `tabs_close` (4.6.2), run 1 (before the scroll-into-view fix, with `undo_cannot_reopen_closed_document` already present and passing): exit 1, SMOKE SUMMARY pass=12 fail=1 (`last_close_restores_entry_surface`, bug 2's drain-loop occurrence, reproduced only on 4.6.2).
+- `tabs_close` (4.6.2), run 2 (after the drain-loop-only fix, before generalizing it): exit 1, SMOKE SUMMARY pass=12 fail=1 (`stale_close_continuation_cannot_close_replacement_tab`, bug 2's second occurrence, the same mechanism hitting a different close-button click in the same file).
+- `tabs_close` (4.6.2), run 3 (after generalizing the fix into `_click_button` itself): exit 0, SMOKE SUMMARY pass=13 fail=0.
+- `tabs_close` (4.6.2), run 4 and 5 (repeated per this plan's own "serial runs" instruction): exit 0, SMOKE SUMMARY pass=13 fail=0, identical both times.
+- `tabs_files` (4.6.2): exit 0, SMOKE SUMMARY pass=23 fail=0, matching the 4.4 result exactly.
+- `ui_complete` (4.6.2, GST_UI_COMPLETE_ENTRY=recipe): exit 0, UI_COMPLETE SUMMARY pass=29 fail=0, matching baseline.
+- `ui_picker` (4.6.2, run to confirm `hide_export_dialog()`'s new default does not regress its own existing call): exit 0, UI_PICKER SUMMARY pass=45 fail=0, matching baseline.
+- Not run this pass: GPU render/composition/recipe-motion checks (unaffected by this phase's editor-only files); 4.7 (not required by phase 6's own verification list); the headless unit wrapper on 4.6.2 (only editor-only `gst_main_panel.gd` and test files changed this phase, the same basis prior editor-only phases used to skip it).
+
+### Environment diagnostics (recorded separately from assertion results)
+
+- Every 4.4 run's stderr held only the pre-existing LayerPane/SettingsPane owner warnings plus the one deliberately-triggered "Cannot save file" diagnostic (the untitled-Save-As-failure-class checks) or `tabs_files`'s own already-documented deliberate diagnostics. No SCRIPT ERROR, Invalid access, Nonexistent function, or Parse Error in any run.
+- Every 4.6.2 run's stderr held only its own deliberately-triggered diagnostic where applicable; `ui_complete`/`ui_picker` stderr was empty.
+- Godot Engine version observed: v4.4.stable.official.4c311cbee (4.4 runs), matching every prior pass in this document; 4.6.2 binary unchanged from every prior phase's own runs.
+- No leftover `gst_tabs_close_*` file found under either isolated project or isolated APPDATA after any run (checked by find).
+- git status in the real repo at the start of this pass showed only NOW.md already modified from before this pass began; no unrelated sandbox/**, .gitignore, or README.md changes were present.
+
+### Blockers / open decisions
+
+- None found requiring a design decision. The two items under "Bugs found" above were reproduced, root-caused, fixed, and re-verified in this same pass, not deferred.
+- The close dialog's own button layout was not given a specific visual position/order beyond what `AcceptDialog.add_button` produces by default; no reviewed decision specifies an exact order, and no test asserts one (only button identity/behavior).
+
+### Scope
+
+- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_document_close_smoke.gd` (new), `tests/gst_editor_document_files_smoke.gd`, `tests/gst_editor_smoke.gd`, `docs/CURRENTNESS_AUDIT.md` (two ticks), `docs/EDITOR_SMOKE.md` (this section), `NOW.md` (Active thread next-action line only), plus the generated `tests/gst_editor_document_close_smoke.gd.uid` companion. All are inside the plan's phase 6 Files list plus its stated NOW.md/docs/CURRENTNESS_AUDIT.md/.uid allowances.
+- `addons/goshade_turbo/ui/gst_document.gd` is in the plan's phase 6 Files list; read in full this pass, not edited.
+- No file outside the plan's phase 6 Files list was edited. `sandbox/**` was not touched. No git worktree was created. The isolated-project copies under `.now/tabs-validation/` were synced (copied), not committed.
+
+## Shader tabs phase 6 review round 1 fix-now (2026-09-11)
+
+Round-1 review verdict PASS-WITH-NOTES, three fix-now notes. Isolated projects synced from the repo before each run: `.now/tabs-validation/project` (4.4), `.now/tabs-validation/project-462` (4.6.2), both with isolated APPDATA/LOCALAPPDATA (`.now/tabs-validation/appdata-4.4`, `appdata-4.6.2`), matching every prior pass in this section.
+
+### Fix-now note status
+
+1. `addons/goshade_turbo/ui/gst_main_panel.gd:955-958` (`_refresh_tabs` doc comment claimed "No close button is built here: phase 6 wires the close affordance", stale since the same function now builds the close Button at `:997-1008`) — fixed. The sentence is rewritten to point at the close Button the function actually builds, alongside the title Button, in the same rebuild loop.
+2. `tests/gst_editor_document_files_smoke.gd` (closed-target Export branch at `addons/goshade_turbo/ui/gst_main_panel.gd:1867-1868` unexecuted by any test) — fixed. New `_run_stale_closed_export_rejected`, mirroring `_run_stale_closed_save_as_rejected` (:221): opens a throwaway document, captures an Export request for it via `_on_export_pressed`/`hide_export_dialog(false)`, activates `doc_a`, removes the throwaway document from `_documents` and tears it down, then resolves `_on_export_file_selected` against the now-closed target. Asserts nothing is written, the active document is untouched, and `doc_a.operation_messages["Export"]` contains `no longer open`. Wired into `run()` immediately after `_run_stale_closed_save_as_rejected`.
+3. `tests/gst_editor_document_close_smoke.gd:492` (`##` mid-block inside a function-body comment that otherwise uses `#`) — fixed. Changed to `#`.
+
+### Verification commands and results
+
+Each selector below was run as its own process, serially, with isolated APPDATA/LOCALAPPDATA set on that process only (never the real user profile), from Git Bash on Windows 11. Command shape: `GST_EDITOR_SMOKE=<selector> APPDATA=<isolated> LOCALAPPDATA=<isolated> <godot> --editor --path <isolated-project> --rendering-method gl_compatibility`.
+
+- Import (isolated 4.4): exit `0`. Stderr held only the documented Godot 4.4.0 first-import progress-dialog diagnostic plus the pre-existing LayerPane/SettingsPane owner warnings; no script error.
+- `tabs_files` (4.4): exit `0`, `SMOKE SUMMARY pass=24 fail=0` (23 prior baseline checks plus the 1 new `stale_closed_export_rejected` case; `SMOKE stale_closed_export_rejected PASS file_exists=false active_is_a=true doc_a_message='This document is no longer open.'`). Stderr held only the pre-existing deliberate load/save-failure diagnostics from other cases in this file (missing-path load, bad-directory save); no script error.
+- Import (isolated 4.6.2): exit `0`, no script errors, no stderr output.
+- `tabs_files` (4.6.2): exit `0`, `SMOKE SUMMARY pass=24 fail=0`, matching the 4.4 result exactly, including `SMOKE stale_closed_export_rejected PASS file_exists=false active_is_a=true doc_a_message='This document is no longer open.'`. Stderr held only the same class of pre-existing deliberate load/save-failure diagnostics (with GDScript backtraces on this engine version); no script error.
+- `tabs_close` (4.4): exit `0`, `SMOKE SUMMARY pass=13 fail=0`, matching the phase 6 baseline exactly. No `SCRIPT ERROR`, `Invalid access`, `Nonexistent function`, or `Parse Error` in stderr.
+- Not run this pass: `tabs_close` on 4.6.2 (not required by this fix-now scope; the round-1 baseline already covers it and no fix-now note touches close-lifecycle behavior), the headless unit wrapper, GPU render/composition/recipe-motion checks, and 4.7 (unaffected by a doc-comment fix, a `##`→`#` comment fix, and a new test case in an already-covered file).
+
+### Environment diagnostics (recorded separately from assertion results)
+
+- Godot Engine version observed: `v4.4.stable.official.4c311cbee` (4.4 runs); 4.6.2 binary unchanged from every prior phase's own runs.
+- `4.4` `tabs_files`/`tabs_close` stderr held only the documented deliberate diagnostics listed above; no unexpected script/engine error.
+- `4.6.2` `tabs_files` stderr held the same deliberate diagnostics with added GDScript backtraces (engine-version formatting difference only, not a new error class).
+- No leftover `gst_tabs_files_export_stale.gdshader` found under either isolated project after either `tabs_files` run (checked by find).
+- git status in the real repo before this pass showed the same pre-existing modifications as the round-1 pass (`NOW.md`, `docs/CURRENTNESS_AUDIT.md`, `docs/EDITOR_SMOKE.md`, `docs/SHADER_TABS_reviewed-plan.md` status line) plus this pass's own edits; no unrelated `sandbox/**`, `.gitignore`, or `README.md` changes were present.
+
+### Blockers / open decisions
+
+- None. All three fix-now notes were applied inside the plan's phase 6 Files list; no scope drift.
+
+### Scope
+
+- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (fix-now note 1 only), `tests/gst_editor_document_files_smoke.gd` (fix-now note 2), `tests/gst_editor_document_close_smoke.gd` (fix-now note 3), `docs/EDITOR_SMOKE.md` (this section). All are inside the plan's phase 6 Files list.
+- No file outside the plan's phase 6 Files list was edited. `sandbox/**` was not touched. No git worktree was created. The isolated-project copies under `.now/tabs-validation/` were synced (copied), not committed. No commit was made.
+
+## Shader tabs phase 6 review round 2 fix-now (2026-09-11)
+
+Round-2 review verdict PASS-WITH-NOTES, two fix-now notes, both doc-comment rewrites in `addons/goshade_turbo/ui/gst_main_panel.gd`. No behavior change. Isolated project synced from the repo before the run: `.now/tabs-validation/project` (4.4), with isolated `APPDATA`/`LOCALAPPDATA` (`.now/tabs-validation/appdata-4.4`), matching every prior pass in this section.
+
+### Fix-now note status
+
+1. `addons/goshade_turbo/ui/gst_main_panel.gd:84` (`## creation order. Never pruned in this phase (document close is phase 6).` false since `_close_document_now:1373` (`_documents.remove_at(index)`) prunes `_documents`) -- fixed. Rewritten to `## creation order. _close_document_now is the only pruner (_documents.remove_at).`
+2. `addons/goshade_turbo/ui/gst_main_panel.gd:1181-1184` (`_find_document_by_session_id`'s doc comment still said "phase 6 adds the close path this guards against ... since real close does not exist yet", stale since `close_document:1276`/`_close_document_now:1363` are real and exercised by `tests/gst_editor_document_files_smoke.gd:_run_real_close_then_stale_save_as_rejected`) -- fixed. Rewritten to name `_close_document_now` as the real producer of the null case, keeping the note that `tests/gst_editor_document_files_smoke.gd` still isolates the resolution guard by removing a document from `_documents` directly instead of driving a real close.
+
+### Extra stale-comment sweep
+
+Grepped `addons/goshade_turbo/ui/gst_main_panel.gd` and `addons/goshade_turbo/ui/gst_document.gd` for `phase 6 (will|adds|wires)`, `in the meantime`, `close does not exist`, `does not exist yet`, and `phase 6` generally (case-insensitive).
+
+- No additional stale comment found. Every other `phase 6` reference in `gst_main_panel.gd` (lines `119`, `157`, `194`, `356`, `700`, `957`, `996`, `1103`, `1219`, `1262`, `1565`, `1785`, `1786`, `1860`) attributes an already-implemented behavior to phase 6 in past/factual tense (e.g. "Wired-by: _refresh_tabs()'s own per-tab close Button.pressed connection", "resolved phase 6") -- none claims the close path is still missing or deferred.
+- `gst_document.gd:134` ("Called by gst_main_panel.gd's `_exit_tree` for every open document, and by phase 6's close lifecycle for a single discarded document") references phase 6's close lifecycle as an existing caller (`teardown()` is in fact called from `_close_document_now:1374`), not as a future addition -- left unchanged, not stale.
+
+### Verification commands and results
+
+Selector run as its own process with isolated `APPDATA`/`LOCALAPPDATA` set on that process only (never the real user profile), from Git Bash on Windows 11. Command shape: `GST_EDITOR_SMOKE=tabs_close APPDATA=<isolated> LOCALAPPDATA=<isolated> Godot_v4.4-stable_win64.exe --editor --path <isolated-project> --rendering-method gl_compatibility`.
+
+- `tabs_close` (4.4): exit `0`, `SMOKE SUMMARY pass=13 fail=0`, matching the phase 6 baseline exactly. Stderr held only the documented pre-existing `LayerPane`/`SettingsPane` owner warnings and the deliberate bad-directory save-failure error (`Cannot save file 'user://gst_tabs_close_missing_dir/gst_tabs_close_bad.tres'`); no `SCRIPT ERROR`, `Invalid access`, `Nonexistent function`, or `Parse Error`.
+- Not run this pass: `tabs_close` on 4.6.2, `tabs_files`, `tabs_documents`, `tabs_native`, `tabs_ui`, the headless unit wrapper, and 4.7 (not required by this fix-now scope: two doc-comment rewrites with no behavior change; the phase 6 and round-1 baselines already cover close-lifecycle behavior on those configurations).
+
+### Environment diagnostics (recorded separately from assertion results)
+
+- Godot Engine version observed: `v4.4.stable.official.4c311cbee` (unchanged from every prior 4.4 run in this section).
+- Isolated project copy at `.now/tabs-validation/project` was re-synced from the repo's `addons/` and `tests/` directories immediately before this run so the doc-comment rewrites were present in the copy actually exercised; verified byte-identical to the repo copy of `addons/goshade_turbo/ui/gst_main_panel.gd` after the sync.
+- git status in the real repo before this pass showed the same pre-existing modifications as the round-1 pass (`NOW.md`, `docs/CURRENTNESS_AUDIT.md`, `docs/EDITOR_SMOKE.md`, `docs/SHADER_TABS_reviewed-plan.md` status line, plus the phase 6 test files) plus this pass's own edit to `gst_main_panel.gd`; no unrelated `sandbox/**`, `.gitignore`, or `README.md` changes were present.
+
+### Blockers / open decisions
+
+- None. Both fix-now notes were applied inside the plan's phase 6 Files list; no scope drift.
+
+### Scope
+
+- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (both fix-now notes), `docs/EDITOR_SMOKE.md` (this section). Both are inside the plan's phase 6 Files list.
+- No file outside the plan's phase 6 Files list was edited. `sandbox/**` was not touched. No git worktree was created. The isolated-project copy under `.now/tabs-validation/project` was synced (copied), not committed. No commit was made.
