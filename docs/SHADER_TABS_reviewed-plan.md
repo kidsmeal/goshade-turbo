@@ -228,7 +228,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 
 ## Phase 5: Bind file operations to their initiating document
 
-**Status:** pending
+**Status:** committed (2026-09-11) (fix-now round 3 applied, 2026-09-11)
 
 **Goal:** Make Save, Save As, Export, and delayed file-dialog responses operate on the document that initiated them.
 

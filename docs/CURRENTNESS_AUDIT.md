@@ -39,6 +39,7 @@ Written by the review relay when a phase diff made a standing doc stale. Cleared
 Format: `- [ ] <doc path>: <one line, what the diff invalidated> (phase N, <feature or plan name>)`.
 
 - [x] docs/EDITOR_SMOKE.md: round 2 fixes section reports 17 passing assertions for r6a; archived tabs-proof-r6a-4.4.stdout.log contains 18 (phase 1, Multiple shader tabs, review round 3 judgment flag; corrected to 18 in the round 3 fix pass)
+- [ ] docs/EDITOR_UI_DESIGN_reviewed.md:35: the shared-message-label lifetime claim ("a control-local refusal clears only when that control completes a valid edit, its destination is removed, or the active stack is replaced") no longer describes file-operation messages, which are per-document and re-shown on activation (gst_main_panel.gd `_refresh_operation_message_label`) (phase 5, Multiple shader tabs)
 
 ## Deferred review notes
 
@@ -54,6 +55,8 @@ Format: `- [ ] <note, with file:line>: <why deferred> (phase N, <feature or plan
 - [ ] docs/EDITOR_SMOKE.md:2413: independent reviewer runs reproduced the documented sandbox cache/settings errors despite passing phase assertions; repeat stderr verification when the reviewer environment permits those writes, during the phase 2 native-editor verification: reviewer sandbox limitation, not a proof defect (phase 1, Multiple shader tabs, review round 5)
 - [ ] docs/EDITOR_SMOKE.md (phase 2 evidence): record the reviewer's `Failed to read the root certificate store` diagnostic alongside phase 2 verification evidence; isolated settings did not eliminate it and the run cannot establish error-free engine startup: recheck during phase 8's supported-environment matrix (phase 2, Multiple shader tabs, review round 4; reproduced again in phase 3 review rounds 2 and 3)
 - [ ] docs/SHADER_TABS_reviewed-plan.md:145: the reviewer's 4.6.2 launcher started overlapping processes and did not capture individual exit codes; all seven assertion summaries passed. Repeat serial verification with per-process exit capture during phase 8 (phase 2, Multiple shader tabs, review round 5)
+- [ ] addons/goshade_turbo/ui/gst_main_panel.gd:1384: `hide_export_dialog()` hides the dialog without clearing `_pending_export`, so each caller must clear it (the leak patched at tests/gst_editor_smoke.gd:1029); move the clear into `hide_export_dialog()`: waits for phase 6, whose `tabs_close` adds the next callers of this seam (phase 5, Multiple shader tabs, review round 1)
+- [ ] addons/goshade_turbo/ui/gst_main_panel.gd:1570 and :1621: a closed-target Save As/Export response returns `{ok:false, reason:"This document is no longer open."}` and the `*_file_selected` handlers discard it, so the user sees no feedback: waits for phase 6, the declared consumer of these results (phase 5, Multiple shader tabs, review round 1)
 
 ## Rule of thumb
 - Roadmap says what to do next.

@@ -116,8 +116,35 @@ var _save_as_dialog: EditorFileDialog = null
 var _export_dialog: EditorFileDialog = null
 var _reopen_shader_dialog: EditorFileDialog = null
 var _overwrite_dialog: ConfirmationDialog = null
-## The export target awaiting the overwrite confirmation dialog's answer.
-var _pending_export_path: String = ""
+
+## Phase 5 (docs/SHADER_TABS_reviewed-plan.md): "capture stable document ID
+## and request identity for Save As, Export, overwrite confirmation,
+## preview-image selection, and delayed open/reopen requests." Each of the
+## six *_pending_* Dictionaries below is either `{}` (no request captured --
+## the dialog-opening "_pressed" handler that captures one was never called,
+## exactly the case when a test drives save_to_path/export_to_path/open_path/
+## reopen_shader_path or the *_file_selected/_on_overwrite_confirmed seams
+## directly without popping the real dialog first, e.g.
+## tests/gst_editor_smoke.gd items 2 and 4-9, tests/gst_editor_documents_smoke.gd,
+## tests/gst_editor_native_undo_smoke.gd, tests/gst_editor_tabs_smoke.gd) or
+## `{"request_id": int, "doc_id": int}` (captured when the dialog opened, or,
+## for `_pending_overwrite`, when _export_stack_to_path first found it needs
+## confirmation). `request_id` is a monotonic stamp from
+## _next_file_request_id, unique per capture, for diagnosability; resolution
+## itself only depends on `doc_id` still resolving through
+## _find_document_by_session_id (Cross-cutting "resolve every response
+## against its pending request and owning document; reject closed/stale
+## targets without touching another document") -- _resolve_pending_document
+## below is the one place that reads any of these back.
+var _next_file_request_id: int = 0
+var _pending_save_as: Dictionary = {}
+var _pending_export: Dictionary = {}
+## Also carries "path": the export target this confirmation answers, taking
+## over _pending_export_path's old job.
+var _pending_overwrite: Dictionary = {}
+var _pending_open: Dictionary = {}
+var _pending_reopen: Dictionary = {}
+var _pending_image: Dictionary = {}
 
 ## True only right after open_recipe() installs a shipped recipe (docs/PLAN.md
 ## Phase 8 Build item 3, design decision 16): gates the Randomize button.
@@ -227,6 +254,16 @@ func _ready() -> void:
 	_file_dialog.access = EditorFileDialog.ACCESS_RESOURCES
 	_file_dialog.add_filter("*.png, *.jpg, *.jpeg, *.webp, *.svg", "Images")
 	_file_dialog.file_selected.connect(_on_preview_image_selected)
+	# Phase 5: an explicit Cancel/Escape must not leave a captured request
+	# sitting around for some later, unrelated resolution of the same dialog
+	# to pick up (a real dialog only ever fires file_selected once per open,
+	# but a canceled one still shows "canceled" here to keep every one of
+	# these six dialogs' own pending capture symmetrical and easy to reason
+	# about). set_visible(false)/hide() alone does not emit this (only the
+	# Cancel button/Esc path does, dialogs.cpp AcceptDialog::_cancel_pressed);
+	# a caller that force-hides a dialog directly (e.g. hide_export_dialog())
+	# clears its own pending capture itself if it needs to.
+	_file_dialog.canceled.connect(func() -> void: _pending_image = {})
 	add_child(_file_dialog)
 
 	_save_button.pressed.connect(_on_save_pressed)
@@ -265,6 +302,7 @@ func _ready() -> void:
 	_open_dialog.access = EditorFileDialog.ACCESS_RESOURCES
 	_open_dialog.add_filter("*.tres", "GoShade Turbo Stack")
 	_open_dialog.file_selected.connect(_on_open_file_selected)
+	_open_dialog.canceled.connect(func() -> void: _pending_open = {})
 	add_child(_open_dialog)
 
 	_save_as_dialog = EditorFileDialog.new()
@@ -272,6 +310,7 @@ func _ready() -> void:
 	_save_as_dialog.access = EditorFileDialog.ACCESS_RESOURCES
 	_save_as_dialog.add_filter("*.tres", "GoShade Turbo Stack")
 	_save_as_dialog.file_selected.connect(_on_save_as_file_selected)
+	_save_as_dialog.canceled.connect(func() -> void: _pending_save_as = {})
 	add_child(_save_as_dialog)
 
 	_export_dialog = EditorFileDialog.new()
@@ -279,6 +318,7 @@ func _ready() -> void:
 	_export_dialog.access = EditorFileDialog.ACCESS_RESOURCES
 	_export_dialog.add_filter("*.gdshader", "GoShade Turbo Shader")
 	_export_dialog.file_selected.connect(_on_export_file_selected)
+	_export_dialog.canceled.connect(func() -> void: _pending_export = {})
 	add_child(_export_dialog)
 
 	_reopen_shader_dialog = EditorFileDialog.new()
@@ -286,10 +326,12 @@ func _ready() -> void:
 	_reopen_shader_dialog.access = EditorFileDialog.ACCESS_RESOURCES
 	_reopen_shader_dialog.add_filter("*.gdshader", "GoShade Turbo Shader")
 	_reopen_shader_dialog.file_selected.connect(_on_reopen_shader_file_selected)
+	_reopen_shader_dialog.canceled.connect(func() -> void: _pending_reopen = {})
 	add_child(_reopen_shader_dialog)
 
 	_overwrite_dialog = ConfirmationDialog.new()
 	_overwrite_dialog.confirmed.connect(_on_overwrite_confirmed)
+	_overwrite_dialog.canceled.connect(func() -> void: _pending_overwrite = {})
 	add_child(_overwrite_dialog)
 	_build_start_screen()
 	_apply_default_layout.call_deferred()
@@ -641,8 +683,13 @@ func get_layout_measurements() -> Dictionary:
 func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
 	_picker.set_refusal("")
 	_control_refusals.clear()
-	_message_label.text = ""
-	_message_label.hide()
+	# Phase 5: file-operation messages are now per-document
+	# (GSTDocument.operation_messages), so this rebuilds the shared label
+	# from whichever document is _active_document right now -- already the
+	# incoming one by the time this runs, since _activate_document sets
+	# _active_document before calling _install_document_state/_install_stack
+	# -- instead of unconditionally blanking it.
+	_refresh_operation_message_label()
 	_stack_list.clear_refusals()
 	_inspector_column.clear_refusals()
 	_output_block.clear_refusals()
@@ -659,12 +706,6 @@ func _install_stack(stack: GSTStack, undo: GSTUndo) -> void:
 	_coord_space_option.select(int(_stack.coord_space))
 	_syncing_coord_space = false
 	_resync_material()
-
-
-func _raw_set_current_path(path: String) -> void:
-	_current_path = path
-	if _active_document != null:
-		_active_document.current_path = path
 
 
 func _notify_replace() -> void:
@@ -718,9 +759,10 @@ func _install_document_state_for(doc: GSTDocument, stack: GSTStack, undo: GSTUnd
 	_install_stack(stack, undo)
 
 
-## Document-bound counterpart of _raw_set_current_path, used only by
-## replace_stack's own action (same isolation reason as
-## _install_document_state_for above).
+## Document-bound path setter, shared by replace_stack's own action (same
+## isolation reason as _install_document_state_for above) and
+## _save_stack_to_path's successful-write branch (:1620), which reuses this
+## instead of re-writing its two lines inline.
 func _raw_set_current_path_for(doc: GSTDocument, path: String) -> void:
 	doc.current_path = path
 	if doc == _active_document:
@@ -876,9 +918,9 @@ func _restore_document_preview_controls(doc: GSTDocument) -> void:
 ## patching individual buttons in place. Called after every
 ## activation/creation (_activate_document) and every active-document stack
 ## or property edit (_on_stack_changed/_on_property_changed) and successful
-## save (save_to_path), so titles and dirty stars stay current without a
-## separate per-document watcher. No close button is built here: phase 6
-## wires the close affordance (docs/SHADER_TABS_reviewed-plan.md phase 4
+## save (_save_stack_to_path, :1622), so titles and dirty stars stay current
+## without a separate per-document watcher. No close button is built here:
+## phase 6 wires the close affordance (docs/SHADER_TABS_reviewed-plan.md phase 4
 ## "Wire the tab-close affordance in phase 6; do not expose an unguarded
 ## close path in this phase").
 ##
@@ -1081,6 +1123,48 @@ func _find_reusable_pristine_document() -> GSTDocument:
 		if doc.current_path.is_empty() and not doc.is_dirty():
 			return doc
 	return null
+
+
+## Looks up an already-open document by its stable session id (phase 5).
+## Returns null when no open document carries that id -- it belonged to a
+## document that has since closed (phase 6 adds the close path this guards
+## against; tests/gst_editor_document_files_smoke.gd simulates it in the
+## meantime by removing a document from _documents directly, since real
+## close does not exist yet).
+func _find_document_by_session_id(session_id: int) -> GSTDocument:
+	for doc: GSTDocument in _documents:
+		if doc.session_id == session_id:
+			return doc
+	return null
+
+
+## Resolves a delayed file-dialog response against the document captured
+## when its request was issued (phase 5, see the *_pending_* Dictionaries'
+## own doc comment above). `pending` empty means no request was ever
+## captured for this dialog, so this falls back to whatever is active right
+## now -- the production meaning every plain path-taking seam
+## (save_to_path/export_to_path/open_path/reopen_shader_path) and every
+## *_file_selected/_on_overwrite_confirmed direct test call already relies
+## on. A captured request whose doc_id no longer resolves through
+## _find_document_by_session_id belonged to a document that is no longer
+## open: this returns null, and the caller must reject the response without
+## writing to, or messaging, any other document.
+func _resolve_pending_document(pending: Dictionary) -> GSTDocument:
+	if pending.is_empty():
+		return _active_document
+	return _find_document_by_session_id(int(pending.get("doc_id", -1)))
+
+
+## Captures _active_document's stable id under a fresh, unique request_id
+## (phase 5), for a dialog-opening "_pressed" handler to store into its own
+## *_pending_* field just before popping its dialog. `{}` when there is no
+## active document to capture (never observed in practice: _ready() always
+## installs a first document before any dialog can open).
+func _capture_active_document_request() -> Dictionary:
+	if _active_document == null:
+		return {}
+	_next_file_request_id += 1
+	return {"request_id": _next_file_request_id, "doc_id": _active_document.session_id}
 
 
 ## Creates a new GSTDocument for new_stack and activates it (decision
@@ -1300,8 +1384,25 @@ func hide_export_dialog() -> void:
 func _on_new_pressed() -> void:
 	if is_picker_open() and not _applying_choice:
 		return
-	open_document(GSTStack.new(), "", false)
-	_message_label.text = ""
+	# Fix-now (phase 5 review round 2, note 1): open_document itself awaits
+	# _finish_pending_edits(), which suspends whenever a native color popup's
+	# typed hex is being committed (decision 7's forced-finish rule). Without
+	# this await, the two lines below ran immediately against the
+	# still-previous _active_document instead of the document New actually
+	# installed once that suspension resolved.
+	await open_document(GSTStack.new(), "", false)
+	# Fix-now (phase 5 review round 1, note 1): a direct _message_label.text
+	# write here diverged from GSTDocument.operation_messages -- a pristine
+	# document reused by _find_reusable_pristine_document (open_document's own
+	# new_path.is_empty() branch) can already carry a stale diagnostic (e.g. a
+	# prior failed Open landed on it while it was still pristine); blanking
+	# only the label left that entry in operation_messages, so the next
+	# _refresh_operation_message_label() call (a tab switch back, or any later
+	# message on this document) re-showed it. Clear the entry on the document
+	# itself so the two can never disagree.
+	if _active_document != null:
+		_active_document.operation_messages.clear()
+	_refresh_operation_message_label()
 	_on_chooser_requested("add", &"", "", _stack_list.get_node("%AddButton") as Control)
 
 
@@ -1320,11 +1421,29 @@ func _on_file_menu_pressed(id: int) -> void:
 func _on_open_pressed() -> void:
 	if is_picker_open() and not _applying_choice:
 		return
+	_pending_open = _capture_active_document_request()
 	_open_dialog.popup_centered_ratio()
 
 
+## Phase 5: routes a delayed *failure* response's message to the document
+## active when the Open dialog was opened (_pending_open), not whichever
+## document is active now -- a refusal never activates anything, so there is
+## no new on-screen document to carry the reason instead. A success still
+## targets whichever document activate_document/open_document actually
+## installs (_open_path_for's own doc comment): Open always
+## creates/reactivates its own document regardless of which one this
+## capture names. A stale/closed captured document
+## (_resolve_pending_document returns null) gets no failure message
+## anywhere, matching "reject ... without touching another document"; the
+## Open itself still proceeds normally. Awaits _open_path_for (fix-now,
+## phase 5 review round 3, note 1): activate_document/open_document await
+## _finish_pending_edits(), which suspends across a native color-popup
+## commit in flight -- without this await, a later statement here would run
+## before that installation finished.
 func _on_open_file_selected(path: String) -> void:
-	open_path(path)
+	var message_doc: GSTDocument = _resolve_pending_document(_pending_open)
+	_pending_open = {}
+	await _open_path_for(message_doc, path)
 
 
 ## Activates path's already-open document if one exists (phase 3: "repeat
@@ -1334,25 +1453,49 @@ func _on_open_file_selected(path: String) -> void:
 ## `path` through GSTStackIO and installs it via open_document (phase 3: a
 ## new, independent GSTDocument, not an undoable "Replace stack" action). A
 ## refusal (a missing file or an unresolved entry) leaves the active
-## document untouched and shows the reason in the message label. This is the
-## Open button's own file-selected handler (_on_open_file_selected calls it
-## directly); public so tests/gst_editor_smoke.gd can drive the same path
-## without popping the file dialog (docs/PLAN.md Phase 4 Files precedent,
-## gst_stack_list.gd's add_layer_by_entry_id).
+## document untouched and shows the reason on message_doc (phase 5: the
+## document active when the real Open dialog was opened, or _active_document
+## for this public seam and every direct test call). This is the Open
+## button's own file-selected handler (_on_open_file_selected resolves
+## message_doc and calls this); public so tests/gst_editor_smoke.gd can
+## drive the same path without popping the file dialog (docs/PLAN.md Phase 4
+## Files precedent, gst_stack_list.gd's add_layer_by_entry_id). Awaits
+## _open_path_for for the same forced-finish-suspension reason as
+## _on_open_file_selected above.
 func open_path(path: String) -> void:
+	await _open_path_for(_active_document, path)
+
+
+## Only the failure branch uses message_doc (the document captured when the
+## real Open dialog was opened): a refusal never activates anything, so
+## there is no new on-screen document for the reason to describe instead. A
+## success (either branch) clears the message on the document
+## activate_document/open_document actually installed -- captured directly
+## from their own await, not re-read from _active_document afterward (fix-
+## now, phase 5 review round 3, note 1): activate_document/open_document
+## await _finish_pending_edits(), which suspends across a native color-popup
+## commit in flight, so a non-awaited call's very next statement used to run
+## against whichever document was still active before that suspension
+## resolved -- erasing that document's own "Open" entry instead of the
+## newly installed document's. open_document can return null
+## (open_document's own is_picker_open() guard); a null opened document gets
+## no success message anywhere, matching the same "no target, no message"
+## rule the failure branch already follows.
+func _open_path_for(message_doc: GSTDocument, path: String) -> void:
 	if is_picker_open() and not _applying_choice:
 		return
 	var existing: GSTDocument = _find_document_by_path(path)
 	if existing != null:
-		activate_document(existing)
-		_set_operation_message("Open", "")
+		await activate_document(existing)
+		_set_operation_message_for(existing, "Open", "")
 		return
 	var result: Dictionary = GSTStackIO.load(path, _library)
 	if not result["ok"]:
-		_set_operation_message("Open", result["reason"])
+		_set_operation_message_for(message_doc, "Open", result["reason"])
 		return
-	open_document(result["stack"], path, false)
-	_set_operation_message("Open", "")
+	var opened: GSTDocument = await open_document(result["stack"], path, false)
+	if opened != null:
+		_set_operation_message_for(opened, "Open", "")
 
 
 func _recipe_names() -> Array[String]:
@@ -1380,7 +1523,15 @@ func _recipe_names() -> Array[String]:
 ## independent copy, even of the same recipe opened twice: phase 3
 ## "Repeated recipes create independent layer/coord instances"). This is the
 ## Recipes menu's own handler; public so tests/gst_editor_smoke.gd can drive
-## the same path directly.
+## the same path directly. Success targets the document open_document's own
+## await actually installs, not _active_document re-read afterward (fix-now,
+## phase 5 review round 3, note 1: open_document awaits
+## _finish_pending_edits(), which suspends across a native color-popup
+## commit in flight, so a non-awaited call's very next statement used to run
+## against whichever document was still active before that suspension
+## resolved). The failure branch has no navigation to await, so
+## _active_document at that point is still the document open_recipe was
+## actually called on.
 func open_recipe(name: String) -> void:
 	if is_picker_open() and not _applying_choice:
 		return
@@ -1389,70 +1540,133 @@ func open_recipe(name: String) -> void:
 	if not result["ok"]:
 		_set_operation_message("Recipes", result["reason"])
 		return
-	open_document(result["stack"], "", true, name)
-	_set_operation_message("Recipes", "")
+	var opened: GSTDocument = await open_document(result["stack"], "", true, name)
+	if opened != null:
+		_set_operation_message_for(opened, "Recipes", "")
 
 
 func _on_save_pressed() -> void:
-	if _current_path.is_empty():
+	if _active_document == null:
+		return
+	if _active_document.current_path.is_empty():
 		_on_save_as_pressed()
 		return
-	save_to_path(_current_path)
+	save_to_path(_active_document.current_path)
 
 
 func _on_save_as_pressed() -> void:
+	_pending_save_as = _capture_active_document_request()
 	_save_as_dialog.popup_centered_ratio()
 
 
+## Phase 5: resolves against _pending_save_as (the document active when the
+## Save As dialog was opened), not whichever document is active now.
+## doc == null (no request captured, this dialog never popped -- every
+## direct test call below still resolves to _active_document, matching prior
+## behavior) is handled by _save_stack_to_path itself returning a "no longer
+## open" failure only when a request *was* captured and its document is
+## gone; _resolve_pending_document already folds the "never captured" case
+## into _active_document, so this only ever sees null for a genuinely
+## closed/stale target.
 func _on_save_as_file_selected(path: String) -> void:
-	save_to_path(path)
+	var doc: GSTDocument = _resolve_pending_document(_pending_save_as)
+	_pending_save_as = {}
+	await _save_stack_to_path(doc, path)
 
 
 ## Saves the open stack to `path` through GSTStackIO. This is both the Save
-## button's own handler (when a current path already exists) and Save As's
-## file-selected handler; public so the smoke can drive it directly too.
-## Finishes pending native gestures/popups first (decision superseding 20):
-## a save must never write before the pending edit reaches the stack. Marks
-## the active document's own baseline fingerprint on success (phase 3:
-## "Track successful open/save baselines separately from unsaved
-## recipe/import origin"), so is_dirty() reads clean immediately after a
-## successful save.
-func save_to_path(path: String) -> void:
-	await _finish_pending_edits()
-	var result: Dictionary = GSTStackIO.save(_stack, path)
+## button's own handler (when a current path already exists) and the
+## production/test entry point every direct caller (documents_smoke,
+## native_undo_smoke, tabs_smoke) already used before phase 5: always the
+## *currently active* document, exactly like before. Save As's own delayed
+## dialog response instead resolves its own captured document through
+## _on_save_as_file_selected above and calls the document-bound
+## _save_stack_to_path directly, so a document switch between opening that
+## dialog and it resolving can never redirect the write.
+func save_to_path(path: String) -> Dictionary:
+	return await _save_stack_to_path(_active_document, path)
+
+
+## Document-bound save (phase 5). Refuses a stale/closed target (doc no
+## longer in _documents) without writing or messaging anywhere else, and
+## refuses a canonical path already owned by a *different* open document
+## with a path-conflict message on doc itself (Cross-cutting "Refuse Save As
+## to a canonical path owned by another open document"; doc's own current
+## path always resolves back to doc, never itself, so a plain re-save to the
+## same path is unaffected). Finishes pending native gestures/popups only
+## when doc is still the active one -- an inactive document can hold no live
+## gesture of its own: every past edit on it was already committed before
+## ownership moved away (activate_document/open_document's own await
+## _finish_pending_edits() before switching). Marks doc's own baseline
+## fingerprint and path only on a successful write (phase 3's baseline
+## contract; Cross-cutting "Update path/title and the saved fingerprint only
+## after successful stack save").
+func _save_stack_to_path(doc: GSTDocument, path: String) -> Dictionary:
+	if doc == null or not _documents.has(doc):
+		return {"ok": false, "reason": "This document is no longer open."}
+	var conflict: GSTDocument = _find_document_by_path(path)
+	if conflict != null and conflict != doc:
+		var result: Dictionary = {"ok": false, "reason": "%s is already open in another tab." % path}
+		_set_operation_message_for(doc, "Save", result["reason"])
+		return result
+	if doc == _active_document:
+		await _finish_pending_edits()
+	var result: Dictionary = GSTStackIO.save(doc.stack, path)
 	if not result["ok"]:
-		_set_operation_message("Save", result["reason"])
-		return
-	_raw_set_current_path(path)
-	if _active_document != null:
-		_active_document.mark_baseline()
+		_set_operation_message_for(doc, "Save", result["reason"])
+		return result
+	# Fix-now (phase 5 review round 2, note 2): reuse the byte-identical
+	# document-bound path setter instead of re-writing its two lines inline.
+	_raw_set_current_path_for(doc, path)
+	doc.mark_baseline()
 	_refresh_tabs()
-	_set_operation_message("Save", "")
+	_set_operation_message_for(doc, "Save", "")
+	return result
 
 
 func _on_export_pressed() -> void:
+	_pending_export = _capture_active_document_request()
 	_export_dialog.popup_centered_ratio()
 
 
+## Phase 5: resolves against _pending_export (the document active when the
+## Export dialog was opened), not whichever document is active now.
 func _on_export_file_selected(path: String) -> void:
-	export_to_path(path, false)
+	var doc: GSTDocument = _resolve_pending_document(_pending_export)
+	_pending_export = {}
+	await _export_stack_to_path(doc, path, false)
 
 
-## Exports the open stack to `path` through GSTExport.write (decision 9: the
-## overwrite gate). When the target exists with a differing body and
-## `confirm` is false, shows the overwrite confirmation dialog and performs
-## no write; confirming it re-calls this with `confirm = true`. This is the
-## Export button's file-selected handler and the confirmation dialog's own
-## confirmed handler; public so the smoke can drive it directly too. Finishes
-## pending native gestures/popups first (decision superseding 20).
-func export_to_path(path: String, confirm: bool) -> void:
-	await _finish_pending_edits()
-	var result: Dictionary = GSTExport.write(_stack, _library, path, confirm)
+## Exports the currently active document's stack to `path`. Production/test
+## entry point every direct caller already used before phase 5 (always the
+## active document, unchanged); the real Export dialog's own delayed
+## response instead resolves its own captured document through
+## _on_export_file_selected above.
+func export_to_path(path: String, confirm: bool) -> Dictionary:
+	return await _export_stack_to_path(_active_document, path, confirm)
+
+
+## Document-bound export (phase 5). Refuses a stale/closed target the same
+## way _save_stack_to_path does. When GSTExport.write reports
+## needs_confirmation, captures doc's own id (not just the path) into
+## _pending_overwrite, so _on_overwrite_confirmed below re-targets the same
+## document that asked for this export -- Cross-cutting "Preserve export's
+## existing hand-edit overwrite check and bind its second confirmation to
+## the original request" -- even if a different document becomes active
+## while the confirmation dialog is up. Export never marks a baseline
+## (Cross-cutting "Export never clears dirty state").
+func _export_stack_to_path(doc: GSTDocument, path: String, confirm: bool) -> Dictionary:
+	if doc == null or not _documents.has(doc):
+		return {"ok": false, "reason": "This document is no longer open.", "needs_confirmation": false}
+	if doc == _active_document:
+		await _finish_pending_edits()
+	var result: Dictionary = GSTExport.write(doc.stack, _library, path, confirm)
 	if result["needs_confirmation"]:
-		_pending_export_path = path
+		_next_file_request_id += 1
+		_pending_overwrite = {"request_id": _next_file_request_id, "doc_id": doc.session_id, "path": path}
 		_overwrite_dialog.dialog_text = "%s already holds a body that differs from this stack's codegen. Overwrite it?" % path
 		_overwrite_dialog.popup_centered()
-		return
+		return result
 	# Any other outcome resolves the question the dialog was asking (a
 	# confirmed write, or a write that turned out not to need confirmation
 	# at all): closes it explicitly rather than relying on AcceptDialog's
@@ -1461,10 +1675,11 @@ func export_to_path(path: String, confirm: bool) -> void:
 	if _overwrite_dialog.visible:
 		_overwrite_dialog.hide()
 	if not result["ok"]:
-		_set_operation_message("Export", result["reason"])
-		return
+		_set_operation_message_for(doc, "Export", result["reason"])
+		return result
 	_refresh_exported_shader(path, result["code"])
-	_set_operation_message("Export", "")
+	_set_operation_message_for(doc, "Export", "")
+	return result
 
 
 ## GSTExport.write only replaces the bytes on disk. A Shader the editor has
@@ -1482,46 +1697,90 @@ func _refresh_exported_shader(path: String, code: String) -> void:
 		EditorInterface.get_resource_filesystem().update_file(path)
 
 
+## Phase 5: re-targets the same document _export_stack_to_path captured when
+## it first found this export needs confirmation (_pending_overwrite), not
+## whichever document is active now. A stale/closed target (doc no longer
+## open) just hides the dialog and does nothing else -- there is no longer
+## any document to overwrite or message.
 func _on_overwrite_confirmed() -> void:
-	export_to_path(_pending_export_path, true)
-	_pending_export_path = ""
+	var doc: GSTDocument = _resolve_pending_document(_pending_overwrite)
+	var path: String = String(_pending_overwrite.get("path", ""))
+	_pending_overwrite = {}
+	if doc == null:
+		if _overwrite_dialog.visible:
+			_overwrite_dialog.hide()
+		return
+	await _export_stack_to_path(doc, path, true)
 
 
 func _on_reopen_shader_pressed() -> void:
 	if is_picker_open() and not _applying_choice:
 		return
+	_pending_reopen = _capture_active_document_request()
 	_reopen_shader_dialog.popup_centered_ratio()
 
 
+## Phase 5: routes a delayed *failure* response's message to the document
+## active when the Reopen Shader dialog was opened, the same reasoning as
+## _on_open_file_selected above (a success still targets whatever
+## open_document actually installs -- the freshly reopened document itself
+## -- independent of which document is active now). Awaits
+## _reopen_shader_path_for for the same forced-finish-suspension reason as
+## _on_open_file_selected (fix-now, phase 5 review round 3, note 1).
 func _on_reopen_shader_file_selected(path: String) -> void:
-	reopen_shader_path(path)
+	var message_doc: GSTDocument = _resolve_pending_document(_pending_reopen)
+	_pending_reopen = {}
+	await _reopen_shader_path_for(message_doc, path)
 
 
 ## Reopens a stack from an exported .gdshader's embedded header through
 ## GSTExport.reopen (decision 8). A refusal (no header, unparsable header, or
-## an unknown schema -- B8) shows the reason in the message label and leaves
-## the active document untouched; no new empty stack is offered. On success,
-## installs the rebuilt stack via open_document (phase 3: a new, independent
-## GSTDocument, not an undoable "Replace stack" action) with an empty
-## _current_path (a reopened stack has no .tres of its own, and this new
-## document's unsaved origin is never confused with another open document
-## that happens to share the same empty path). When the file's body differs
-## from a fresh codegen of its own header (decision 8's stale-body warning),
-## that is shown instead of the plain success clear. This is the Reopen
-## Shader button's own file-selected handler; public so the smoke can drive
-## it directly too.
+## an unknown schema -- B8) shows the reason on message_doc (phase 5: the
+## document active when the real Reopen Shader dialog was opened, or
+## _active_document for this public seam and every direct test call) and
+## leaves the active document untouched; no new empty stack is offered. On
+## success, installs the rebuilt stack via open_document (phase 3: a new,
+## independent GSTDocument, not an undoable "Replace stack" action) with an
+## empty _current_path (a reopened stack has no .tres of its own, and this
+## new document's unsaved origin is never confused with another open
+## document that happens to share the same empty path). When the file's body
+## differs from a fresh codegen of its own header (decision 8's stale-body
+## warning), that is shown instead of the plain success clear. This is the
+## Reopen Shader button's own file-selected handler; public so the smoke can
+## drive it directly too. Awaits _reopen_shader_path_for for the same
+## forced-finish-suspension reason as open_path above (fix-now, phase 5
+## review round 3, note 1).
 func reopen_shader_path(path: String) -> void:
+	await _reopen_shader_path_for(_active_document, path)
+
+
+## Only the failure branch uses message_doc, the same reasoning as
+## _open_path_for above: a refusal never activates anything, so there is no
+## new on-screen document for the reason to describe instead; a success
+## (with or without the body-differs warning) targets the document
+## open_document's own await actually installs -- the freshly reopened
+## document itself -- captured directly rather than re-read from
+## _active_document afterward (fix-now, phase 5 review round 3, note 1):
+## open_document awaits _finish_pending_edits(), which suspends across a
+## native color-popup commit in flight, so a non-awaited call's very next
+## statement used to run against whichever document was still active before
+## that suspension resolved. open_document can return null (its own
+## is_picker_open() guard); a null opened document gets no success message
+## anywhere, matching the failure branch's "no target, no message" rule.
+func _reopen_shader_path_for(message_doc: GSTDocument, path: String) -> void:
 	if is_picker_open() and not _applying_choice:
 		return
 	var result: Dictionary = GSTExport.reopen(path, _library)
 	if not result["ok"]:
-		_set_operation_message("Reopen Shader", result["reason"])
+		_set_operation_message_for(message_doc, "Reopen Shader", result["reason"])
 		return
-	open_document(result["stack"], "", false, "", true)
+	var opened: GSTDocument = await open_document(result["stack"], "", false, "", true)
+	if opened == null:
+		return
 	if result["body_differs"]:
-		_set_operation_message("Reopen Shader", "%s reopened: its body differs from a fresh codegen of the header (hand edits detected, decision 8)" % path)
+		_set_operation_message_for(opened, "Reopen Shader", "%s reopened: its body differs from a fresh codegen of the header (hand edits detected, decision 8)" % path)
 	else:
-		_set_operation_message("Reopen Shader", "")
+		_set_operation_message_for(opened, "Reopen Shader", "")
 
 
 func _on_layer_selected(layer_id: StringName) -> void:
@@ -1585,16 +1844,31 @@ func _on_preset_selected(index: int) -> void:
 
 
 func _on_image_button_pressed() -> void:
+	_pending_image = _capture_active_document_request()
 	_file_dialog.popup_centered_ratio()
 
 
+## Phase 5: resolves against _pending_image (the document active when the
+## image dialog was opened), not whichever document is active now. Writes
+## doc.preview_image_path unconditionally (a document's own stored preview
+## image is its content whether or not it is on screen right now -- phase 4
+## restores it from there on a later activation), but only touches the live
+## _preview/_material the active UI is actually showing when doc is still
+## the active document. A stale/closed target (doc == null) touches nothing
+## (Cross-cutting "reject closed/stale targets without touching another
+## document").
 func _on_preview_image_selected(path: String) -> void:
+	var doc: GSTDocument = _resolve_pending_document(_pending_image)
+	_pending_image = {}
+	if doc == null:
+		return
 	var texture: Texture2D = load(path) as Texture2D
 	if texture == null:
 		return
+	doc.preview_image_path = path
+	if doc != _active_document:
+		return
 	_preview.set_image(texture)
-	if _active_document != null:
-		_active_document.preview_image_path = path
 	_resync_material()
 
 
@@ -2036,7 +2310,15 @@ func _on_picker_choice(choice: Dictionary) -> void:
 			var loaded: Dictionary = GSTStackIO.load("%s/%s.tres" % [RECIPES_DIR, value], _library)
 			result = loaded
 			if loaded["ok"]:
-				open_document(loaded["stack"], "", true, value)
+				# Fix-now (phase 5 review round 3, note 1): open_document
+				# awaits _finish_pending_edits(), which suspends across a
+				# native color-popup commit in flight. Without this await,
+				# the shared success tail below (_picker_refusal("") ->
+				# _set_operation_message("Recipes", "") -> _active_document)
+				# used to run against whichever document was still active
+				# before that suspension resolved, not the document this
+				# recipe just installed.
+				await open_document(loaded["stack"], "", true, value)
 	_applying_choice = false
 	if not result["ok"]:
 		_picker_refusal(result["reason"])
@@ -2045,15 +2327,41 @@ func _on_picker_choice(choice: Dictionary) -> void:
 	_close_picker()
 
 
+## Convenience for a synchronous, non-delayed operation message (Recipes'
+## own embedded-picker refusal path, and the preset dropdown's screen_uv
+## suggestion): always the currently active document, since neither can
+## outlive an await across a document switch the way a file dialog response
+## can. File-dialog handlers use _set_operation_message_for directly with
+## their own resolved message_doc/doc (phase 5).
 func _set_operation_message(control: String, reason: String) -> void:
-	var key: String = "file:" + control
+	_set_operation_message_for(_active_document, control, reason)
+
+
+## Routes a file-operation diagnostic onto doc's own GSTDocument.
+## operation_messages (phase 5: "route operation messages to their owning
+## document so a delayed failure cannot replace another document's
+## diagnostics") and only rebuilds the shared label when doc is still the
+## active one. A null doc (a resolved-stale/closed request) is a no-op:
+## there is no document left to carry the message.
+func _set_operation_message_for(doc: GSTDocument, control: String, reason: String) -> void:
+	if doc == null:
+		return
 	if reason.is_empty():
-		_control_refusals.erase(key)
+		doc.operation_messages.erase(control)
 	else:
-		_control_refusals[key] = reason
+		doc.operation_messages[control] = reason
+	if doc == _active_document:
+		_refresh_operation_message_label()
+
+
+## Rebuilds _message_label from _active_document's own operation_messages
+## (phase 5), called whenever they change on the active document
+## (_set_operation_message_for) and whenever the active document itself
+## changes (_install_stack, reached through every activation).
+func _refresh_operation_message_label() -> void:
 	var lines: Array[String] = []
-	for name: String in _control_refusals:
-		if name.begins_with("file:"):
-			lines.append("%s: %s" % [name.trim_prefix("file:"), _control_refusals[name]])
+	if _active_document != null:
+		for name: Variant in _active_document.operation_messages:
+			lines.append("%s: %s" % [String(name), _active_document.operation_messages[name]])
 	_message_label.text = "\n".join(lines)
 	_message_label.visible = not lines.is_empty()

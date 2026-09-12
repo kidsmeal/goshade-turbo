@@ -34,6 +34,9 @@ func run(plugin: EditorPlugin) -> void:
 	elif flag == "tabs_ui":
 		var tabs_ui_smoke: RefCounted = load("res://tests/gst_editor_tabs_smoke.gd").new()
 		await tabs_ui_smoke.run(plugin)
+	elif flag == "tabs_files":
+		var files_smoke: RefCounted = load("res://tests/gst_editor_document_files_smoke.gd").new()
+		await files_smoke.run(plugin)
 	elif flag == "ui_complete":
 		var complete_smoke: RefCounted = load("res://tests/gst_editor_ui_complete_smoke.gd").new()
 		await complete_smoke.run(plugin)
@@ -1012,6 +1015,18 @@ func _run_phase6_export_dialog_opens(plugin: EditorPlugin, panel: GSTMainPanel) 
 	var dialog_visible: bool = panel.is_export_dialog_visible()
 	_check("3f", path_before.is_empty() and dialog_visible, "Export press with no current_path opens the export dialog: current_path='%s' (expect '') dialog_visible=%s" % [path_before, dialog_visible])
 	panel.hide_export_dialog()
+	# Phase 5: _on_export_pressed() above captured this panel's own
+	# _pending_export against whatever document is active right now (the
+	# empty New'd stack this check itself is about). hide_export_dialog()
+	# calls EditorFileDialog.hide() directly, which does not emit the
+	# dialog's own "canceled" signal (only the Cancel button/Esc path does,
+	# dialogs.cpp AcceptDialog::_cancel_pressed) and so would otherwise leave
+	# that stale capture in place for _run_phase6_export_and_overwrite_gate's
+	# own direct panel._on_export_file_selected(export_path) call further
+	# down this same run to resolve against -- redirecting that later,
+	# unrelated export onto this check's own empty document instead of
+	# whichever document is active by the time it runs.
+	panel._pending_export = {}
 
 
 ## Item 4: the Open dialog's own file-selected handler, _on_open_file_selected,

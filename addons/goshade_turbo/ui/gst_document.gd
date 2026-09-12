@@ -79,6 +79,20 @@ var material: ShaderMaterial = preview_sync.get_material()
 ## never-edited document (new or freshly opened) is never dirty.
 var saved_fingerprint: String = ""
 
+## Latest file-operation diagnostic per control ("Open", "Save", "Export",
+## "Reopen Shader", "Recipes", "Preview" -- Save As failures write "Save",
+## gst_main_panel.gd's _on_save_as_file_selected), phase 5
+## (docs/SHADER_TABS_reviewed-plan.md):
+## "route operation messages to their owning document so a delayed failure
+## cannot replace another document's diagnostics." An empty/absent key means
+## no current message for that control on this document. gst_main_panel.gd's
+## _set_operation_message_for writes it and only rebuilds the shared message
+## label when this document is the active one; _install_stack's own
+## _refresh_operation_message_label call reads it back on every activation,
+## so switching tabs shows each document's own messages instead of whichever
+## operation happened to run last while a different document was active.
+var operation_messages: Dictionary = {}
+
 
 static var _next_session_id: int = 0
 
