@@ -1,0 +1,175 @@
+[gd_resource type="Resource" script_class="GSTStack" load_steps=19 format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_ee3i3"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_jdnjo"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_kxe4p"]
+
+[sub_resource type="Resource" id="Resource_yyari"]
+script = ExtResource("1_ee3i3")
+id = &"0"
+entry = "source/texture"
+kind_out = 1
+slots = {}
+params = {}
+
+[sub_resource type="Resource" id="Resource_fro4w"]
+script = ExtResource("2_jdnjo")
+scale = Vector2(3, 3)
+offset = Vector2(0, 0)
+rotation = 0.0
+scroll = Vector2(0.15, 0.05)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_qld7r"]
+script = ExtResource("1_ee3i3")
+id = &"1"
+entry = "generative/snoise"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_fro4w")
+
+[sub_resource type="Resource" id="Resource_uc0mg"]
+script = ExtResource("2_jdnjo")
+scale = Vector2(2, 2)
+offset = Vector2(-1, 0)
+rotation = -1.5708
+scroll = Vector2(0, 0)
+warp_x = &"1"
+warp_y = &""
+warp_strength = 0.12
+
+[sub_resource type="Resource" id="Resource_cnlbe"]
+script = ExtResource("1_ee3i3")
+id = &"2"
+entry = "generative/linear_gradient"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_uc0mg")
+
+[sub_resource type="Resource" id="Resource_ajspn"]
+script = ExtResource("1_ee3i3")
+id = &"3"
+entry = "color/palette"
+kind_out = 1
+slots = {
+"t": &"2"
+}
+params = {
+"a": Vector3(0.15, 0.71, 0.65),
+"b": Vector3(0.52, 0.49, 0.16),
+"c": Vector3(0.92, 0.37, 0.83),
+"d": Vector3(0.82, 0.09, 0.48)
+}
+
+[sub_resource type="Resource" id="Resource_uwe8o"]
+script = ExtResource("2_jdnjo")
+scale = Vector2(48, 48)
+offset = Vector2(0, 0)
+rotation = -1.5708
+scroll = Vector2(0, 0)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="Resource_tq2xr"]
+script = ExtResource("1_ee3i3")
+id = &"4"
+entry = "generative/stripes"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Resource_uwe8o")
+
+[sub_resource type="Resource" id="Resource_nm5om"]
+script = ExtResource("1_ee3i3")
+id = &"5"
+entry = "color/gradient_map"
+kind_out = 1
+slots = {
+"t": &"4"
+}
+params = {
+"color_a": Color(0.6, 0.6, 0.65, 1),
+"color_b": Color(1, 1, 1, 1)
+}
+
+[sub_resource type="Resource" id="Resource_6gbfy"]
+script = ExtResource("1_ee3i3")
+id = &"6"
+entry = "color/multiply"
+kind_out = 1
+slots = {
+"a": &"3",
+"b": &"5"
+}
+params = {
+"t": 0.5
+}
+
+[sub_resource type="Resource" id="Resource_ktjby"]
+script = ExtResource("1_ee3i3")
+id = &"7"
+entry = "filter/outline"
+kind_out = 1
+slots = {
+"source": &"0"
+}
+params = {
+"thickness": 0.006,
+"threshold": 0.1
+}
+
+[sub_resource type="Resource" id="Resource_gbwdd"]
+script = ExtResource("1_ee3i3")
+id = &"8"
+entry = "color/fill"
+kind_out = 1
+slots = {}
+params = {
+"color": Color(0.02, 0.05, 0.12, 1)
+}
+
+[sub_resource type="Resource" id="Resource_p37ki"]
+script = ExtResource("1_ee3i3")
+id = &"9"
+entry = "color/mix"
+kind_out = 1
+slots = {
+"a": &"6",
+"b": &"8",
+"mask": &"7"
+}
+params = {}
+
+[sub_resource type="Resource" id="Resource_affms"]
+script = ExtResource("1_ee3i3")
+id = &"10"
+entry = "fieldops/alpha"
+kind_out = 0
+slots = {
+"color": &"0"
+}
+params = {}
+
+[sub_resource type="Resource" id="Resource_50cp3"]
+script = ExtResource("1_ee3i3")
+id = &"11"
+entry = "fieldops/max"
+kind_out = 0
+slots = {
+"a": &"10",
+"b": &"7"
+}
+params = {}
+
+[resource]
+script = ExtResource("3_kxe4p")
+coord_space = 0
+layers = Array[ExtResource("1_ee3i3")]([SubResource("Resource_yyari"), SubResource("Resource_qld7r"), SubResource("Resource_cnlbe"), SubResource("Resource_ajspn"), SubResource("Resource_tq2xr"), SubResource("Resource_nm5om"), SubResource("Resource_6gbfy"), SubResource("Resource_ktjby"), SubResource("Resource_gbwdd"), SubResource("Resource_p37ki"), SubResource("Resource_affms"), SubResource("Resource_50cp3")])
+output_color = &"9"
+output_alpha = &"11"
+next_id = 12

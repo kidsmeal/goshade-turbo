@@ -54,6 +54,7 @@ New idea mid-task: `/claudhd:idea <text>` records it in IDEAS.md so you can keep
 - ClauDHD enforcement opted in 2026-09-09 (`.now/enabled`): the commit-boundary reconcile and, from plugin 1.0.11 after a restart, the post-commit verify now run here. Any plan may be granted `thread.js commit-policy auto <plan>` to commit phases without asking; push stays manual.
 - `docs/CURRENTNESS_AUDIT.md` and `docs/RUNTIME_VERIFICATION_QUEUE.md` still carry `<DATE>` template placeholders; the audit's deferred-notes list is real, the rest is scaffold.
 - `docs/CURRENTNESS_AUDIT.md` deferred note: `tests/run_render_checks.gd` cannot run in the GPU-less reviewer sandbox. Clears when a GPU reviewer exists.
+- Logo (2026-09-11, off-thread): `sandbox/logo/` renders the README wordmark through the tool's own export. Font is `ZenDots` (OFL, `sandbox/logo/fonts/`; `BrunoAceSC` kept as the alternate); pipeline is `export_logo.gd` (stack .tres to .gdshader), `build_logo_scene.gd -- --font <key>`, `run_logo_check.gd` (GPU, writes `goshade_turbo_logo.png`). Tune the stack in the panel from `logo_stack.tres`, re-export, re-render.
 - Running `godot --import` on a newer Godot than 4.4 rewrites `sandbox/screenshots/glow.png.import`. Restore it before committing.
 
 ## Leaving this file when you stop

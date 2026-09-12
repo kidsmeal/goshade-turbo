@@ -1,0 +1,90 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="FontFile" path="res://sandbox/logo/fonts/ZenDots-Regular.ttf" id="1_dbdfj"]
+[ext_resource type="Shader" path="res://sandbox/logo/logo.gdshader" id="2_il18y"]
+
+[sub_resource type="FontVariation" id="FontVariation_5meul"]
+base_font = ExtResource("1_dbdfj")
+variation_transform = Transform2D(1, 0.18, 0, 1, 0, 0)
+
+[sub_resource type="LabelSettings" id="LabelSettings_6n07r"]
+font = SubResource("FontVariation_5meul")
+font_size = 256
+
+[sub_resource type="LabelSettings" id="LabelSettings_ah2m4"]
+font = SubResource("FontVariation_5meul")
+font_size = 256
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tjs4k"]
+shader = ExtResource("2_il18y")
+shader_parameter/l1_scale = null
+shader_parameter/l1_offset = null
+shader_parameter/l1_rotation = null
+shader_parameter/l1_scroll = null
+shader_parameter/l2_scale = null
+shader_parameter/l2_offset = null
+shader_parameter/l2_rotation = null
+shader_parameter/l2_warp_strength = null
+shader_parameter/l3_palette_a = null
+shader_parameter/l3_palette_b = null
+shader_parameter/l3_palette_c = null
+shader_parameter/l3_palette_d = null
+shader_parameter/l4_scale = null
+shader_parameter/l4_offset = null
+shader_parameter/l4_rotation = null
+shader_parameter/l5_gradient_map_color_a = null
+shader_parameter/l5_gradient_map_color_b = null
+shader_parameter/l6_color_multiply_t = null
+shader_parameter/l7_outline_thickness = null
+shader_parameter/l7_outline_threshold = null
+shader_parameter/l8_fill_color = null
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_av48d"]
+viewport_path = NodePath("Text")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_gn6g6"]
+viewport_path = NodePath("Out")
+
+[node name="Logo" type="Node2D"]
+
+[node name="Text" type="SubViewport" parent="."]
+disable_3d = true
+transparent_bg = true
+size = Vector2i(2048, 2048)
+render_target_update_mode = 4
+
+[node name="Center" type="CenterContainer" parent="Text"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Lines" type="VBoxContainer" parent="Text/Center"]
+layout_mode = 2
+theme_override_constants/separation = -40
+
+[node name="Line0" type="Label" parent="Text/Center/Lines"]
+layout_mode = 2
+text = "GOSHADE"
+label_settings = SubResource("LabelSettings_6n07r")
+horizontal_alignment = 1
+
+[node name="Line1" type="Label" parent="Text/Center/Lines"]
+layout_mode = 2
+text = "TURBO"
+label_settings = SubResource("LabelSettings_ah2m4")
+horizontal_alignment = 1
+
+[node name="Out" type="SubViewport" parent="."]
+disable_3d = true
+transparent_bg = true
+size = Vector2i(2048, 2048)
+render_target_update_mode = 4
+
+[node name="Logo" type="Sprite2D" parent="Out"]
+material = SubResource("ShaderMaterial_tjs4k")
+position = Vector2(1024, 1024)
+texture = SubResource("ViewportTexture_av48d")
+
+[node name="Preview" type="Sprite2D" parent="."]
+position = Vector2(1024, 1024)
+texture = SubResource("ViewportTexture_gn6g6")

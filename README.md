@@ -1,42 +1,45 @@
 # GoShade Turbo
 
-A Godot editor plugin. Build a `canvas_item` shader by stacking typed layers
-from a bundled MIT function library, with sliders, live preview, and a
-self-contained `.gdshader` export. Target user: someone with no shader
-knowledge who wants to click things and see what happens, then ship the
-result. Design: `docs/DESIGN.md`.
+![GoShade Turbo](sandbox/logo/goshade_turbo_logo.png)
 
-Own project, own repo, MIT. Not a Capsule Castle feature.
+![Godot 4.4+](https://img.shields.io/badge/Godot-4.4%2B-478cbf?logo=godotengine&logoColor=white)
+![Version 0.1.0](https://img.shields.io/badge/version-0.1.0-blue)
+![License MIT](https://img.shields.io/badge/license-MIT-green)
+
+Godot editor plugin for building `canvas_item` shaders without writing shader
+code. Stack typed layers from a bundled function library, tune them with
+sliders, watch the live preview, export a self-contained `.gdshader`.
+
+Design notes: `docs/DESIGN.md`.
 
 ## Install
 
 1. Copy `addons/goshade_turbo` into your project's `addons/` directory.
-2. In the Godot editor: Project Settings > Plugins, enable "GoShade Turbo".
-3. Minimum Godot version: 4.4. Tested on 4.6 and 4.7 (`docs/PLAN.md` version
-   matrix).
+2. Project Settings > Plugins, enable GoShade Turbo.
+
+Requires Godot 4.4 or later. Tested on 4.4, 4.6 and 4.7.
 
 ## Usage
 
 ### Panel
 
-A main screen tab next to 2D/3D/Script. Three columns: stack list, the
-selected layer's sliders (the inspector's own property editor pointed at the
-layer resource), preview. An add button opens a picker popup grouped by
-taxonomy folder (generative, sdf, fieldops, color, source, filter), each
-entry shown with its function name, kind signature, and description; the
-picker pre-filters to entries whose output kind fits the slot it was opened
-from.
+The plugin adds a main screen tab next to 2D, 3D and Script. Three columns:
+the stack list, the selected layer's properties, the live preview.
 
-Every slot on an operator layer picks any earlier layer in the stack (no
-forward references). A generator layer carries its own coord block: scale,
-offset, rotation, scroll speed, and two optional warp slots. A fixed output
-block at the bottom of the panel picks the output color layer and the alpha
-mode (a field layer, `texture` alpha, the output color layer's own alpha, or
-`none`).
+The add button opens a picker grouped by folder: generative, sdf, fieldops,
+color, source, filter. Each entry shows its function name, kind signature
+and description. The picker lists only entries whose output kind fits the
+slot it was opened from.
 
-Every stack edit (add, remove, reorder, slot change, output change) is
-undoable through the editor's own undo history. Slider edits come free from
-the inspector.
+Stack rules:
+
+- A slot picks any layer below it. No forward references.
+- A generator layer has a coord block: scale, offset, rotation, scroll
+  speed, and two optional warp slots.
+- The output block picks the output color layer and the alpha mode: a field
+  layer, `texture` alpha, the color layer's own alpha, or `none`.
+- Every stack edit goes through the editor's undo history. Slider edits go
+  through the inspector, so they do too.
 
 ### Recipes
 
@@ -45,83 +48,74 @@ the inspector.
 
 ### Export
 
-Export writes a self-contained `.gdshader`: a license notice, a one-line
-`// stack: <json>` header carrying the whole stack, then the generated
-shader body. Reopening that file (through the panel, or by pointing the
-`Open` dialog at it) rebuilds the stack from the header, with no `.tres`
-required. If the file already exists and its body no longer matches a fresh
-codegen of its own header, export asks for confirmation before overwriting a
-hand-edited body. A file with no `// stack:` header, an unparsable header,
-or an unknown schema version is refused with a message naming the reason;
-no new empty stack is offered in that case.
+Export writes a self-contained `.gdshader`: a license notice, one
+`// stack: <json>` line carrying the whole stack, then the shader body.
+Opening that file in the panel rebuilds the stack from the header. No
+`.tres` needed.
 
-### `local` coordinate space and `gst_rect_size`
+Export compares an existing file's body against a fresh codegen of its own
+header and asks before overwriting a hand-edited body. Opening a file with
+no `// stack:` header, an unparsable header, or an unknown schema version is
+refused with the reason.
 
-The stack-level coordinate space dropdown offers `uv` (default),
-`screen_uv`, and `local`. `local` space is computed in `vertex()` as
-`VERTEX / gst_rect_size`, because `VERTEX` inside `fragment()` is screen
-space in a `canvas_item` shader, not the drawn node's own local space.
-`gst_rect_size` is a `uniform vec2` that the plugin and the live preview set
-from the target node's rect size, so a coord-block scale of `1.0` matches
-`uv` at that node's size. The exported shader defaults `gst_rect_size` to
-`vec2(1.0)`: **if you attach an exported shader that uses `local` space to a
-node, you must set `gst_rect_size` to that node's rect size yourself**, or
-`local` space will read as if the node were 1x1.
+### `local` coordinate space
+
+The coordinate space dropdown offers `uv`, `screen_uv` and `local`.
+`local` is `VERTEX / gst_rect_size`, computed in `vertex()`, because
+`VERTEX` inside `fragment()` is screen space in a `canvas_item` shader.
+
+The plugin and the preview set the `gst_rect_size` uniform from the node's
+rect size. An exported shader defaults it to `vec2(1.0)`. Set
+`gst_rect_size` to the node's rect size on any node that gets a `local`
+space shader, or it renders as if the node were 1x1.
 
 ## Tests
 
-Every headless test run needs the global script class cache built first,
-once per clone and again after adding any new `class_name` script:
+Build the script class cache once per clone, and again after adding any
+`class_name` script:
 
 ```
 godot --headless --path . --import
 ```
 
-Codegen and unit tests (headless, no GPU needed):
+Codegen and unit tests, headless:
 
 ```
 godot --headless --path . -s res://tests/run_codegen_tests.gd
 ```
 
-Rendered checks (needs a real GPU and display session: the `--headless`
-dummy rendering driver cannot read back viewport pixels, so this command is
-deliberately not headless):
+Rendered checks. These need a GPU session: the `--headless` dummy driver
+cannot read back viewport pixels.
 
 ```
 godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd
 ```
 
-Add `-- --write-screenshots` to also save every checked stack's rendered
-128x128 image to `sandbox/screenshots/<stack file stem>.png`:
+Add `-- --write-screenshots` to save every checked stack's 128x128 render to
+`sandbox/screenshots/<stack file stem>.png`.
 
-```
-godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd -- --write-screenshots
-```
-
-Foil and Opal motion and control response at fixed times (`1`, `30`, and
-`120` seconds):
+Recipe motion checks at fixed times (1, 30 and 120 seconds):
 
 ```
 godot --path . --rendering-driver opengl3 -s res://tests/run_recipe_motion_checks.gd
 ```
 
-`godot` above is whatever command resolves to a Godot 4.4+ binary on your
-system.
+`godot` is whatever resolves to a Godot 4.4+ binary on your system.
 
-## Roster
+## Library
 
-The full v0.1 function library, one row per manifest under
-`addons/goshade_turbo/library/`. Kind signature reads `(input kinds) ->
-output kind`; `field` is a scalar, `color` is a `vec4`. `(generator)`
-entries carry a coord block (scale/offset/rotation/scroll/warp) instead of
-input slots; `(source)` entries read a built-in (`TEXTURE` or the screen
-texture) instead of an upstream layer; `(filter)` entries take only a
-`texture` or `screen` source layer and sample it at neighbor offsets.
+57 functions, one row per manifest under `addons/goshade_turbo/library/`.
+The kind signature reads `(input kinds) -> output kind`. `field` is a
+scalar, `color` is a `vec4`. `(generator)` entries take a coord block
+instead of input slots. `(source)` entries read `TEXTURE` or the screen
+texture. `(filter)` entries take a `texture` or `screen` source layer and
+sample it at neighbor offsets.
 
-This table is generated from the manifests themselves by a throwaway
-headless script (`GSTLibrary.scan()` plus one print loop, run once and
-discarded, per the project's rule that manifests are never re-saved by the
-plugin), so it cannot drift from what actually ships.
+Regenerate this table after a library change:
+
+```
+godot --headless --path . -s res://tests/print_roster.gd
+```
 
 | id | function | kind signature | source_math |
 |---|---|---|---|
@@ -141,7 +135,7 @@ plugin), so it cannot drift from what actually ships.
 | `fieldops/abs` | `gst_abs` | (field) -> field | absolute value, standard GLSL builtin construction. |
 | `fieldops/add` | `add` | (field, field) -> field | scalar addition, no external source. |
 | `fieldops/alpha` | `alpha` | (color) -> field | trivial vec4 alpha-channel read, no external source. |
-| `fieldops/ease` | `ease` | (field) -> field | ease-in pow(x, x + 1), ease-out 1 - pow(1 - x, 2 - x), blended by bias. Own construction; the 0.5 blend of x^2 and its mirror is smoothstep's polynomial. |
+| `fieldops/ease` | `ease` | (field) -> field | in: pow(x, x + 1). out: 1 - pow(1 - x, 2 - x). blended by bias. Own construction. At 0.5 blend it mirrors smoothstep. |
 | `fieldops/fract` | `gst_fract` | (field) -> field | fractional part, standard GLSL builtin construction. |
 | `fieldops/invert` | `invert` | (field) -> field | trivial unit-range complement, no external source. |
 | `fieldops/max` | `gst_max` | (field, field) -> field | scalar maximum, standard GLSL builtin construction. |
@@ -149,7 +143,7 @@ plugin), so it cannot drift from what actually ships.
 | `fieldops/mix` | `gst_mix` | (field, field, field) -> field | linear interpolation, standard GLSL builtin construction. |
 | `fieldops/multiply` | `multiply` | (field, field) -> field | scalar multiplication, no external source. |
 | `fieldops/pow` | `gst_pow` | (field) -> field | power function, standard GLSL builtin construction. Input clamped to non-negative because GLSL pow() is undefined for a negative base. |
-| `fieldops/ratchet` | `ratchet` | (field) -> field | own construction: mod(x + 1, x * x) descending sawtooth over a pow(1 - x, x + steep) ease-in floor, blended by x; a reset at 0.99 finishes the last tooth. |
+| `fieldops/ratchet` | `ratchet` | (field) -> field | Own construction. mod(x + 1, x * x) descending sawtooth over a pow(1 - x, x + steep) ease-in floor, blended by x. The reset at 0.99 finishes the last tooth, which mod would only wrap at exactly 1. |
 | `fieldops/remap` | `remap` | (field) -> field | standard linear range remap, no external source. |
 | `fieldops/smoothstep` | `gst_smoothstep` | (field) -> field | Hermite smoothstep interpolation, standard GLSL builtin construction. Khronos GLSL ES 3.0 spec, section 8.3. |
 | `filter/box_blur` | `box_blur` | (color) -> color (filter) | 3x3 box filter, unweighted mean, standard convolution kernel. |
@@ -158,8 +152,8 @@ plugin), so it cannot drift from what actually ships.
 | `filter/outline` | `outline` | (color) -> color (filter) | alpha edge detection via 4-neighbor max difference, standard sprite outline technique. |
 | `filter/pixelate` | `pixelate` | (color) -> color (filter) | grid snapping / spatial quantization, standard pixelation construction. |
 | `generative/cellular_edges` | `cellular_edges` | () -> field (generator) | F2 - F1 cellular edge construction over a jittered grid, per Inigo Quilez, "Voronoi Edges", https://iquilezles.org/articles/voronoilines/. The bright-boundary remap (1.0 - smoothstep(0.0, width, F2 - F1)) is our own addition on top of that construction. |
-| `generative/clock` | `clock` | () -> field | fract(TIME * speed), standard construction. Ignores position; feeds add or mix to animate a field value. |
 | `generative/checker` | `checker` | () -> field (generator) | standard floor-parity checkerboard construction, common technique, no single canonical source. |
+| `generative/clock` | `clock` | () -> field | fract(TIME * speed), standard construction. Ignores position; feeds add or mix to animate a field value. Adding it before a fract is the same as adding unbounded time, since fract drops the whole part. |
 | `generative/fbm` | `fbm` | () -> field (generator) | fractional Brownian motion: standard sum-of-octaves construction. See D. Ebert et al., "Texturing & Modeling: A Procedural Approach" (3rd ed., 2003), ch. 2. |
 | `generative/hash` | `hash` | () -> field (generator) | sin/dot pseudo-random hash, a common GLSL technique. The Book of Shaders, ch. 10 "Random", https://thebookofshaders.com/10/ |
 | `generative/linear_gradient` | `linear_gradient` | () -> field (generator) | standard axis-aligned linear ramp, common technique, no single canonical source. Angle is driven by the layer's coord rotation rather than a dedicated param. |
@@ -183,11 +177,16 @@ plugin), so it cannot drift from what actually ships.
 | `source/screen` | `gst_source_screen` | () -> color (source) | Godot 4 canvas_item shader built-in: hint_screen_texture sampler2D read at SCREEN_UV (Godot shading language reference, canvas_item built-ins). |
 | `source/texture` | `gst_source_texture` | () -> color (source) | Godot 4 canvas_item shader built-in: TEXTURE sampler2D (Godot shading language reference, canvas_item built-ins). |
 
-Library source policy (design decision 15): this is our own library. We cite
-the source of the math on every entry; we write the code; a `source_code`
-license is recorded only on the rare entry where code itself, not just the
-formula, was copied from a permissive source (see `generative/hash`, ported
-from Capsule Castle's own `SpriteGoldFoil.gdshader`, same author).
+Every entry cites the source of its math. The code is written for this
+library. `source_code_license` is set only where code itself was copied
+from a permissive source (`generative/hash`, ported from the author's own
+Capsule Castle shader).
+
+## Credits
+
+Logo: [Zen Dots](https://fonts.google.com/specimen/Zen+Dots), SIL Open Font
+License 1.1, in `sandbox/logo/fonts/`. Rendered through the plugin's own
+export, see `sandbox/logo/`.
 
 ## License
 

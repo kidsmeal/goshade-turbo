@@ -6,3 +6,12 @@
 
 # Local Claude Code permissions (machine paths)
 .claude/settings.local.json
+
+# Local browser-pane launch config (machine paths)
+.claude/launch.json
+
+# Godot editor data dirs, created beside project.godot when the editor runs with the project as its data path
+export_templates/
+feature_profiles/
+script_templates/
+text_editor_themes/
