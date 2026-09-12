@@ -203,6 +203,61 @@ func _row_height() -> float:
 	return maxf(1.0, _list.get_item_rect(0).size.y)
 
 
+## Deselects without emitting layer_selected (phase 4, gst_main_panel.gd's
+## document activation): a stale selection carried over from whichever
+## document's rows this list showed before install_stack() rebuilt it for a
+## newly activated one must never linger just because its item id happens to
+## also exist in the new stack.
+## Wired-by: gst_main_panel.gd (document activation).
+func clear_selection() -> void:
+	_list.deselect_all()
+
+
+## Pairs with get_scroll_anchor_id (phase 4): lets a caller capture this
+## list's own current scroll position, by stable layer id and sub-row
+## fraction rather than a raw scrollbar value, before installing a different
+## stack's rows over it.
+## Wired-by: gst_main_panel.gd (document activation).
+func get_scroll_offset() -> float:
+	return _scroll_anchor_offset()
+
+
+## Restores a previously captured scroll anchor/offset (get_scroll_anchor_id/
+## get_scroll_offset) once this list's own rows already reflect the newly
+## installed stack. Deferred like refresh()'s own restoration: item rects
+## need one layout pass to settle before a scrollbar value derived from them
+## is meaningful.
+##
+## An empty anchor_id (this document has never had its own scroll state
+## captured -- its first activation with content) still queues an explicit
+## reset to the top, rather than doing nothing (fix-now S2, phase 4 review
+## round 2): refresh() above, called earlier in the same document-install
+## call chain (gst_main_panel.gd's _install_document_state), already captured
+## and queued its own deferred restore of whichever anchor id the outgoing
+## document's rows were scrolled to before this list's rows were rebuilt for
+## the incoming document. If that outgoing anchor id happens to also exist in
+## the incoming document's own stack -- ordinary, since every GSTStack's own
+## next_id starts at 0 (gst_stack_ops.gd) -- a bare early return here left
+## that stale restore uncontested, bleeding the outgoing document's scroll
+## position into a document that never asked for one. Queuing this reset
+## after refresh()'s own deferred call guarantees it runs last and wins.
+## Wired-by: gst_main_panel.gd (document activation).
+func restore_scroll_state(anchor_id: StringName, offset: float) -> void:
+	if _list.item_count == 0:
+		return
+	if anchor_id == &"":
+		_reset_scroll_to_top.call_deferred()
+		return
+	_restore_scroll_anchor.call_deferred(anchor_id, offset)
+
+
+## Deferred counterpart to the anchor_id == &"" branch above: overrides any
+## stale deferred restore refresh() already queued against this list's newly
+## installed rows.
+func _reset_scroll_to_top() -> void:
+	_list.get_v_scroll_bar().value = 0.0
+
+
 ## Wired-by: tests/gst_editor_ui_layout_smoke.gd.
 func scroll_to_fraction(fraction: float) -> void:
 	var bar: VScrollBar = _list.get_v_scroll_bar()

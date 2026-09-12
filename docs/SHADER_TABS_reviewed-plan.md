@@ -189,7 +189,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 
 ## Phase 4: Add shader tabs and activation state
 
-**Status:** pending
+**Status:** committed (2026-09-11) (fix-now round 2 applied, 2026-09-11)
 
 **Goal:** Expose document switching through the GoShade tab row while restoring editing state and rendering only the active preview.
 

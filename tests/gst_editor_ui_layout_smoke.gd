@@ -92,6 +92,17 @@ func _check_file_menu(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	for i: int in range(popup.item_count):
 		if not popup.is_item_separator(i):
 			labels.append(popup.get_item_text(i))
+	# A pristine active document (phase 3 docs/SHADER_TABS_reviewed-plan.md:
+	# GSTMainPanel.open_document's own pristine-reuse rule, "pristine initial
+	# empty content remains reusable") would make File > New reactivate this
+	# very same document instead of installing a different stack -- correct
+	# design behavior, but it would make this check's own "New installs a
+	# fresh stack" assertion vacuous. Dirty it first so New is guaranteed to
+	# create a genuinely distinct one (Shader tabs phase 4: this selector was
+	# not re-run since before phase 3 landed the reuse rule; adapting the
+	# stale assumption here rather than the production reuse contract).
+	panel.get_undo().add_layer("color/fill", GSTLayer.Kind.COLOR, false)
+	await plugin.get_tree().process_frame
 	var old_stack: GSTStack = panel.get_stack()
 	popup.id_pressed.emit(0)
 	await plugin.get_tree().process_frame

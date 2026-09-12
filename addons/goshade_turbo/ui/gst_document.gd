@@ -8,8 +8,8 @@ extends RefCounted
 ## state -- independent of every other open document. gst_main_panel.gd
 ## holds every open GSTDocument in its own document list and activates one
 ## at a time into the shared UI (stack list, inspector column, output
-## block, coord-space dropdown, preview); visible tab controls that expose
-## switching to the user are wired in phase 4.
+## block, coord-space dropdown, preview); the shader-tab row (phase 4) is the
+## visible control that lets a user switch which one is active.
 ##
 ## Cross-cutting "Shared editor state and history": resource paths and
 ## active scenes cannot choose a shader history. This UndoRedo instance is
@@ -48,6 +48,15 @@ var recipe_name: String = ""
 var reopened_import: bool = false
 ## Stable layer id last selected in this document's own stack list.
 var selected_layer_id: StringName = &""
+
+## Stack-list scroll position, captured by stable layer id (not a raw
+## scrollbar offset -- rows are rebuilt on every activation) whenever this
+## document stops being the active one (gst_main_panel.gd's
+## _activate_document, phase 4: "restore stable-ID layer selection and list
+## position"). "" means no captured position (never activated away from, or a
+## pristine document that has never scrolled).
+var list_scroll_anchor_id: StringName = &""
+var list_scroll_offset: float = 0.0
 
 ## Document-local preview/diagnostic state (phase 4 restores these on
 ## activation; phase 3 only stores them as the active document's own

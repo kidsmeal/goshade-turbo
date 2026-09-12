@@ -176,3 +176,35 @@ func get_target_rect_size() -> Vector2:
 ## Wired-by: none (editor smoke seam)
 func get_current_target_material() -> ShaderMaterial:
 	return _target_node.material as ShaderMaterial if _target_node != null else null
+
+
+## Reinstalls the shipped default preview image (phase 4,
+## docs/SHADER_TABS_reviewed-plan.md): gst_main_panel.gd's document
+## activation calls this for a document whose own preview_image_path is ""
+## (it never picked a custom image), so switching away from a document that
+## did pick one never leaves that picked texture showing for a document that
+## did not. Routes through the existing set_image so the background and any
+## TextureRect target stay in sync the same way a real Image... pick does.
+## Wired-by: gst_main_panel.gd (document activation).
+func reset_image() -> void:
+	set_image(load(DEFAULT_IMAGE_PATH) as Texture2D)
+
+
+## Explicit render-loop control (phase 4 Cross-cutting "Explicitly control
+## GSTPreview update mode so only active, visible GoShade content renders"):
+## gst_main_panel.gd calls this from its own visibility_changed handler, so
+## the shared SubViewport stops rendering every frame while the GoShade
+## main-screen tab is hidden (a game scene or another editor panel is active)
+## and resumes when it is shown again. Document material/state (each
+## GSTDocument's own preview_sync/material) is untouched either way -- only
+## this one shared viewport's own render loop pauses.
+## Wired-by: gst_main_panel.gd (_on_panel_visibility_changed).
+func set_active(active: bool) -> void:
+	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS if active else SubViewport.UPDATE_DISABLED
+
+
+## The shared SubViewport's own current update mode, for a test to confirm
+## set_active's effect directly instead of inferring it from a stale render.
+## Wired-by: none (editor smoke seam)
+func get_update_mode() -> SubViewport.UpdateMode:
+	return _viewport.render_target_update_mode

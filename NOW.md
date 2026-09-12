@@ -21,7 +21,7 @@ Last touched: 2026-09-11
 
 Next physical action:
 
-- [ ] Phase 3 committed ee17cf4; next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 4 (visible shader tabs) when you say go
+- [ ] Phase 4 committed (tabs UI); next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 5 (bind file ops to initiating document), auto-commit granted
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

@@ -31,6 +31,9 @@ func run(plugin: EditorPlugin) -> void:
 	elif flag == "tabs_documents":
 		var documents_smoke: RefCounted = load("res://tests/gst_editor_documents_smoke.gd").new()
 		await documents_smoke.run(plugin)
+	elif flag == "tabs_ui":
+		var tabs_ui_smoke: RefCounted = load("res://tests/gst_editor_tabs_smoke.gd").new()
+		await tabs_ui_smoke.run(plugin)
 	elif flag == "ui_complete":
 		var complete_smoke: RefCounted = load("res://tests/gst_editor_ui_complete_smoke.gd").new()
 		await complete_smoke.run(plugin)

@@ -62,6 +62,9 @@ signal stack_changed
 @onready var _codegen_message: Label = %CodegenMessage
 @onready var _editing_content: VBoxContainer = %EditingContent
 @onready var _preview_area: VBoxContainer = %PreviewArea
+@onready var _shader_tabs_scroll: ScrollContainer = %ShaderTabsScroll
+@onready var _shader_tabs: HBoxContainer = %ShaderTabs
+@onready var _new_tab_button: Button = %NewTabButton
 
 const COORD_SPACE_NAMES: Array[String] = ["uv", "screen_uv", "local"]
 ## docs/PLAN.md Phase 7 Files: the Recipes MenuButton lists every .tres here.
@@ -81,10 +84,9 @@ var _library: GSTLibrary = null
 ## creation order. Never pruned in this phase (document close is phase 6).
 var _documents: Array[GSTDocument] = []
 ## The document currently bound to the shared UI (stack list, inspector
-## column, output block, coord-space dropdown, preview). Visible tab
-## controls that let a user switch it are wired in phase 4; until then only
-## New/Open/Reopen Shader/Recipes and the internal fixture seams below
-## change it.
+## column, output block, coord-space dropdown, preview). Changed by
+## New/Open/Reopen Shader/Recipes, the shader-tab row's own Button.pressed
+## handlers (phase 4, _refresh_tabs), and the internal fixture seams below.
 var _active_document: GSTDocument = null
 ## Mirrors _active_document.undo_redo/.undo so every existing call site in
 ## this file (get_watched_history(), get_undo(), keyboard undo/redo, every
@@ -141,6 +143,26 @@ var _picker_context: Dictionary = {}
 var _picker_focus: WeakRef = null
 var _applying_choice: bool = false
 var _control_refusals: Dictionary = {}
+## GSTDocument.session_id -> its own shader-tab Button (phase 4), rebuilt
+## wholesale by _refresh_tabs() every time it runs (matching
+## gst_stack_list.gd's own full-rebuild-per-change convention). An editor
+## smoke seam (get_tab_button); production code never reads this map.
+var _tab_buttons: Dictionary = {}
+## Shared by every tab Button (phase 4 review round 1 fix 1): a plain
+## toggle_mode Button with no group reverts status.pressed to false on a
+## second click (BaseButton::on_action_event unconditionally toggles, then
+## _unpress_group() only forces it back to true when a button_group is
+## present -- base_button.cpp, verified against .now/tabs-validation/
+## godot-4.4-source). One ButtonGroup instance, reused across every
+## _refresh_tabs() rebuild, keeps re-clicking the already-active tab a no-op
+## instead of visibly un-pressing it. ButtonGroup.allow_unpress defaults to
+## false, which is exactly this radio-button behavior.
+var _tab_button_group: ButtonGroup = ButtonGroup.new()
+## Guards _preset_option.select() calls made to reflect a newly activated
+## document's own stored preview_preset (mirrors _syncing_coord_space's own
+## guard for the same reason: OptionButton.select() does not itself emit
+## item_selected, but the guard is kept for the same defensive parity).
+var _syncing_preview_controls: bool = false
 
 
 func _ready() -> void:
@@ -221,6 +243,23 @@ func _ready() -> void:
 	_randomize_button.pressed.connect(_on_randomize_pressed)
 	_set_recipe_open(false)
 
+	_new_tab_button.pressed.connect(_on_new_pressed)
+	# Phase 4 Cross-cutting "Explicitly control GSTPreview update mode...":
+	# pauses the shared preview SubViewport while the GoShade main-screen tab
+	# is hidden (plugin.gd's _make_visible(false)) and resumes it when shown
+	# again. Fires once immediately below too, since plugin.gd calls
+	# _panel.hide() right after this node's own _ready() already ran.
+	visibility_changed.connect(_on_panel_visibility_changed)
+	# Round 1 fix 3: _refresh_tabs()'s own deferred scroll-into-view call
+	# only re-fires when the tab row itself is rebuilt (a document/stack
+	# change). A resize alone (main window, editor-scale, or the narrow-
+	# layout breakpoint toggling) can shrink _shader_tabs_scroll without
+	# rebuilding anything, which could otherwise scroll the still-correct
+	# active tab Button out of view. The tab row spans the whole panel width
+	# regardless of the main split, so this container's own resized signal
+	# covers every one of those cases directly.
+	_shader_tabs_scroll.resized.connect(_on_tab_scroll_resized)
+
 	_open_dialog = EditorFileDialog.new()
 	_open_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
 	_open_dialog.access = EditorFileDialog.ACCESS_RESOURCES
@@ -279,6 +318,18 @@ func _exit_tree() -> void:
 	_active_document = null
 	_undo_redo = null
 	_undo = null
+
+
+## Wired-by: visibility_changed (_ready()).
+func _on_panel_visibility_changed() -> void:
+	_preview.set_active(is_visible_in_tree())
+
+
+## Wired-by: _shader_tabs_scroll.resized (_ready()).
+func _on_tab_scroll_resized() -> void:
+	if _active_document == null:
+		return
+	_await_scroll_active_tab_into_view(_tab_buttons.get(_active_document.session_id) as Button)
 
 
 func _build_start_screen() -> void:
@@ -755,11 +806,170 @@ func _on_document_property_changed(doc: GSTDocument) -> void:
 ## very first document must never dismiss a start screen that has not been
 ## shown yet; activate_document/open_document below dismiss it themselves.
 func _activate_document(doc: GSTDocument) -> void:
+	# Captured from the still-installed previous document's own rows/scroll
+	# state before anything below rebinds the stack list to doc's stack
+	# (phase 4: "restore stable-ID layer selection and list position"). Only
+	# the previous document's own selected_layer_id is already kept live via
+	# _on_layer_selected; scroll position has no per-scroll signal to hook,
+	# so it is captured here, at the one point every switch passes through.
+	if _active_document != null and _active_document != doc:
+		_active_document.list_scroll_anchor_id = _stack_list.get_scroll_anchor_id()
+		_active_document.list_scroll_offset = _stack_list.get_scroll_offset()
 	_active_document = doc
 	_undo_redo = doc.undo_redo
 	_current_path = doc.current_path
 	_set_recipe_open(doc.recipe_open)
 	_install_document_state(doc.stack, doc.undo, doc.preview_sync, doc.material, doc.preview_layer_id)
+	_restore_document_selection(doc)
+	_restore_document_preview_controls(doc)
+	_refresh_tabs()
+
+
+## Restores doc's own stable-ID layer selection and list scroll position
+## (phase 4) after _install_stack above has already rebuilt _stack_list's
+## rows for doc.stack. Clears any selection _install_stack's own refresh()
+## carried over by coincidence (a stale pre-clear selected_id in the old
+## list happening to match an id that also exists in doc's own stack) before
+## applying doc's real remembered selection, so a switch never leaves the
+## wrong row highlighted or the inspector column pointed at the wrong layer.
+func _restore_document_selection(doc: GSTDocument) -> void:
+	_stack_list.clear_selection()
+	if doc.selected_layer_id != &"" and GSTStackOps.find_layer(_stack, doc.selected_layer_id) != null:
+		_stack_list.select_layer(doc.selected_layer_id)
+	else:
+		doc.selected_layer_id = &""
+		_inspector_column.edit(&"")
+	_update_layer_menu()
+	_stack_list.restore_scroll_state(doc.list_scroll_anchor_id, doc.list_scroll_offset)
+
+
+## Restores doc's own stored preview preset/image (phase 4: solo/diagnostic
+## state -- preview_layer_id -- is already restored by _install_document_state
+## above, which is called before this). "" preview_preset/preview_image_path
+## means doc never changed them away from the shipped defaults (a pristine
+## New document, or one never touched from this panel's own current-session
+## preset/image controls), so both fall back to their _ready()-time defaults
+## instead of leaking whatever another document last selected.
+func _restore_document_preview_controls(doc: GSTDocument) -> void:
+	var preset_name: String = doc.preview_preset if not doc.preview_preset.is_empty() else GSTPreviewPresets.SPRITE
+	var preset_index: int = GSTPreviewPresets.PRESET_NAMES.find(preset_name)
+	if preset_index == -1:
+		preset_index = 0
+		preset_name = GSTPreviewPresets.PRESET_NAMES[0]
+	_syncing_preview_controls = true
+	_preset_option.select(preset_index)
+	_syncing_preview_controls = false
+	_preview.set_preset(preset_name)
+	if doc.preview_image_path.is_empty():
+		_preview.reset_image()
+	else:
+		var texture: Texture2D = load(doc.preview_image_path) as Texture2D
+		if texture != null:
+			_preview.set_image(texture)
+		else:
+			_preview.reset_image()
+	_resync_material()
+
+
+## Rebuilds the shader-tab row from _documents (phase 4), matching
+## gst_stack_list.gd's own full-rebuild-per-change convention rather than
+## patching individual buttons in place. Called after every
+## activation/creation (_activate_document) and every active-document stack
+## or property edit (_on_stack_changed/_on_property_changed) and successful
+## save (save_to_path), so titles and dirty stars stay current without a
+## separate per-document watcher. No close button is built here: phase 6
+## wires the close affordance (docs/SHADER_TABS_reviewed-plan.md phase 4
+## "Wire the tab-close affordance in phase 6; do not expose an unguarded
+## close path in this phase").
+##
+## Round 1 fix 2: every rebuild frees and recreates every tab Button, which
+## would silently drop keyboard undo focus (_owns_undo_focus() reads
+## get_viewport().gui_get_focus_owner() directly) whenever the control that
+## held it was itself one of the freed tab Buttons -- exactly what a real
+## tab click leaves focused just before the click's own activate_document
+## call reaches here. focus_was_tab_button is captured before anything is
+## freed; when true, focus is transferred onto the new active document's own
+## rebuilt Button below, so a Ctrl+Z immediately after a tab click still
+## passes that gate. A refresh triggered by an unrelated stack/property edit
+## (focus on an inspector row, the stack list, a native popup, etc.) leaves
+## that focus alone.
+func _refresh_tabs() -> void:
+	var current_focus: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	var focus_was_tab_button: bool = current_focus != null and _tab_buttons.values().has(current_focus)
+	for child: Node in _shader_tabs.get_children():
+		_shader_tabs.remove_child(child)
+		child.queue_free()
+	_tab_buttons.clear()
+	var untitled_index: int = 0
+	var active_button: Button = null
+	for doc: GSTDocument in _documents:
+		if doc.current_path.is_empty() and doc.recipe_name.is_empty():
+			untitled_index += 1
+		var button: Button = Button.new()
+		button.toggle_mode = true
+		button.button_group = _tab_button_group
+		button.button_pressed = doc == _active_document
+		button.clip_text = true
+		button.custom_minimum_size.x = 96.0
+		button.text = _tab_title(doc, untitled_index)
+		button.tooltip_text = _tab_tooltip(doc)
+		button.pressed.connect(activate_document.bind(doc))
+		_shader_tabs.add_child(button)
+		_tab_buttons[doc.session_id] = button
+		if doc == _active_document:
+			active_button = button
+	if focus_was_tab_button and active_button != null:
+		active_button.grab_focus()
+	# Fix 3 (round 1): keep the active tab scrolled into view under overflow,
+	# including right after a narrow-layout resize. _await_scroll_active_tab_
+	# into_view re-validates the target since another _refresh_tabs() call
+	# (e.g. two edits in the same frame) can free it again before it runs.
+	_await_scroll_active_tab_into_view(active_button)
+
+
+## A freshly rebuilt Button's own laid-out position/size, and
+## _shader_tabs_scroll's own internal scrollbar clamp for its current size
+## (ScrollContainer::_reposition_children, scene/gui/scroll_container.cpp),
+## are not guaranteed final until the next real frame boundary -- measured
+## at a 150% editor scale (round 1 fix 3): a same-frame call_deferred call
+## here read a stale scroll transform and landed short of the true end by a
+## fixed amount every time. Awaiting process_frame instead of using
+## call_deferred lets both settle first.
+func _await_scroll_active_tab_into_view(button: Button) -> void:
+	await get_tree().process_frame
+	if is_instance_valid(button) and button.is_inside_tree():
+		_shader_tabs_scroll.ensure_control_visible(button)
+
+
+## Presentation (decision 4, docs/SHADER_TABS_reviewed.md): filename without
+## extension once saved, recipe name before that first save, or a numbered
+## Untitled label for a document with neither (a brand new document, or one
+## reopened from an exported .gdshader header, decision 8 -- it has no
+## recipe name and no .tres of its own either). untitled_index is this
+## document's own 1-based position among currently open untitled-bucket
+## documents, computed by the caller as it iterates _documents in creation
+## order. A trailing `*` marks content that differs from the last successful
+## open/save baseline (GSTDocument.is_dirty()).
+func _tab_title(doc: GSTDocument, untitled_index: int) -> String:
+	var base: String = ""
+	if not doc.current_path.is_empty():
+		base = doc.current_path.get_file().get_basename()
+	elif not doc.recipe_name.is_empty():
+		base = doc.recipe_name.replace("_", " ").capitalize()
+	else:
+		base = "Untitled %d" % untitled_index
+	return base + ("*" if doc.is_dirty() else "")
+
+
+## Tooltip shows the full path or unsaved origin (decision 4).
+func _tab_tooltip(doc: GSTDocument) -> String:
+	if not doc.current_path.is_empty():
+		return doc.current_path
+	if not doc.recipe_name.is_empty():
+		return "Opened from recipe '%s' (not yet saved)." % doc.recipe_name
+	if doc.reopened_import:
+		return "Reopened from an exported .gdshader header (not yet saved)."
+	return "New shader (not yet saved)."
 
 
 ## Public navigation entry point onto an already-open document (phase 3).
@@ -768,17 +978,21 @@ func _activate_document(doc: GSTDocument) -> void:
 ## not move to doc while a commit is still in flight, since that commit
 ## would otherwise land after _install_document_state/_inspector_column.setup
 ## have already rebound _undo/the inspector column to doc's own adapter.
-## Wired-by: deferred (phase 4 wires visible tab controls onto this same
-## call); until then this is the New/Open/Reopen/Recipes handlers' own
-## canonical-path-reuse path (open_document below) and an editor smoke seam
-## for tests/gst_editor_documents_smoke.gd and the navigation/history-
-## preservation assertions in tests/gst_editor_smoke.gd.
+## Wired-by: _refresh_tabs()'s own per-tab Button.pressed connection (phase
+## 4); also the New/Open/Reopen/Recipes handlers' own canonical-path-reuse
+## path (open_path below) and an editor smoke seam for
+## tests/gst_editor_documents_smoke.gd, tests/gst_editor_tabs_smoke.gd, and
+## the navigation/history-preservation assertions in tests/gst_editor_smoke.gd.
 func activate_document(doc: GSTDocument) -> void:
 	if doc == null or doc == _active_document:
 		return
-	if is_picker_open() and not _applying_choice:
-		return
 	await _finish_pending_edits()
+	# Decision 5 (docs/SHADER_TABS_reviewed.md): switching cancels any open
+	# picker rather than refusing to switch or leaving it open against a
+	# stack it no longer destinations into -- restore_focus=false so no
+	# stale target on the document being left is queued for a deferred
+	# grab_focus() against rows _install_stack is about to free.
+	_close_picker(false)
 	_dismiss_start_screen()
 	_activate_document(doc)
 
@@ -791,6 +1005,27 @@ func get_active_document() -> GSTDocument:
 ## Wired-by: none (editor smoke seam)
 func get_documents() -> Array[GSTDocument]:
 	return _documents.duplicate()
+
+
+## doc's own tab Button, or null if doc is not open (phase 4).
+## Wired-by: none (editor smoke seam)
+func get_tab_button(doc: GSTDocument) -> Button:
+	return _tab_buttons.get(doc.session_id) as Button
+
+
+## Wired-by: none (editor smoke seam)
+func get_new_tab_button() -> Button:
+	return _new_tab_button
+
+
+## Wired-by: none (editor smoke seam)
+func get_tab_scroll() -> ScrollContainer:
+	return _shader_tabs_scroll
+
+
+## Wired-by: none (editor smoke seam)
+func get_tab_row() -> HBoxContainer:
+	return _shader_tabs
 
 
 ## Canonical path comparison logic, exposed statically and gated by an
@@ -1191,6 +1426,7 @@ func save_to_path(path: String) -> void:
 	_raw_set_current_path(path)
 	if _active_document != null:
 		_active_document.mark_baseline()
+	_refresh_tabs()
 	_set_operation_message("Save", "")
 
 
@@ -1312,6 +1548,7 @@ func _on_stack_changed() -> void:
 	_coord_space_option.select(int(_stack.coord_space))
 	_syncing_coord_space = false
 	stack_changed.emit()
+	_refresh_tabs()
 
 
 ## GSTUndo's on_property_changed callback: fires after every do and undo of
@@ -1321,9 +1558,13 @@ func _on_stack_changed() -> void:
 ## inspector column here would free the very row a live gesture, an open
 ## native color popup, or a test still holds a reference to (decision
 ## superseding 20). gst_inspector_column.gd refreshes that one row's own
-## displayed value itself, bound by key, alongside this call.
+## displayed value itself, bound by key, alongside this call. _refresh_tabs()
+## keeps the active document's own dirty star current (phase 4): a native
+## property edit changes GSTDocument.is_dirty()'s fingerprint just as a
+## structural edit does, but never goes through _on_stack_changed above.
 func _on_property_changed() -> void:
 	_resync_material()
+	_refresh_tabs()
 
 
 ## _resync_material runs first and always sets _message_label to the current
@@ -1331,6 +1572,8 @@ func _on_property_changed() -> void:
 ## applied on top of a clean sync, so a real codegen error is never masked
 ## by it.
 func _on_preset_selected(index: int) -> void:
+	if _syncing_preview_controls:
+		return
 	_set_operation_message("Preview", "")
 	var preset_name: String = GSTPreviewPresets.PRESET_NAMES[index]
 	_preview.set_preset(preset_name)
@@ -1610,13 +1853,22 @@ func _owns_undo_focus() -> bool:
 	return _inspector_column.owns_popup_focus(focus)
 
 
-func _close_picker() -> void:
+## restore_focus=false (phase 4, activate_document's own cancel-on-switch
+## call): skips the focus-restoration below entirely instead of queuing a
+## deferred grab_focus() against a target that belongs to the document being
+## switched away from -- exactly the "stale focus restoration" decision 5
+## calls out, since _install_stack (about to run via _activate_document)
+## frees and rebuilds every native row this dialog might have pointed at.
+func _close_picker(restore_focus: bool = true) -> void:
 	if not is_picker_open():
 		return
 	var context: Dictionary = _picker_context
 	_picker_context = {}
 	_picker.hide()
 	_set_picker_modality(false)
+	if not restore_focus:
+		_picker_focus = null
+		return
 	var target: Control = _picker_focus.get_ref() as Control if _picker_focus != null else null
 	if context["stack"] == _stack:
 		if context["purpose"] == "input":
