@@ -21,13 +21,24 @@ fill_to = Vector2(1, 0.5)
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_proc"]
 shader = ExtResource("1_proc")
+shader_parameter/eye_count = 5
+shader_parameter/centre_eye = true
+shader_parameter/alternate_spin = true
+shader_parameter/ring_radius = 100.0
+shader_parameter/eye_radius = 70.0
+shader_parameter/core_radius = 20.0
+shader_parameter/disc_rps = 0.03
+shader_parameter/eye_rps = 0.15
+shader_parameter/eye_rps_variance = 0.5
+shader_parameter/eye_rps_differential = 0.1
+shader_parameter/drift = -4.0
 shader_parameter/fade = 0.15
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_portal"]
 shader = ExtResource("2_portal")
 shader_parameter/l1_gst_smoothstep_edge0 = 0.3
 shader_parameter/l1_gst_smoothstep_edge1 = 0.5
-shader_parameter/l11_fill_color = Color(0.860914, 0.456958, 0.717396, 1)
+shader_parameter/l11_fill_color = Color(0, 0, 0, 1)
 shader_parameter/l12_gst_smoothstep_edge0 = 0.37
 shader_parameter/l12_gst_smoothstep_edge1 = 0.877
 shader_parameter/l3_scale = Vector2(1, 1)
