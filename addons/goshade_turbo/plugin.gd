@@ -50,3 +50,25 @@ func _make_visible(visible: bool) -> void:
 
 func get_panel() -> Control:
 	return _panel
+
+
+## Godot's confirmed-quit/scene-close status list (decision 10, phase 7,
+## docs/SHADER_TABS_reviewed-plan.md): lists every dirty shader document by
+## name for an empty for_scene (the editor's own quit confirmation), and
+## reports none for a nonempty one -- GoShade's documents are session-scoped,
+## never scene-owned, so closing a game scene must never treat them as if
+## they belonged to it.
+func _get_unsaved_status(for_scene: String) -> String:
+	if _panel == null:
+		return ""
+	return (_panel as GSTMainPanel).get_unsaved_status_text(for_scene)
+
+
+## Godot's own "Save and Quit" callback (decision 10): void, unawaited, and
+## unable to veto shutdown. Delegates synchronously to the panel, which
+## saves every dirty named document and recovers every untitled or failed-
+## path one into a project-local record before the process actually exits.
+func _save_external_data() -> void:
+	if _panel == null:
+		return
+	(_panel as GSTMainPanel).save_external_data()

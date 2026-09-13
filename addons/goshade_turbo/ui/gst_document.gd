@@ -79,6 +79,52 @@ var material: ShaderMaterial = preview_sync.get_material()
 ## never-edited document (new or freshly opened) is never dirty.
 var saved_fingerprint: String = ""
 
+## "" for a document that holds no shutdown recovery record right now; the
+## record's own stable identity (GSTDocumentRecovery's "id") otherwise --
+## either because gst_main_panel.gd's save_external_data() just wrote one for
+## this still-dirty, untitled-or-failed-path document during a confirmed
+## quit, or because this document was itself reopened from that record at
+## startup (load_recovery_records()). gst_main_panel.gd reuses this same id
+## on every later shutdown while the document stays dirty (decision 10:
+## "avoid duplicate restoration of one record") and clears it back to ""
+## once the document is saved or explicitly discarded, removing the on-disk
+## record at the same time (Cross-cutting "Keep each record until its
+## document is successfully saved or explicitly discarded").
+var recovery_record_id: String = ""
+
+## compute_fingerprint(stack) at the moment recovery_record_id's own on-disk
+## record last successfully captured this document's content -- "" whenever
+## recovery_record_id is "". Real confirmed quit (docs/EDITOR_SMOKE.md
+## "Shader tabs phase 7" evidence): Godot's own "Save and Quit" handler
+## re-evaluates every plugin's _get_unsaved_status("") after calling
+## _save_external_data(), and never actually exits the process while that
+## still reports anything -- a document is_dirty() forever by design (decision
+## 10: recovery preserves content without silently marking it saved) would
+## therefore leave the real confirmed-quit dialog stuck open indefinitely
+## once recovered. needs_shutdown_attention() below excludes a document only
+## once its own current content is provably the same content already
+## captured on disk, so a genuinely newer edit made after an earlier
+## recovery write (or after reopening one, in the same session, without
+## saving or discarding it) still surfaces normally.
+var recovery_fingerprint: String = ""
+
+## True while Godot's own confirmed-quit/scene-close status should still
+## name this document: it is dirty (GSTDocument.is_dirty()) and either holds
+## no recovery record yet or that record's own content is now stale against
+## the live stack. False once a just-written or freshly-reopened recovery
+## record's content matches the current stack exactly, even though is_dirty()
+## itself (the UI dirty star, close-confirmation) stays true until the user
+## actually saves or discards -- decision 10's "Save and Quit" contract is
+## that a successful recovery write is what makes the shutdown itself safe
+## to complete, not a private editing-session concept like the dirty star.
+func needs_shutdown_attention() -> bool:
+	if not is_dirty():
+		return false
+	if recovery_record_id.is_empty():
+		return true
+	return compute_fingerprint(stack) != recovery_fingerprint
+
+
 ## Latest file-operation diagnostic per control ("Open", "Save", "Export",
 ## "Reopen Shader", "Recipes", "Preview" -- Save As failures write "Save",
 ## gst_main_panel.gd's _on_save_as_file_selected), phase 5

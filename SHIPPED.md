@@ -4,6 +4,9 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9f765a96026d938e415ae85be1e66eb0a24fa25e -->
 
+### 2026-09-12
+- Shader tabs phase 7: save dirty documents on confirmed shutdown with validated project-local recovery records
+
 ### 2026-09-11
 - Shader tabs phase 6: protect document close with a document-bound Save, Discard, or Cancel lifecycle
 - Shader tabs phase 5: bind Save, Save As, Export, and dialog responses to their initiating document

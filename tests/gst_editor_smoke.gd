@@ -40,6 +40,9 @@ func run(plugin: EditorPlugin) -> void:
 	elif flag == "tabs_close":
 		var close_smoke: RefCounted = load("res://tests/gst_editor_document_close_smoke.gd").new()
 		await close_smoke.run(plugin)
+	elif flag == "tabs_recovery":
+		var recovery_smoke: RefCounted = load("res://tests/gst_editor_document_recovery_smoke.gd").new()
+		await recovery_smoke.run(plugin)
 	elif flag == "ui_complete":
 		var complete_smoke: RefCounted = load("res://tests/gst_editor_ui_complete_smoke.gd").new()
 		await complete_smoke.run(plugin)

@@ -377,6 +377,14 @@ func _ready() -> void:
 	# ownership onto the first GSTDocument instead, created the same way
 	# open_document creates every later one.
 	_activate_document(_create_document(_stack, "", false))
+	# Phase 7 (docs/SHADER_TABS_reviewed-plan.md): reopen any dirty document a
+	# prior confirmed-quit save_external_data() call recovered, before the
+	# user ever sees this bootstrap document's own start screen (Cross-
+	# cutting "restoration occurs before entry"). A project with no recovery
+	# records is the overwhelmingly common case and this call is a no-op for
+	# it: GSTDocumentRecovery.load_all() on a missing index.json returns no
+	# records and no failures.
+	load_recovery_records()
 
 
 ## Releases every open document's own UndoRedo (an Object, not a RefCounted
@@ -1290,15 +1298,38 @@ func close_document(doc: GSTDocument) -> void:
 	_close_dialog.popup_centered()
 
 
-## Short display name for the close-confirmation dialog's own text; not the
-## tab title (_tab_title), which also carries the dirty star and an
-## untitled_index this message does not need.
+## Short display name for the close-confirmation dialog's own text and
+## get_unsaved_status_text's own per-document lines; not the tab title
+## (_tab_title), which also carries the dirty star this message does not
+## need. Fix-now round 2, note 2: an untitled document (no current_path, no
+## recipe_name) used to fall through to the same literal "This shader" for
+## every such document, so two dirty untitled documents rendered as two
+## identical, indistinguishable lines in Godot's own quit confirmation
+## (observed: "This shader\nquit_named_failed"). Reuses _tab_title's own
+## 1-based "Untitled %d" numbering (_untitled_index) instead, so this
+## message and the tab row always agree on which untitled document is which.
 func _describe_document(doc: GSTDocument) -> String:
 	if not doc.current_path.is_empty():
 		return doc.current_path.get_file().get_basename()
 	if not doc.recipe_name.is_empty():
 		return doc.recipe_name.replace("_", " ").capitalize()
-	return "This shader"
+	return "Untitled %d" % _untitled_index(doc)
+
+
+## doc's own 1-based position among _documents' untitled bucket (no
+## current_path, no recipe_name), in the same creation-order iteration
+## _refresh_tabs uses to compute _tab_title's own untitled_index -- shared
+## here so _describe_document (close-confirmation dialog, unsaved-status
+## lines) and the tab row itself never disagree about which untitled
+## document is which.
+func _untitled_index(doc: GSTDocument) -> int:
+	var index: int = 0
+	for candidate: GSTDocument in _documents:
+		if candidate.current_path.is_empty() and candidate.recipe_name.is_empty():
+			index += 1
+		if candidate == doc:
+			return index
+	return index
 
 
 ## _close_dialog.confirmed ("Save"). Resolves against the document captured
@@ -1371,6 +1402,11 @@ func _close_document_now(doc: GSTDocument) -> void:
 		# a stack this panel is about to stop showing.
 		_close_picker(false)
 	_documents.remove_at(index)
+	# Phase 7: closing a document -- whether through Discard or an already-
+	# clean immediate close -- is one of the two places a recovery record is
+	# allowed to disappear (the other is a successful save, _save_stack_to_
+	# path below). A no-op when doc never held one.
+	_forget_recovery_record(doc)
 	doc.teardown()
 	if not was_active:
 		_refresh_tabs()
@@ -1392,6 +1428,172 @@ func _close_document_now(doc: GSTDocument) -> void:
 ## text is actually being committed.
 func _finish_pending_edits() -> void:
 	await _inspector_column.finish_pending_edits()
+
+
+## Phase 7 (docs/SHADER_TABS_reviewed-plan.md): shutdown recovery storage,
+## always under *this running project's own* settings directory -- never a
+## user's own stack/export path (decision 10). Running the editor against an
+## isolated test project (tests/gst_editor_document_recovery_smoke.gd's own
+## convention, matching every other Shader tabs phase) is what keeps this off
+## a real project's own recovery records; production takes whatever project
+## is actually open.
+## Wired-by: none (editor smoke seam).
+func get_recovery_dir() -> String:
+	return GSTDocumentRecovery.recovery_dir(EditorInterface.get_editor_paths().get_project_settings_dir())
+
+
+## plugin.gd's own _get_unsaved_status(""); decision 10 lists every dirty
+## shader document by the same short name the close-confirmation dialog uses
+## (_describe_document). A nonempty for_scene reports "" unconditionally:
+## every open GSTDocument is session-scoped, never scene-owned (Cross-
+## cutting "Scene close must not treat session-scoped shader documents as
+## scene-owned"), so Godot's own scene-close confirmation must never see
+## shader content as if it belonged to whatever scene is closing. No pending-
+## edit finish runs here: property_changed already applies a live gesture's
+## value straight onto the document/object/property target as it happens
+## (phase 1/2), so is_dirty()'s fingerprint already reflects it without
+## needing this synchronous, non-awaitable virtual to wait on anything.
+## Wired-by: plugin.gd's _get_unsaved_status.
+func get_unsaved_status_text(for_scene: String) -> String:
+	if not for_scene.is_empty():
+		return ""
+	var names: Array[String] = []
+	for doc: GSTDocument in _documents:
+		if doc.needs_shutdown_attention():
+			names.append(_describe_document(doc))
+	return "\n".join(names)
+
+
+## plugin.gd's own _save_external_data(): the confirmed "Save and Quit"
+## callback (decision 10). Godot documents this virtual as void and
+## unawaited -- it cannot suspend the shutdown it was called from, so this
+## finishes what pending native edit it can synchronously (matching phase 1's
+## own finding, tests/gst_editor_document_proof.gd's shutdown case: "That
+## closure's pending_edit argument is never supplied, so its await branch is
+## never taken and the call resolves synchronously") before saving every
+## dirty named document straight to its own current_path, and recovering
+## every untitled or failed-path document into a self-contained record
+## instead (Cross-cutting "Phase 7 introduces editor-local recovery metadata
+## only"). A document whose named save just succeeded drops any recovery
+## record it used to carry (Cross-cutting "Keep each record until its
+## document is successfully saved..."); one whose save failed keeps its
+## dirty state and gets recovered under its *original* path/origin instead,
+## reusing its own record id on a later shutdown rather than piling up a
+## duplicate (decision 10).
+## Wired-by: plugin.gd's _save_external_data.
+func save_external_data() -> void:
+	_finish_pending_edits()
+	var dir: String = get_recovery_dir()
+	for doc: GSTDocument in _documents:
+		if not doc.is_dirty():
+			continue
+		if doc.current_path.is_empty():
+			_recover_document(doc, dir, "")
+			continue
+		var save_result: Dictionary = GSTStackIO.save(doc.stack, doc.current_path)
+		if bool(save_result.get("ok", false)):
+			doc.mark_baseline()
+			_forget_recovery_record(doc)
+			continue
+		_recover_document(doc, dir, String(save_result.get("reason", "")))
+
+
+## Writes/updates doc's own recovery record. `save_failure_reason` is ""
+## for an untitled document (nothing was ever attempted for it to fail) or
+## the exact GSTStackIO.save failure reason for a named document whose own
+## save just failed. On a recovery-write failure too, reports both exact
+## attempted paths and this callback's own inability to veto shutdown
+## through a single editor error (decision 10: "If the user chooses Save and
+## Quit... report the exact paths and engine limitation through an editor
+## error; _save_external_data() is void and cannot veto shutdown"). Fix-now
+## round 2, note 1: a non-empty quarantined_path in write_record's own result
+## means this same call just renamed an unreadable index.json out of the way
+## before writing doc's own fresh one -- any stack files that quarantined
+## index used to reference are now unindexed, so this reports it through the
+## same push_error channel at write time instead of leaving it silent
+## (load_all's own directory scan, GSTDocumentRecovery._find_quarantined_
+## indexes, also keeps reporting the same file on every later startup until
+## a human removes it).
+func _recover_document(doc: GSTDocument, dir: String, save_failure_reason: String) -> void:
+	var write_result: Dictionary = GSTDocumentRecovery.write_record(dir, doc.stack, doc.current_path, doc.recipe_open, doc.recipe_name, doc.reopened_import, not save_failure_reason.is_empty(), doc.recovery_record_id)
+	if bool(write_result.get("ok", false)):
+		doc.recovery_record_id = String(write_result.get("record_id", ""))
+		doc.recovery_fingerprint = GSTDocument.compute_fingerprint(doc.stack)
+		var quarantined_path: String = String(write_result.get("quarantined_path", ""))
+		if not quarantined_path.is_empty():
+			push_error("GoShade Turbo: recovery index at %s was unreadable and has been quarantined to %s before writing this document's own recovery record; any recovery records it referenced are no longer indexed and must be recovered manually." % [dir.path_join(GSTDocumentRecovery.METADATA_FILE), quarantined_path])
+		return
+	var stack_path: String = String(write_result.get("stack_path", ""))
+	if save_failure_reason.is_empty():
+		push_error("GoShade Turbo: could not recover an untitled shader document -- writing its recovery stack to %s failed: %s. _save_external_data() is void and cannot veto editor shutdown." % [stack_path, write_result.get("reason", "")])
+	else:
+		push_error("GoShade Turbo: could not save %s (%s) or recover it to %s: %s. _save_external_data() is void and cannot veto editor shutdown." % [doc.current_path, save_failure_reason, stack_path, write_result.get("reason", "")])
+
+
+## Removes doc's own recovery record on disk, if it has one, and clears its
+## tracked id -- called after a successful save/Save As and after Discard
+## (Cross-cutting "verify cleanup after Save As and close Discard"). A no-op
+## for a document that never held a recovery record. Fix-now round 6, note 2
+## (S2): remove_record's own result is now checked before this call clears
+## doc's own recovery identity -- previously a failed stack deletion or a
+## failed metadata rewrite (the same production call site, dir replaced by a
+## non-empty directory or its own .tmp path blocked) still cleared doc's own
+## recovery_record_id/recovery_fingerprint unconditionally, so a genuinely
+## unresolved on-disk record (an orphaned stack, or a dangling index entry
+## still naming a now-deleted stack) lost the only in-memory pointer this
+## document ever had back to it, with nothing reported. A failed cleanup now
+## leaves doc's own recovery identity exactly as it was and reports the
+## reason through the same push_error channel _recover_document already uses
+## for its own write-time failures, so a document whose Save/Discard cleanup
+## did not actually finish is never silently treated as fully resolved.
+func _forget_recovery_record(doc: GSTDocument) -> void:
+	if doc.recovery_record_id.is_empty():
+		return
+	var remove_result: Dictionary = GSTDocumentRecovery.remove_record(get_recovery_dir(), doc.recovery_record_id)
+	if not bool(remove_result.get("ok", false)):
+		push_error("GoShade Turbo: could not remove recovery record %s: %s" % [doc.recovery_record_id, remove_result.get("reason", "")])
+		return
+	doc.recovery_record_id = ""
+	doc.recovery_fingerprint = ""
+
+
+## Reopens every valid recovery record left by a previous confirmed-quit
+## save_external_data() call as its own dirty document (decision 10:
+## "recovery documents reopen as dirty tabs before the normal entry
+## surface"), before _ready() lets the user see the start screen behind the
+## bootstrap document it just created. A failed/unreadable record is kept on
+## disk exactly where it was and reported, never deleted (Cross-cutting
+## "Invalid/unknown recovery metadata remains available for diagnosis; no
+## migration may silently delete it") -- only an explicit Discard or a
+## successful save removes a record (_forget_recovery_record above). Each
+## recovered document starts dirty unconditionally: it holds content that
+## never reached its own original_path (or never had one), so there is
+## nothing on disk yet for mark_baseline() to consider "saved".
+## Wired-by: _ready(); an editor smoke seam for
+## tests/gst_editor_document_recovery_smoke.gd's own fresh-restoration check.
+func load_recovery_records() -> void:
+	var dir: String = get_recovery_dir()
+	var result: Dictionary = GSTDocumentRecovery.load_all(dir, _library)
+	for failure: Variant in (result.get("failures", []) as Array):
+		var failure_entry: Dictionary = failure as Dictionary
+		push_error("GoShade Turbo: recovery record unreadable at %s: %s" % [failure_entry.get("path", ""), failure_entry.get("reason", "")])
+	var recovered: Array[GSTDocument] = []
+	for raw_entry: Variant in (result.get("records", []) as Array):
+		var entry: Dictionary = raw_entry as Dictionary
+		var doc: GSTDocument = GSTDocument.new()
+		doc.current_path = String(entry.get("original_path", ""))
+		doc.recipe_open = bool(entry.get("recipe_open", false))
+		doc.recipe_name = String(entry.get("recipe_name", ""))
+		doc.reopened_import = bool(entry.get("reopened_import", false))
+		doc.recovery_record_id = String(entry.get("id", ""))
+		doc.setup(entry["stack"], _library, _on_document_stack_changed.bind(doc), _on_document_property_changed.bind(doc), true)
+		doc.recovery_fingerprint = GSTDocument.compute_fingerprint(doc.stack)
+		_documents.append(doc)
+		recovered.append(doc)
+	if recovered.is_empty():
+		return
+	_dismiss_start_screen()
+	_activate_document(recovered[recovered.size() - 1])
 
 
 ## Wired-by: none (editor smoke seam)
@@ -1844,6 +2046,10 @@ func _save_stack_to_path(doc: GSTDocument, path: String) -> Dictionary:
 	# document-bound path setter instead of re-writing its two lines inline.
 	_raw_set_current_path_for(doc, path)
 	doc.mark_baseline()
+	# Phase 7: a successful save/Save As is the other place a recovery record
+	# is allowed to disappear (Cross-cutting "Keep each record until its
+	# document is successfully saved or explicitly discarded").
+	_forget_recovery_record(doc)
 	_refresh_tabs()
 	_set_operation_message_for(doc, "Save", "")
 	return result

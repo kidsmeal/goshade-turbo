@@ -13,7 +13,7 @@ Position: idle - pick a mode with /claudhd:start or /claudhd:design
 from: (unplanned work)
 Counts: queue 0 · quick fixes 3 · ideas untriaged 6
 
-Last touched: 2026-09-11
+Last touched: 2026-09-12
 
 ## Active thread (only one)
 
@@ -21,7 +21,7 @@ Last touched: 2026-09-11
 
 Next physical action:
 
-- [ ] Phase 6 committed (protected close); next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 7 (save dirty documents on confirmed shutdown), auto-commit granted, native reviewer (Codex cap until Sep 16)
+- [ ] Phase 7 committed (shutdown recovery, 7 review rounds); next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 8 (cross-version lifecycle verification 4.4/4.6.2/4.7), auto-commit granted, reviewer is Sol
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

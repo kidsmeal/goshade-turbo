@@ -293,7 +293,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 
 ## Phase 7: Save dirty documents during confirmed shutdown
 
-**Status:** pending
+**Status:** committed (2026-09-12) (fix-now round 6 applied, 2026-09-12)
 
 **Goal:** Preserve dirty documents through Godot's confirmed quit flow using synchronous saves and project-local recovery records.
 
