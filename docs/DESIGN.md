@@ -12,17 +12,17 @@ Own project, own repo, MIT. Not a Capsule Castle feature.
 
 ## Prior art (why this exists)
 
-Verified 2026-09-07, re-verified 2026-09-15. Nothing does the combination: a layer stack (not a graph) composed from a licensed block library, live sliders with document-owned undo, in-editor, exporting a plain `.gdshader`.
+Verified 2026-09-07, re-verified 2026-09-15. Nothing does the combination: an ordered layer stack (not a node graph) composed from a bundled, per-block-licensed function library, live preview with sliders, in the Godot editor, exporting a self-contained `.gdshader` for canvas_item.
 
+- Sprite Shader Mixer (spheras, MIT, 49 stars, last push 2026-05-17): the nearest neighbor. Ordered stack of whole shaders per Sprite2D/AnimatedSprite2D/Label/ColorRect, intensity per shader, generates a `.gdshader`; catalog downloaded from GitHub, local custom shaders added by a May 2026 PR. Whole shaders blended by intensity, not typed blocks with coord spaces; sprite-bound, no standalone preview panel, no undo integration, no per-block license fields, README still targets Godot 4.1.
+- PS1 Shader Mixer (Juanrod99, last push 2026-05-25) and PS1 Shader Mixer Pro (iHyobi, itch, paid): click, slide, export. Seven fixed post effects, no custom blocks.
+- CompositeMaterial (mFieldHouses, forum post 2026-03-21, last push 2026-07-13, no license): ordered layer stack for 3D PBR materials with masks; README says it depends on an unpublished module and will not work. Different target (spatial materials, not canvas effects).
+- Godot VisualShader plus ShaderV: node graph with preview and sliders. Graph shaped, not stack shaped.
+- Godot 4.7 text shader editor: live preview of a text shader while editing. Erodes "preview" as a differentiator on its own; composition and the library remain the gap.
+- Material Maker 1.6 (2026-04): standalone procedural PBR texture graph on Godot 4.5.1, exports textures and materials; not an in-editor shader composer.
 - godotshaders.com and the Godot Shaders Library addon: whole shaders, browse and install, no composing.
 - LYGIA: the function library, no UI, Prosperity 3.0 license (see decision 15).
-- Godot VisualShader plus ShaderV: node graph with preview and sliders. Graph shaped, not stack shaped.
-- PS1 Shader Mixer: click, slide, export. Seven fixed post effects, no custom blocks.
 - SHADERed Godot plugin, Shader Previewer, Godot Shaders Sketchbook: preview or debug one shader, no library.
-- Sprite Shader Mixer (spheras, MIT, asset 2245): the closest neighbor, found 2026-09-15. Ordered stack of catalog shaders merged into one generated `.gdshader`, per-effect intensity, in-editor list with reordering. Godot 4.1, 2D sprites/labels/ColorRect only, last release v1.2.0 2023-11-01; a 2026-05-17 PR added local shaders that must match a fixed template. No undo integration, no recovery, no per-block license metadata.
-- CompositeMaterial (mFieldHouses, no license file, forum 2026-03, last push 2026-07-13): node-graph procedural 3D materials with sliders, generates native shaders. Graph shaped, 3D only.
-- Material Maker 1.6 (2026-04): standalone node-graph texture/material authoring with a Godot 4 shader export path. Not in-editor, graph shaped.
-- Godot 4.7 inline text shader preview: previews a text shader while typing. Preview only, no composing, no library, no export step.
 
 ## Locked decisions
 
