@@ -299,6 +299,14 @@ func _ready() -> void:
 	_randomize_button.pressed.connect(_on_randomize_pressed)
 	_set_recipe_open(false)
 
+	# 2026-09-15 native + button pass: matches Godot's own scene-tab add
+	# button (EditorSceneTabs::_notification/EditorSceneTabs::EditorSceneTabs,
+	# .now/tabs-validation/godot-4.4-source/editor/gui/editor_scene_tabs.cpp:
+	# 57-58, 438) -- flat, icon-only, drawing the editor's own "Add" icon read
+	# from the editor theme at runtime (not a baked resource path) instead of
+	# the old "+" text button.
+	_new_tab_button.flat = true
+	_new_tab_button.icon = get_theme_icon(&"Add", &"EditorIcons")
 	_new_tab_button.pressed.connect(_on_new_pressed)
 	# 2026-09-15 TabBar pass: tab_changed only fires when %ShaderTabs's own
 	# current_tab index actually moves (TabBar.set_current_tab, tab_bar.cpp),

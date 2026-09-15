@@ -32,7 +32,6 @@ select_with_rmb = false
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "New shader"
-text = "+"
 
 [node name="ShaderTabRowSeparator" type="HSeparator" parent="."]
 layout_mode = 2

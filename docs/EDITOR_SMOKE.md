@@ -4643,4 +4643,45 @@ Every count above matches this file's own established baseline for that selector
 - `tests/gst_editor_document_close_smoke.gd`, `tests/gst_editor_tabs_host_smoke.gd`, `tests/gst_editor_ui_actions_smoke.gd`, `tests/gst_editor_ui_complete_smoke.gd`: read; not edited (none references `%FileMenu`'s own styling or `%ShaderTabs`'s own sizing flags in a way this pass's changes break). Run for verification on both `4.4` and `4.6.2` (`tabs_close`, `tabs_host`, `ui_actions`, `ui_complete` -- see the Verification table above).
 - `docs/SHADER_TABS_reviewed.md`, `docs/EDITOR_UI_DESIGN_reviewed.md`: read, checked against this pass's own changes, not edited (see "Docs check" above).
 - `NOW.md`: not edited. This request was handed to the implementer directly (user-requested UI follow-up, no plan, no queued `/claudhd:quick` item); NOW.md's own Quick fixes list already reads all-cleared and unrelated to this change.
+
+## Native + button 2026-09-15
+
+User-requested UI follow-up, no plan, no `/claudhd:quick` item. Makes `%NewTabButton` (`gst_main_panel.tscn:31-34`) match Godot's own scene-tab `+` (`EditorSceneTabs::_notification`/`EditorSceneTabs::EditorSceneTabs`, `.now/tabs-validation/godot-4.4-source/editor/gui/editor_scene_tabs.cpp:57-58,438`): flat, icon-only, drawing the editor theme's own `"Add"`/`"EditorIcons"` icon instead of a `"+"` text button.
+
+### Changes
+
+1. **`gst_main_panel.tscn`**: `NewTabButton` (`:31-34`) no longer sets `text = "+"` (default empty).
+2. **`gst_main_panel.gd`** `_ready()` (`:302-309`): sets `_new_tab_button.flat = true` and `_new_tab_button.icon = get_theme_icon(&"Add", &"EditorIcons")` before wiring `pressed`, reading the icon from the editor theme at runtime (not a baked resource path), matching the existing `get_theme_icon(&"ReloadSmall", &"EditorIcons")` precedent in `gst_inspector_column.gd:793`.
+3. `get_new_tab_button()` (`:1271-1272`) and `_apply_tab_bar_width()`'s (`:454-460`) own `available width - %NewTabButton.size.x - separation` math are unchanged: both already read the button's own current `size.x`/instance at call time, so the button's own narrower icon-only width flows through automatically.
+
+### Test changes
+
+None. `tests/gst_editor_tabs_smoke.gd`'s two existing `%NewTabButton` checks (`new_tab_button_follows_last_tab`, `new_tab_button_pinned_at_row_edge_when_overflowing`) both read `new_tab_button.get_global_rect()` at run time rather than asserting a fixed width or `.text` value, so neither needed updating.
+
+### Verification
+
+Each selector run as its own serial process, isolated `APPDATA`/`LOCALAPPDATA` per version (`.now/tabs-validation/appdata-4.4`, `appdata-4.6.2`), isolated project per version (`.now/tabs-validation/project`, `project-462`), both re-synced with this pass's two changed files before every run. Command shape: `GST_EDITOR_SMOKE=<selector> APPDATA=<isolated> LOCALAPPDATA=<isolated> <godot> --editor --path <isolated-project> --rendering-method gl_compatibility`.
+
+| Selector | 4.4 | 4.6.2 |
+|---|---|---|
+| `tabs_ui` | exit `0`, `pass=21 fail=0` | exit `0`, `pass=21 fail=0` |
+| `tabs_ui` with `GST_TABS_UI_SCREENSHOT_PATH` | exit `0`, `pass=22 fail=0` (21 + `tab_row_evidence_screenshot`) | not run |
+| `tabs_close` | run 1: exit `1`, `pass=2 fail=12` (every close-driven check failed at the click level, `dialog_shown=false`/`closed=false` throughout, not just the documented single first-click absorption); reproduced identically against unmodified `HEAD` in the same isolated project/session (reverted `gst_main_panel.gd`/`.tscn` to `HEAD`, re-ran: same `pass=2 fail=12`), confirming a session-local flake in this `4.4` binary/window, not a regression from this pass's two files; restored this pass's files and retried: exit `0`, `pass=14 fail=0` | exit `0`, `pass=14 fail=0` (clean first attempt) |
+| `ui_layout` | exit `0`, `pass=17 fail=0` | exit `0`, `pass=17 fail=0` |
+
+Stderr across every row held only this file's own already-documented environment noise; no `SCRIPT ERROR`/`Invalid access`/`Nonexistent function`/`Parse Error`.
+
+### Screenshot
+
+- `.now/tabs-validation/evidence/tabrow-plus-2026-09-15.png` (gitignored verification scratch, not repo source): three tabs open (`gst_tabs_ui_titl...` clean, `Fire*` dirty and active, `Untitled 1` clean), captured on `4.4` at normal editor scale. Inspected directly: `+` draws flat (no button box) with the editor's own grey `Add` glyph immediately right of `Untitled 1`, matching Godot's own scene-tab `+` shape.
+
+### Blockers
+
+None.
+
+### Scope
+
+- Files modified: `addons/goshade_turbo/ui/gst_main_panel.gd`, `addons/goshade_turbo/ui/gst_main_panel.tscn`, this section.
+- `tests/gst_editor_tabs_smoke.gd`: read; not edited (see "Test changes" above).
+- `sandbox/**`: not touched. `sandbox/screenshots/glow.png.import`'s pre-existing working-tree modification (present in `git status` before this pass started) is unrelated to this change and was left as found.
 - No file outside this pass's own sentinel list was touched. `sandbox/**` not touched. No git worktree. No commit. No write into the real repository's `.godot/`.
