@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b75smslclddhs"
-path="res://.godot/imported/ref_generative_cellular_edges.png-c1522a569c6aa8aac7e7e18ddee441f5.ctex"
+uid="uid://c4mvb0sgngjdd"
+path="res://.godot/imported/goshade_turbo_logo.png-3ebd4e8c6e55bc4ea67d1a966903889f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sandbox/screenshots/ref_generative_cellular_edges.png"
-dest_files=["res://.godot/imported/ref_generative_cellular_edges.png-c1522a569c6aa8aac7e7e18ddee441f5.ctex"]
+source_file="res://sandbox/logo/goshade_turbo_logo.png"
+dest_files=["res://.godot/imported/goshade_turbo_logo.png-3ebd4e8c6e55bc4ea67d1a966903889f.ctex"]
 
 [params]
 

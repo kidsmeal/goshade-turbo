@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9f765a96026d938e415ae85be1e66eb0a24fa25e -->
 
 ### 2026-09-15
+- Add Godot-generated .uid and .import companions for sandbox/logo, print_roster, and the regenerated cellular_edges reference
 - DESIGN.md: re-verify prior art 2026-09-15, add Sprite Shader Mixer, CompositeMaterial, Material Maker 1.6, Godot 4.7 inline preview
 
 ### 2026-09-14
