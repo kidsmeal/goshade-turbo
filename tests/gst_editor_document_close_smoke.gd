@@ -9,24 +9,22 @@ extends RefCounted
 ## resources/history, adjacent-tab selection, the last close restoring the
 ## entry surface, and a stale close continuation rejected after closure.
 ##
-## Every tab close Button and every _close_dialog button (Save/Discard/
-## Cancel) below is driven with a real InputEventMouseButton press/release at
-## its own global rect through its own Viewport (_click_button), never
-## Button.pressed.emit() and never panel._on_close_save_requested()/
-## _on_close_custom_action() called directly -- matching
-## tests/gst_editor_tabs_smoke.gd's own established real-click convention:
-## BaseButton::on_action_event gates a mouse-button event behind
-## status.hovering, which only a real click (or its documented
-## NOTIFICATION_MOUSE_ENTER workaround) establishes, so emitting the signal
-## directly would bypass that gate and could neither reproduce nor catch a
-## wiring regression in it. Buttons inside a popped-up ConfirmationDialog
-## live in that dialog's own embedded Window/Viewport, not the root one
-## (mirrors tests/gst_editor_document_files_smoke.gd's own real-popup color
-## helpers, which type into a native color popup's own LineEdit through that
-## same popup's own get_viewport()): _click_button always pushes through the
-## target Button's own get_viewport(), so it works unchanged for a tab's
-## close Button (root viewport) and a dialog's own Save/Discard/Cancel
-## Button (the dialog's own embedded Window) alike.
+## 2026-09-15 TabBar pass: %ShaderTabs is now a native Godot TabBar instead
+## of a row of per-document title/close Buttons (gst_main_panel.gd/.tscn), so
+## a tab's own close gesture is a click at panel.get_tab_close_rect(doc) (a
+## global-coordinate seam reconstructed from TabBar's own public theme items,
+## since its internal cb_rect has no getter) rather than a click on a
+## Button.pressed()-wired close Button. _click_tab_close below drives that
+## click with a real InputEventMouseButton press/release through the
+## viewport, matching this file's own established real-click convention
+## (never Button.pressed.emit(), never panel._on_close_save_requested()/
+## _on_close_custom_action() called directly) -- unlike a Button, TabBar's
+## own gui_input (tab_bar.cpp) resolves a click by the event's own position
+## alone, with no BaseButton-style status.hovering gate, so no
+## NOTIFICATION_MOUSE_ENTER workaround is needed for the click itself to
+## register. Buttons inside a popped-up ConfirmationDialog (Save/Discard/
+## Cancel) are unchanged real Buttons in that dialog's own embedded
+## Window/Viewport, still driven by _click_button exactly as before.
 ##
 ## Distinct dirty documents are opened through panel.open_recipe() (phase 3:
 ## never reused) where a check needs more than one open document at once;
@@ -50,8 +48,18 @@ func run(plugin: EditorPlugin) -> void:
 		_finish(plugin)
 		return
 
-	EditorInterface.set_main_screen_editor("GoShade Turbo")
-	await plugin.get_tree().process_frame
+	# Matches tests/gst_editor_tabs_smoke.gd's own bootstrap fix (2026-09-15
+	# TabBar pass): the editor's own deferred "restore last main screen from
+	# saved window layout" can still be in flight this early in a session and
+	# overrides a single set_main_screen_editor call once it finishes
+	# loading. Re-asserting it every frame until the panel actually reports
+	# visible (bounded to 60 frames) survives that race.
+	for i: int in range(60):
+		EditorInterface.set_main_screen_editor("GoShade Turbo")
+		await plugin.get_tree().process_frame
+		if panel.is_visible_in_tree():
+			break
+	_check("main_screen_visible", panel.is_visible_in_tree(), "visible=%s" % [panel.is_visible_in_tree()])
 	if panel.is_start_screen_visible():
 		panel.get_create_empty_button().pressed.emit()
 		await plugin.get_tree().process_frame
@@ -63,13 +71,13 @@ func run(plugin: EditorPlugin) -> void:
 	# press delivered in a fresh editor session hits Viewport's own
 	# stale-subwindow-focus-clearing path once (scene/main/viewport.cpp
 	# Viewport::_sub_windows_forward_input, "no window found and clicked,
-	# remove focus") and never reaches BaseButton::on_action_event; every
+	# remove focus") and never reaches a control's own gui_input; every
 	# click after the first behaves normally. Absorbed here on the initial
-	# document's own already-active tab title Button (a harmless no-op
-	# reclick), before any assertion-bearing click below.
+	# document's own already-active tab (a harmless no-op reclick), before
+	# any assertion-bearing click below.
 	var warm_up_doc: GSTDocument = panel.get_active_document()
 	if warm_up_doc != null:
-		await _click_button(plugin, panel.get_tab_button(warm_up_doc))
+		await _click_tab(plugin, panel, warm_up_doc)
 
 	await _run_clean_close_immediate(plugin, panel)
 	await _run_dirty_named_close_save(plugin, panel)
@@ -87,22 +95,21 @@ func run(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-## Clean (never-dirtied) document closes the instant its own close Button is
-## pressed, with no Save/Discard/Cancel prompt at all (decision 9: "unmodified
+## Clean (never-dirtied) document closes the instant its own tab close icon is
+## clicked, with no Save/Discard/Cancel prompt at all (decision 9: "unmodified
 ## saved documents close immediately").
 func _run_clean_close_immediate(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var doc: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
 	var was_open: bool = panel.get_documents().has(doc)
 	var was_clean: bool = not doc.is_dirty()
-	var close_button: Button = panel.get_tab_close_button(doc)
-	var button_found: bool = close_button != null
-	if button_found:
-		await _click_button(plugin, close_button)
+	var tab_found: bool = panel.get_tab_index(doc) != -1
+	if tab_found:
+		await _click_tab_close(plugin, panel, doc)
 	await plugin.get_tree().process_frame
 	var closed: bool = not panel.get_documents().has(doc)
 	var no_dialog: bool = not panel.is_close_dialog_visible()
-	_check("clean_close_immediate", was_open and was_clean and button_found and closed and no_dialog, "was_open=%s was_clean=%s button_found=%s closed=%s no_dialog=%s" % [was_open, was_clean, button_found, closed, no_dialog])
+	_check("clean_close_immediate", was_open and was_clean and tab_found and closed and no_dialog, "was_open=%s was_clean=%s tab_found=%s closed=%s no_dialog=%s" % [was_open, was_clean, tab_found, closed, no_dialog])
 
 
 ## A dirty, already-named document (a real current_path) closes through the
@@ -121,8 +128,7 @@ func _run_dirty_named_close_save(plugin: EditorPlugin, panel: GSTMainPanel) -> v
 	var dirty_before: bool = doc.is_dirty()
 	var expected_fingerprint: String = GSTDocument.compute_fingerprint(doc.stack)
 
-	var close_button: Button = panel.get_tab_close_button(doc)
-	await _click_button(plugin, close_button)
+	await _click_tab_close(plugin, panel, doc)
 	var dialog_shown: bool = panel.is_close_dialog_visible()
 	await _click_button(plugin, panel.get_close_dialog().get_ok_button())
 	await plugin.get_tree().process_frame
@@ -152,8 +158,7 @@ func _run_dirty_named_close_discard(plugin: EditorPlugin, panel: GSTMainPanel) -
 	var dirty_before: bool = doc.is_dirty()
 	var history: UndoRedo = doc.undo_redo
 
-	var close_button: Button = panel.get_tab_close_button(doc)
-	await _click_button(plugin, close_button)
+	await _click_tab_close(plugin, panel, doc)
 	var dialog_shown: bool = panel.is_close_dialog_visible()
 	await _click_button(plugin, panel.get_close_dialog_discard_button())
 	await plugin.get_tree().process_frame
@@ -186,7 +191,7 @@ func _run_undo_cannot_reopen_closed_document(plugin: EditorPlugin, panel: GSTMai
 	panel.get_undo().add_layer("color/fill", GSTLayer.Kind.COLOR, false)
 	await plugin.get_tree().process_frame
 
-	await _click_button(plugin, panel.get_tab_close_button(doc))
+	await _click_tab_close(plugin, panel, doc)
 	await _click_button(plugin, panel.get_close_dialog_discard_button())
 	await plugin.get_tree().process_frame
 	var closed: bool = not panel.get_documents().has(doc)
@@ -212,8 +217,7 @@ func _run_dirty_close_cancel(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var dirty_before: bool = doc.is_dirty()
 	var layers_before: int = doc.stack.layers.size()
 
-	var close_button: Button = panel.get_tab_close_button(doc)
-	await _click_button(plugin, close_button)
+	await _click_tab_close(plugin, panel, doc)
 	var dialog_shown: bool = panel.is_close_dialog_visible()
 	await _click_button(plugin, panel.get_close_dialog().get_cancel_button())
 	await plugin.get_tree().process_frame
@@ -221,7 +225,7 @@ func _run_dirty_close_cancel(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var still_open: bool = panel.get_documents().has(doc)
 	var still_dirty: bool = doc.is_dirty()
 	var dialog_hidden: bool = not panel.is_close_dialog_visible()
-	var tab_still_present: bool = panel.get_tab_button(doc) != null
+	var tab_still_present: bool = panel.get_tab_index(doc) != -1
 	var layers_unchanged: bool = doc.stack.layers.size() == layers_before
 	_check("dirty_close_cancel_preserves_document", dirty_before and dialog_shown and still_open and still_dirty and dialog_hidden and tab_still_present and layers_unchanged, "dirty_before=%s dialog_shown=%s still_open=%s still_dirty=%s dialog_hidden=%s tab_present=%s layers_unchanged=%s" % [dirty_before, dialog_shown, still_open, still_dirty, dialog_hidden, tab_still_present, layers_unchanged])
 
@@ -239,8 +243,7 @@ func _run_untitled_close_save_as_success(plugin: EditorPlugin, panel: GSTMainPan
 	var untitled_before: bool = doc.current_path.is_empty()
 	var expected_fingerprint: String = GSTDocument.compute_fingerprint(doc.stack)
 
-	var close_button: Button = panel.get_tab_close_button(doc)
-	await _click_button(plugin, close_button)
+	await _click_tab_close(plugin, panel, doc)
 	var dialog_shown: bool = panel.is_close_dialog_visible()
 	await _click_button(plugin, panel.get_close_dialog().get_ok_button())
 	await plugin.get_tree().process_frame
@@ -270,8 +273,7 @@ func _run_untitled_close_save_as_failure(plugin: EditorPlugin, panel: GSTMainPan
 	await plugin.get_tree().process_frame
 	var dirty_before: bool = doc.is_dirty()
 
-	var close_button: Button = panel.get_tab_close_button(doc)
-	await _click_button(plugin, close_button)
+	await _click_tab_close(plugin, panel, doc)
 	await _click_button(plugin, panel.get_close_dialog().get_ok_button())
 	await plugin.get_tree().process_frame
 	var save_as_opened: bool = panel._save_as_dialog.visible
@@ -284,7 +286,7 @@ func _run_untitled_close_save_as_failure(plugin: EditorPlugin, panel: GSTMainPan
 	var still_open: bool = panel.get_documents().has(doc)
 	var still_dirty: bool = doc.is_dirty()
 	var message_present: bool = not String(doc.operation_messages.get("Save", "")).is_empty()
-	var tab_still_present: bool = panel.get_tab_button(doc) != null
+	var tab_still_present: bool = panel.get_tab_index(doc) != -1
 	_check("untitled_close_save_as_failure_preserves_document", dirty_before and save_as_opened and still_open and still_dirty and message_present and tab_still_present, "dirty_before=%s save_as_opened=%s still_open=%s still_dirty=%s message='%s' tab_present=%s" % [dirty_before, save_as_opened, still_open, still_dirty, doc.operation_messages.get("Save", ""), tab_still_present])
 
 
@@ -302,8 +304,7 @@ func _run_untitled_close_save_as_cancel(plugin: EditorPlugin, panel: GSTMainPane
 	var dirty_before: bool = doc.is_dirty()
 	var layers_before: int = doc.stack.layers.size()
 
-	var close_button: Button = panel.get_tab_close_button(doc)
-	await _click_button(plugin, close_button)
+	await _click_tab_close(plugin, panel, doc)
 	await _click_button(plugin, panel.get_close_dialog().get_ok_button())
 	await plugin.get_tree().process_frame
 	var save_as_opened: bool = panel._save_as_dialog.visible
@@ -316,7 +317,7 @@ func _run_untitled_close_save_as_cancel(plugin: EditorPlugin, panel: GSTMainPane
 	var still_open: bool = panel.get_documents().has(doc)
 	var still_dirty: bool = doc.is_dirty()
 	var pending_cleared: bool = panel._pending_save_as.is_empty()
-	var tab_still_present: bool = panel.get_tab_button(doc) != null
+	var tab_still_present: bool = panel.get_tab_index(doc) != -1
 	_check("untitled_close_save_as_cancel_preserves_document", dirty_before and save_as_opened and pending_before_cancel and still_open and still_dirty and pending_cleared and tab_still_present and doc.stack.layers.size() == layers_before, "dirty_before=%s save_as_opened=%s pending_before=%s still_open=%s still_dirty=%s pending_cleared=%s tab_present=%s" % [dirty_before, save_as_opened, pending_before_cancel, still_open, still_dirty, pending_cleared, tab_still_present])
 
 
@@ -335,8 +336,7 @@ func _run_inactive_document_close(plugin: EditorPlugin, panel: GSTMainPanel) -> 
 	var doc_a_dirty: bool = doc_a != null and doc_a.is_dirty()
 	var active_is_b: bool = panel.get_active_document() == doc_b
 
-	var close_button_a: Button = panel.get_tab_close_button(doc_a)
-	await _click_button(plugin, close_button_a)
+	await _click_tab_close(plugin, panel, doc_a)
 	var dialog_shown_for_inactive: bool = panel.is_close_dialog_visible()
 	await _click_button(plugin, panel.get_close_dialog_discard_button())
 	await plugin.get_tree().process_frame
@@ -364,13 +364,13 @@ func _run_adjacent_tab_selected_after_close(plugin: EditorPlugin, panel: GSTMain
 	await panel.activate_document(doc2)
 	await plugin.get_tree().process_frame
 	var doc2_dirty: bool = doc2.is_dirty()
-	await _click_button(plugin, panel.get_tab_close_button(doc2))
+	await _click_tab_close(plugin, panel, doc2)
 	await _click_button(plugin, panel.get_close_dialog_discard_button())
 	await plugin.get_tree().process_frame
 	var doc2_closed: bool = not panel.get_documents().has(doc2)
 	var adjacent_after_middle_close: bool = panel.get_active_document() == doc3
 
-	await _click_button(plugin, panel.get_tab_close_button(doc3))
+	await _click_tab_close(plugin, panel, doc3)
 	await _click_button(plugin, panel.get_close_dialog_discard_button())
 	await plugin.get_tree().process_frame
 	var doc3_closed: bool = not panel.get_documents().has(doc3)
@@ -397,7 +397,7 @@ func _run_stale_close_continuation_cannot_close_replacement(plugin: EditorPlugin
 	panel.get_undo().add_layer("color/fill", GSTLayer.Kind.COLOR, false)
 	await plugin.get_tree().process_frame
 
-	await _click_button(plugin, panel.get_tab_close_button(doc_x))
+	await _click_tab_close(plugin, panel, doc_x)
 	var dialog_shown: bool = panel.is_close_dialog_visible()
 	await _click_button(plugin, panel.get_close_dialog().get_ok_button())
 	await plugin.get_tree().process_frame
@@ -450,12 +450,9 @@ func _run_last_close_restores_entry_surface(plugin: EditorPlugin, panel: GSTMain
 	while panel.get_documents().size() > 1 and drain_iterations < 30:
 		drain_iterations += 1
 		var doc: GSTDocument = panel.get_active_document()
-		if doc == null:
+		if doc == null or panel.get_tab_index(doc) == -1:
 			break
-		var close_button: Button = panel.get_tab_close_button(doc)
-		if close_button == null:
-			break
-		await _click_button(plugin, close_button)
+		await _click_tab_close(plugin, panel, doc)
 		var dialog_visible_after_click: bool = panel.is_close_dialog_visible()
 		if dialog_visible_after_click:
 			await _click_button(plugin, panel.get_close_dialog_discard_button())
@@ -464,7 +461,7 @@ func _run_last_close_restores_entry_surface(plugin: EditorPlugin, panel: GSTMain
 
 	var last_doc: GSTDocument = panel.get_active_document()
 	var entry_hidden_before: bool = not panel.is_start_screen_visible()
-	await _click_button(plugin, panel.get_tab_close_button(last_doc))
+	await _click_tab_close(plugin, panel, last_doc)
 	if panel.is_close_dialog_visible():
 		await _click_button(plugin, panel.get_close_dialog_discard_button())
 	await plugin.get_tree().process_frame
@@ -472,35 +469,95 @@ func _run_last_close_restores_entry_surface(plugin: EditorPlugin, panel: GSTMain
 	var entry_restored: bool = panel.is_start_screen_visible()
 	var replacement_doc: GSTDocument = panel.get_active_document()
 	var replacement_ok: bool = replacement_doc != null and replacement_doc != last_doc and not replacement_doc.is_dirty() and panel.get_documents().size() == 1
-	var replacement_tab_present: bool = replacement_doc != null and panel.get_tab_button(replacement_doc) != null
+	var replacement_tab_present: bool = replacement_doc != null and panel.get_tab_index(replacement_doc) != -1
 	_check("last_close_restores_entry_surface", drained_to_one and entry_hidden_before and entry_restored and replacement_ok and replacement_tab_present, "drained_to_one=%s entry_hidden_before=%s entry_restored=%s replacement_ok=%s replacement_tab_present=%s" % [drained_to_one, entry_hidden_before, entry_restored, replacement_ok, replacement_tab_present])
 
 
+## Real click on doc's own tab body (its title/selection area, not its close
+## icon): press then release InputEventMouseButton at
+## panel.get_tab_rect(doc)'s own global-rect center. Used only for this
+## file's own warm-up reclick (run(), above) -- every close gesture below
+## goes through _click_tab_close instead. TabBar.ensure_tab_visible(index)
+## runs first and is awaited a frame, matching
+## tests/gst_editor_tabs_smoke.gd's own _click_tab precedent exactly (see
+## that file for the ofs_cache-outside-the-visible-window rationale).
+func _click_tab(plugin: EditorPlugin, panel: GSTMainPanel, doc: GSTDocument) -> void:
+	var index: int = panel.get_tab_index(doc)
+	if index == -1:
+		return
+	panel.get_tab_bar().ensure_tab_visible(index)
+	await plugin.get_tree().process_frame
+	var point: Vector2 = panel.get_tab_rect(doc).get_center()
+	_push_mouse(panel.get_tab_bar(), point, MOUSE_BUTTON_LEFT, true)
+	await plugin.get_tree().process_frame
+	await plugin.get_tree().process_frame
+	_push_mouse(panel.get_tab_bar(), point, MOUSE_BUTTON_LEFT, false)
+	await plugin.get_tree().process_frame
+	await plugin.get_tree().process_frame
+
+
+## Real click on doc's own tab close icon: press then release
+## InputEventMouseButton at panel.get_tab_close_rect(doc)'s own global-rect
+## center, delivered through %ShaderTabs's own Viewport (never
+## Button.pressed.emit(), never panel.close_document() called directly).
+## TabBar.ensure_tab_visible(index) runs first and is awaited a frame, for
+## the same reason _click_tab above documents.
+##
+## Warps the real OS cursor to the close icon first (restored to its own
+## prior position after the click) -- unlike a tab body click, TabBar's own
+## close-button press handling (tab_bar.cpp TabBar::gui_input's cb_pressing
+## branch) calls _update_hover() to populate the cb_hover index the release
+## handler later reads, and _update_hover() reads
+## Control::get_local_mouse_position(), which for this panel's own root
+## (non-embedded) Viewport resolves through
+## DisplayServer::mouse_get_position() (scene/main/viewport.cpp
+## Viewport::get_mouse_position) -- the real OS cursor position -- not the
+## synthetic event's own .position field a tab body click already resolves
+## against directly. Verified directly in this session: an identical press/
+## release with no cursor warp reached TabBar's own gui_input (confirmed via
+## its gui_input signal) and correctly set cb_pressing on press, but cb_hover
+## stayed unset because the real cursor never moved, so tab_close_pressed
+## never emitted regardless of click position; warping first reproduces
+## tab_close_pressed reliably. Matches this project's own established
+## precedent for native-control tests needing the real cursor
+## (tests/gst_editor_native_undo_smoke.gd's own EditorSpinSlider drag, which
+## documents the same Input/DisplayServer distinction from the opposite
+## direction).
+func _click_tab_close(plugin: EditorPlugin, panel: GSTMainPanel, doc: GSTDocument) -> void:
+	var index: int = panel.get_tab_index(doc)
+	if index == -1:
+		return
+	panel.get_tab_bar().ensure_tab_visible(index)
+	await plugin.get_tree().process_frame
+	var point: Vector2 = panel.get_tab_close_rect(doc).get_center()
+	var original_mouse: Vector2 = DisplayServer.mouse_get_position()
+	DisplayServer.warp_mouse(Vector2i(point))
+	await plugin.get_tree().process_frame
+	_push_mouse(panel.get_tab_bar(), point, MOUSE_BUTTON_LEFT, true)
+	await plugin.get_tree().process_frame
+	await plugin.get_tree().process_frame
+	_push_mouse(panel.get_tab_bar(), point, MOUSE_BUTTON_LEFT, false)
+	await plugin.get_tree().process_frame
+	await plugin.get_tree().process_frame
+	DisplayServer.warp_mouse(Vector2i(original_mouse))
+
+
 ## Real click on target's own global-rect center, delivered through target's
-## own Viewport (the root viewport for a tab's close Button; a popped-up
-## ConfirmationDialog's own embedded Window for its Save/Discard/Cancel
-## Buttons) -- never Button.pressed.emit(). NOTIFICATION_MOUSE_ENTER supplies
-## the one piece of engine state a synthetic InputEventMouseButton never
-## establishes on its own in this session (BaseButton::on_action_event gates
-## a mouse-button event behind status.hovering; Viewport's own hover
-## tracking requires a real DisplayServer mouse-enter), matching
-## tests/gst_editor_tabs_smoke.gd's own _click_tab precedent exactly.
+## own Viewport (a popped-up ConfirmationDialog's own embedded Window for its
+## Save/Discard/Cancel Buttons) -- never Button.pressed.emit().
+## NOTIFICATION_MOUSE_ENTER supplies the one piece of engine state a
+## synthetic InputEventMouseButton never establishes on its own in this
+## session (BaseButton::on_action_event gates a mouse-button event behind
+## status.hovering; Viewport's own hover tracking requires a real
+## DisplayServer mouse-enter), matching
+## tests/gst_editor_tabs_smoke.gd's own _click_tab precedent from the
+## Button-row era. Only used for real Buttons now (2026-09-15 TabBar pass):
+## every tab title/close click goes through _click_tab/_click_tab_close
+## instead, which need no such workaround (TabBar's own gui_input resolves a
+## click by the event's own position alone, tab_bar.cpp).
 func _click_button(plugin: EditorPlugin, button: Button) -> void:
 	if button == null or not is_instance_valid(button):
 		return
-	# A tab row Button scrolled out of the visible scroll range can share an
-	# on-screen position with the row's own fixed trailing New control
-	# (phase 4 dock layout, docs/EDITOR_SMOKE.md "Shader tabs phase 6" bug 2):
-	# a click aimed at its own logical rect then lands on New instead.
-	# Scrolling any target that lives inside a ScrollContainer into view
-	# first (the same guarantee production's own _refresh_tabs()/
-	# _await_scroll_active_tab_into_view already intends for the active tab)
-	# makes every close-button click in this file safe regardless of how
-	# many tabs have accumulated by the time it runs.
-	var scroll: ScrollContainer = _find_scroll_ancestor(button)
-	if scroll != null:
-		scroll.ensure_control_visible(button)
-		await plugin.get_tree().process_frame
 	await plugin.get_tree().process_frame
 	var point: Vector2 = button.get_global_rect().get_center()
 	button.notification(Control.NOTIFICATION_MOUSE_ENTER)
@@ -510,15 +567,6 @@ func _click_button(plugin: EditorPlugin, button: Button) -> void:
 	_push_mouse(button, point, MOUSE_BUTTON_LEFT, false)
 	await plugin.get_tree().process_frame
 	await plugin.get_tree().process_frame
-
-
-func _find_scroll_ancestor(node: Node) -> ScrollContainer:
-	var current: Node = node.get_parent()
-	while current != null:
-		if current is ScrollContainer:
-			return current as ScrollContainer
-		current = current.get_parent()
-	return null
 
 
 func _push_mouse(target: Control, position: Vector2, button_index: MouseButton, pressed: bool) -> void:

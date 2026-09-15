@@ -6,35 +6,47 @@ extends RefCounted
 ## GSTDocument's own state ownership through panel.open_document/
 ## activate_document called directly; this selector proves the same
 ## guarantees now reach the user through the real tab row -- title/dirty-star
-## presentation, overflow scrolling, real Button.pressed clicks switching by
-## stable id, selection/list-position restoration, canceling a stray picker
-## on switch, finishing a pending native gesture on its own originating
-## document before switching, per-document preview isolation, and the shared
-## SubViewport's own render-loop pausing while the GoShade panel is hidden.
+## presentation, overflow scrolling, real clicks switching by stable id,
+## selection/list-position restoration, canceling a stray picker on switch,
+## finishing a pending native gesture on its own originating document before
+## switching, per-document preview isolation, and the shared SubViewport's
+## own render-loop pausing while the GoShade panel is hidden.
 ##
-## Every real tab-button click below is followed by re-fetching that
-## document's own Button through panel.get_tab_button() rather than reusing a
-## Button captured before the click: _refresh_tabs() (gst_main_panel.gd)
-## frees and rebuilds every tab Button on every activation, and a reference
-## captured before a switch is queued for deletion by that same switch's own
-## synchronous call chain -- reading it again after an awaited frame reads a
-## freed object. Distinct documents are opened through panel.open_recipe()
-## (phase 3: independent copy every time, never reused) except where a check
+## 2026-09-15 TabBar pass: %ShaderTabs is now a native Godot TabBar (matching
+## Godot's own scene tabs) instead of a row of per-document Buttons, so there
+## is no per-tab Control to click, grab focus onto, or read .text/.tooltip_text
+## from. Every real click below goes through panel.get_tab_rect(doc)/
+## get_tab_close_rect(doc) (global-coordinate seams derived from TabBar's own
+## get_tab_rect and a public-theme-item reconstruction of its private cb_rect,
+## gst_main_panel.gd) and a real InputEventMouseButton press/release through
+## the viewport (_click_tab), never a synthetic signal emission on a node that
+## no longer exists per document. Unlike the old per-tab Button row,
+## TabBar::gui_input (tab_bar.cpp) resolves a click by the event's own
+## position alone -- no BaseButton-style hover gate -- so, unlike the old
+## per-tab Buttons, no NOTIFICATION_MOUSE_ENTER workaround is needed for the
+## click itself to register; the Viewport-level "first synthetic click in a
+## fresh session" warm-up (run(), below) is a separate, target-independent
+## artifact and is kept unchanged. A tab scrolled outside %ShaderTabs's own
+## current [offset, max_drawn_tab] window reports ofs_cache 0 (tab_bar.cpp
+## TabBar::_update_cache), so get_tab_rect/get_tab_close_rect are only
+## meaningful for a tab %ShaderTabs is actually showing right now; _click_tab
+## calls TabBar.ensure_tab_visible(index) first for exactly this reason.
+##
+## Non-click document switches below (building content on a document that is
+## not the one under test, restoring focus, etc.) call panel.activate_document
+## directly -- the exact same production entry point %ShaderTabs's own
+## tab_changed handler calls (_on_tab_bar_tab_changed, gst_main_panel.gd) --
+## rather than simulating a click, mirroring the old file's own use of
+## Button.pressed.emit() for the same non-mechanics-under-test setup steps.
+## Only checks that are actually about click mechanics (_click_tab's own
+## callers) drive a real mouse event.
+##
+## Distinct documents are opened through panel.open_recipe() (phase 3:
+## independent copy every time, never reused) except where a check
 ## specifically drives the trailing New control itself, which -- like the
 ## File > New handler it shares -- reuses an existing pristine document and
 ## immediately opens the Add-layer picker; that one call site cancels it
 ## explicitly before any further stack mutation.
-##
-## Round 1 fix pass: stable-ID switching and the reclick/keyboard-undo-focus
-## checks below (_click_tab, _run_reclick_stays_selected_and_keyboard_undo_
-## focus) drive real InputEventMouseButton press/release and InputEventKey
-## Ctrl+Z/Ctrl+Shift+Z through the viewport (Input.parse_input_event /
-## Viewport.push_input), matching the established pattern in
-## tests/gst_editor_native_undo_smoke.gd's own _push_mouse/_push_key, instead
-## of calling Button.pressed.emit() directly -- emitting the signal bypasses
-## BaseButton's own on_action_event entirely, so it can neither reproduce nor
-## catch a toggle-mode/button_group regression (fix 1) or a focus-transfer
-## regression (fix 2), both of which only exist in that engine-side path.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -49,8 +61,24 @@ func run(plugin: EditorPlugin) -> void:
 		_finish(plugin)
 		return
 
-	EditorInterface.set_main_screen_editor("GoShade Turbo")
-	await plugin.get_tree().process_frame
+	# The editor's own deferred "restore last main screen from saved window
+	# layout" (editor_layout.cfg) can still be in flight this early in a
+	# session and overrides a single set_main_screen_editor call once it
+	# finishes loading, landing back on whatever main screen (e.g. "Script")
+	# a prior session left active -- observed directly in this isolated
+	# profile via a screenshot: "Loading plugin window layout..." still on
+	# screen with "Script" selected right after the single call below
+	# returned. Re-asserting it every frame until the panel actually reports
+	# visible (bounded to 60 frames, well past every observed settle time)
+	# survives that race without weakening what this proves once it exits
+	# the loop: panel.is_visible_in_tree() is a real production signal
+	# (_on_panel_visibility_changed/_preview.set_active), not a fixture.
+	for i: int in range(60):
+		EditorInterface.set_main_screen_editor("GoShade Turbo")
+		await plugin.get_tree().process_frame
+		if panel.is_visible_in_tree():
+			break
+	_check("main_screen_visible", panel.is_visible_in_tree(), "visible=%s" % [panel.is_visible_in_tree()])
 	if panel.is_start_screen_visible():
 		panel.get_create_empty_button().pressed.emit()
 		await plugin.get_tree().process_frame
@@ -58,28 +86,30 @@ func run(plugin: EditorPlugin) -> void:
 		await plugin.get_tree().process_frame
 
 	var initial_doc: GSTDocument = panel.get_active_document()
-	var initial_button: Button = panel.get_tab_button(initial_doc)
-	_check("initial_tab_present", initial_button != null and initial_button.text == "Untitled 1", "text='%s'" % [initial_button.text if initial_button != null else "<missing>"])
+	var initial_index: int = panel.get_tab_index(initial_doc)
+	var initial_title: String = panel.get_tab_bar().get_tab_title(initial_index) if initial_index != -1 else ""
+	_check("initial_tab_present", initial_index != -1 and initial_title == "Untitled 1", "text='%s'" % [initial_title if initial_index != -1 else "<missing>"])
 
-	# One-time engine warm-up (round 1 fix pass): the very first synthetic
+	# One-time engine warm-up (round 1 fix pass, Button-row era; unchanged by
+	# the 2026-09-15 TabBar pass): the very first synthetic
 	# InputEventMouseButton press delivered in a fresh editor session hits
 	# Viewport's own stale-subwindow-focus-clearing path once
 	# (scene/main/viewport.cpp Viewport::_sub_windows_forward_input, "no
-	# window found and clicked, remove focus") and is consumed there without
-	# reaching on_action_event; every click after the first behaves
-	# normally. Observed directly in this same isolated session: an
+	# window found and clicked, remove focus") and is consumed there before
+	# reaching any control's own gui_input; every click after the first
+	# behaves normally. Observed directly in this same isolated session: an
 	# identical real click on the already-active tab failed silently on the
-	# very first attempt and succeeded on every later attempt. Absorbed
-	# here, on the harmless already-active tab (a no-op reclick per fix 1),
-	# before any assertion-bearing click below -- not a gst_main_panel.gd
-	# defect, since no production code runs differently on a first vs. later
-	# click.
+	# very first attempt and succeeded on every later attempt. Absorbed here,
+	# on the harmless already-active tab (a no-op reclick), before any
+	# assertion-bearing click below -- not a gst_main_panel.gd defect, since
+	# no production code runs differently on a first vs. later click.
 	await _click_tab(plugin, panel, initial_doc)
 
 	var saved_doc: GSTDocument = await _run_title_lifecycle(plugin, panel, initial_doc)
 	var fire_doc: GSTDocument = await _run_recipe_title(plugin, panel)
 	var working_doc: GSTDocument = await _run_stable_id_switching(plugin, panel, saved_doc, fire_doc)
-	await _capture_tab_row_evidence(plugin)
+	await _capture_tab_row_evidence(plugin, "GST_TABS_UI_SCREENSHOT_PATH", "tab_row_evidence_screenshot")
+	_run_new_tab_button_follows_last_tab(panel)
 	await _run_reclick_stays_selected_and_keyboard_undo_focus(plugin, panel, saved_doc, fire_doc)
 	await _run_selection_and_scroll_restoration(plugin, panel, working_doc, fire_doc)
 	await _run_scroll_state_no_bleed_across_documents(plugin, panel, working_doc, fire_doc, saved_doc)
@@ -88,6 +118,12 @@ func run(plugin: EditorPlugin) -> void:
 	await _run_active_only_viewport_updates(plugin, panel)
 	await _run_invalid_document_isolation(plugin, panel)
 	await _run_long_title_and_overflow(plugin, panel)
+	# Tab row and toolbar follow-up 2026-09-15: captured here, right after the
+	# 24-tab overflow state _run_long_title_and_overflow's own
+	# tab_row_overflow_scrolls/new_tab_button_pinned_at_row_edge_when_
+	# overflowing checks just proved, and before _run_narrow_layout resizes
+	# the window out from under it.
+	await _capture_tab_row_evidence(plugin, "GST_TABS_UI_OVERFLOW_SCREENSHOT_PATH", "tab_row_overflow_evidence_screenshot")
 	await _run_narrow_layout(plugin, panel)
 	await _run_twenty_layers_and_rects(plugin, panel)
 
@@ -103,16 +139,19 @@ func run(plugin: EditorPlugin) -> void:
 func _run_title_lifecycle(plugin: EditorPlugin, panel: GSTMainPanel, doc: GSTDocument) -> GSTDocument:
 	panel.get_undo().add_layer("color/fill", GSTLayer.Kind.COLOR, false)
 	await plugin.get_tree().process_frame
-	var dirty_button: Button = panel.get_tab_button(doc)
-	_check("tab_title_dirty_star", dirty_button != null and dirty_button.text == "Untitled 1*", "text='%s'" % [dirty_button.text if dirty_button != null else "<missing>"])
+	var dirty_index: int = panel.get_tab_index(doc)
+	var dirty_title: String = panel.get_tab_bar().get_tab_title(dirty_index) if dirty_index != -1 else ""
+	_check("tab_title_dirty_star", dirty_index != -1 and dirty_title == "Untitled 1*", "text='%s'" % [dirty_title if dirty_index != -1 else "<missing>"])
 
 	var save_path: String = "user://gst_tabs_ui_title_save.tres"
 	_cleanup([save_path])
 	panel.save_to_path(save_path)
 	await plugin.get_tree().process_frame
-	var saved_button: Button = panel.get_tab_button(doc)
-	var saved_title_ok: bool = saved_button != null and saved_button.text == "gst_tabs_ui_title_save" and saved_button.tooltip_text == save_path
-	_check("tab_title_saved", saved_title_ok, "text='%s' tooltip='%s' (expect '%s')" % [saved_button.text if saved_button != null else "<missing>", saved_button.tooltip_text if saved_button != null else "", save_path])
+	var saved_index: int = panel.get_tab_index(doc)
+	var saved_title: String = panel.get_tab_bar().get_tab_title(saved_index) if saved_index != -1 else ""
+	var saved_tooltip: String = panel.get_tab_bar().get_tab_tooltip(saved_index) if saved_index != -1 else ""
+	var saved_title_ok: bool = saved_index != -1 and saved_title == "gst_tabs_ui_title_save" and saved_tooltip == save_path
+	_check("tab_title_saved", saved_title_ok, "text='%s' tooltip='%s' (expect '%s')" % [saved_title, saved_tooltip, save_path])
 	return doc
 
 
@@ -123,19 +162,23 @@ func _run_recipe_title(plugin: EditorPlugin, panel: GSTMainPanel) -> GSTDocument
 	panel.open_recipe("fire")
 	await plugin.get_tree().process_frame
 	var fire: GSTDocument = panel.get_active_document()
-	var fire_button: Button = panel.get_tab_button(fire)
-	var recipe_title_ok: bool = fire_button != null and fire_button.text == "Fire*" and fire_button.tooltip_text.contains("recipe 'fire'")
-	_check("tab_title_recipe", recipe_title_ok, "text='%s' tooltip='%s'" % [fire_button.text if fire_button != null else "<missing>", fire_button.tooltip_text if fire_button != null else ""])
+	var fire_index: int = panel.get_tab_index(fire)
+	var fire_title: String = panel.get_tab_bar().get_tab_title(fire_index) if fire_index != -1 else ""
+	var fire_tooltip: String = panel.get_tab_bar().get_tab_tooltip(fire_index) if fire_index != -1 else ""
+	var recipe_title_ok: bool = fire_index != -1 and fire_title == "Fire*" and fire_tooltip.contains("recipe 'fire'")
+	_check("tab_title_recipe", recipe_title_ok, "text='%s' tooltip='%s'" % [fire_title, fire_tooltip])
 	return fire
 
 
-## Stable-ID switching, driven by real Button.pressed clicks (round 1 fix:
-## real InputEventMouseButton press/release through the viewport, not
-## Button.pressed.emit()). Exercises the trailing New control once here (the
-## one place this file drives it): like File > New, it reuses an existing
-## pristine document and immediately opens the Add-layer picker, cancelled
-## explicitly before returning so later checks can mutate the returned
-## document's stack freely.
+## Stable-ID switching, driven by real clicks (round 1 fix, Button-row era:
+## real InputEventMouseButton press/release through the viewport, not a
+## synthetic signal emission -- carried over unchanged by the 2026-09-15
+## TabBar pass, just against %ShaderTabs's own tab rects instead of a Button's
+## own rect). Exercises the trailing New control once here (the one place
+## this file drives it): like File > New, it reuses an existing pristine
+## document and immediately opens the Add-layer picker, cancelled explicitly
+## before returning so later checks can mutate the returned document's stack
+## freely.
 func _run_stable_id_switching(plugin: EditorPlugin, panel: GSTMainPanel, saved_doc: GSTDocument, fire_doc: GSTDocument) -> GSTDocument:
 	panel.get_new_tab_button().pressed.emit()
 	await plugin.get_tree().process_frame
@@ -146,39 +189,41 @@ func _run_stable_id_switching(plugin: EditorPlugin, panel: GSTMainPanel, saved_d
 	var created_distinct: bool = working_doc != null and working_doc != saved_doc and working_doc != fire_doc
 
 	await _click_tab(plugin, panel, saved_doc)
-	var saved_button_after: Button = panel.get_tab_button(saved_doc)
-	var switched_to_saved: bool = panel.get_active_document() == saved_doc and saved_button_after != null and saved_button_after.button_pressed
+	var switched_to_saved: bool = panel.get_active_document() == saved_doc and panel.get_tab_bar().current_tab == panel.get_tab_index(saved_doc)
 
 	await _click_tab(plugin, panel, fire_doc)
-	var fire_button_after: Button = panel.get_tab_button(fire_doc)
-	var saved_button_now: Button = panel.get_tab_button(saved_doc)
-	var switched_to_fire: bool = panel.get_active_document() == fire_doc and fire_button_after != null and fire_button_after.button_pressed and saved_button_now != null and not saved_button_now.button_pressed
+	var switched_to_fire: bool = panel.get_active_document() == fire_doc and panel.get_tab_bar().current_tab == panel.get_tab_index(fire_doc)
 	_check("stable_id_switch_by_click", created_distinct and switched_to_saved and switched_to_fire, "created_distinct=%s switched_to_saved=%s switched_to_fire=%s" % [created_distinct, switched_to_saved, switched_to_fire])
 	return working_doc
 
 
-## Fix 1 (round 1 required fix): a real click on the already-active tab must
-## keep it selected, not un-press it. base_button.cpp's on_action_event
-## unconditionally toggles status.pressed, then _unpress_group() only forces
-## it back to true when a button_group is present (verified against
-## .now/tabs-validation/godot-4.4-source/scene/gui/base_button.cpp); without
-## one, a synthetic pressed.emit() can never observe this, since it skips
-## on_action_event/_unpress_group entirely.
+## Fix 1 (round 1 required fix, Button-row era): a real click on the
+## already-active tab must keep it selected. With %ShaderTabs now a native
+## TabBar (2026-09-15 pass), this is an engine-level guarantee rather than
+## something production code has to maintain itself:
+## TabBar::set_current_tab only emits tab_changed when the index actually
+## moves (tab_bar.cpp), so a reclick never even reaches
+## _on_tab_bar_tab_changed's own activate_document call. Verified here
+## directly against %ShaderTabs's own current_tab, not inferred from a
+## Button's .button_pressed the way the Button-row era's own version of this
+## check had to.
 ##
-## Fix 2 (round 1 required fix): _refresh_tabs() frees every tab Button on
-## every activation, including whichever one the click above just focused;
-## without an explicit transfer, the next Ctrl+Z has no live focus target
-## left inside GoShade and fails _owns_undo_focus()'s gate. Proves a real
-## click followed by real Ctrl+Z/Ctrl+Shift+Z reaches only the document that
-## click activated: fire_doc gets its own unreverted edit first so a stray
-## undo/redo landing on it instead of saved_doc is directly observable.
+## Fix 2 (round 1 required fix, Button-row era): the old per-tab Button row
+## froze every tab Button on every activation, dropping keyboard-undo focus
+## unless _refresh_tabs() explicitly transferred it. %ShaderTabs is never
+## freed or rebuilt (gst_main_panel.gd _refresh_tabs(), 2026-09-15 pass), so
+## that transfer no longer exists in production -- this proves a real click
+## followed by real Ctrl+Z/Ctrl+Shift+Z still reaches only the document that
+## click activated, now via focus staying on %ShaderTabs itself rather than
+## being handed between per-tab Buttons: fire_doc gets its own unreverted
+## edit first so a stray undo/redo landing on it instead of saved_doc is
+## directly observable.
 func _run_reclick_stays_selected_and_keyboard_undo_focus(plugin: EditorPlugin, panel: GSTMainPanel, saved_doc: GSTDocument, fire_doc: GSTDocument) -> void:
 	await _click_tab(plugin, panel, fire_doc)
 	await _click_tab(plugin, panel, fire_doc)
-	var reclicked_button: Button = panel.get_tab_button(fire_doc)
 	var reclick_stays_active: bool = panel.get_active_document() == fire_doc
-	var reclick_stays_pressed: bool = reclicked_button != null and reclicked_button.button_pressed
-	_check("active_tab_reclick_stays_selected", reclick_stays_active and reclick_stays_pressed, "active=%s pressed=%s" % [reclick_stays_active, reclick_stays_pressed])
+	var reclick_stays_selected: bool = panel.get_tab_bar().current_tab == panel.get_tab_index(fire_doc)
+	_check("active_tab_reclick_stays_selected", reclick_stays_active and reclick_stays_selected, "active=%s selected=%s" % [reclick_stays_active, reclick_stays_selected])
 
 	var history_saved: UndoRedo = saved_doc.undo_redo
 	var saved_layers_before: int = saved_doc.stack.layers.size()
@@ -194,20 +239,17 @@ func _run_reclick_stays_selected_and_keyboard_undo_focus(plugin: EditorPlugin, p
 	var saved_position_after_add: int = history_saved.get_current_action()
 
 	# Establishes the real-world precondition a genuine click leaves behind
-	# (focus on the just-activated tab's own Button) before the switch this
-	# check actually measures. Verified in this isolated session: Viewport's
-	# own click-to-focus grab is gated behind a separate hover-hierarchy
-	# structure (gui.mouse_over_hierarchy, scene/main/viewport.cpp) that a
-	# synthetic press/release never populates without a real DisplayServer
-	# mouse-enter, so _click_tab's own NOTIFICATION_MOUSE_ENTER workaround
-	# (which only supplies BaseButton's own status.hovering) reliably drives
-	# the real toggle/activation click but not this separate focus grab. A
-	# real hardware click always grants both; this grab_focus() call supplies
-	# only the one piece this session cannot otherwise reproduce, so the
-	# fix under test -- gst_main_panel.gd's _refresh_tabs() transferring that
-	# focus onto the new active Button across its own rebuild -- is still
-	# exercised for real by the click below.
-	panel.get_tab_button(saved_doc).grab_focus()
+	# (focus on %ShaderTabs itself) before the switch this check actually
+	# measures. As with the Button-row era's own precedent this replaces,
+	# Viewport's own click-to-focus grab is gated behind a separate
+	# hover-hierarchy structure (gui.mouse_over_hierarchy, scene/main/
+	# viewport.cpp) a synthetic press/release never populates without a real
+	# DisplayServer mouse-enter; this grab_focus() call supplies only that
+	# one otherwise-unreachable piece of engine state, so the click below
+	# still exercises %ShaderTabs's own real activation path
+	# (TabBar::gui_input's own set_current_tab call, then
+	# _on_tab_bar_tab_changed's own activate_document call) end to end.
+	panel.get_tab_bar().grab_focus()
 
 	await _click_tab(plugin, panel, fire_doc)
 	var history_fire: UndoRedo = fire_doc.undo_redo
@@ -217,8 +259,7 @@ func _run_reclick_stays_selected_and_keyboard_undo_focus(plugin: EditorPlugin, p
 	var fire_position_after_add: int = history_fire.get_current_action()
 
 	var focus_owner: Control = panel.get_viewport().gui_get_focus_owner()
-	var active_button: Button = panel.get_tab_button(fire_doc)
-	var focus_on_active_tab: bool = focus_owner == active_button
+	var focus_on_active_tab: bool = focus_owner == panel.get_tab_bar()
 
 	_push_key(panel, KEY_Z, true, false)
 	await plugin.get_tree().process_frame
@@ -237,9 +278,11 @@ func _run_reclick_stays_selected_and_keyboard_undo_focus(plugin: EditorPlugin, p
 ## Selection and list-position restoration (phase 4: "restore stable-ID
 ## layer selection and list position"). Builds enough layers on working_doc
 ## to scroll, selects and scrolls away from the top, switches to fire_doc and
-## back through real tab clicks, and checks both survive by stable id.
+## back through panel.activate_document (the same production entry point a
+## real tab click drives, _on_tab_bar_tab_changed), and checks both survive
+## by stable id.
 func _run_selection_and_scroll_restoration(plugin: EditorPlugin, panel: GSTMainPanel, working_doc: GSTDocument, fire_doc: GSTDocument) -> void:
-	panel.get_tab_button(working_doc).pressed.emit()
+	await panel.activate_document(working_doc)
 	await plugin.get_tree().process_frame
 	var list: GSTStackList = panel.get_stack_list()
 	for i: int in range(12):
@@ -253,9 +296,9 @@ func _run_selection_and_scroll_restoration(plugin: EditorPlugin, panel: GSTMainP
 	var anchor_before: StringName = list.get_scroll_anchor_id()
 	var offset_before: float = list.get_scroll_offset()
 
-	panel.get_tab_button(fire_doc).pressed.emit()
+	await panel.activate_document(fire_doc)
 	await plugin.get_tree().process_frame
-	panel.get_tab_button(working_doc).pressed.emit()
+	await panel.activate_document(working_doc)
 	await plugin.get_tree().process_frame
 
 	var restored_list: GSTStackList = panel.get_stack_list()
@@ -291,7 +334,7 @@ func _run_selection_and_scroll_restoration(plugin: EditorPlugin, panel: GSTMainP
 ## document's later scroll, and the new document's own later scroll must not
 ## bleed back into working_doc either.
 func _run_scroll_state_no_bleed_across_documents(plugin: EditorPlugin, panel: GSTMainPanel, working_doc: GSTDocument, fire_doc: GSTDocument, saved_doc: GSTDocument) -> void:
-	panel.get_tab_button(working_doc).pressed.emit()
+	await panel.activate_document(working_doc)
 	await plugin.get_tree().process_frame
 	var working_list: GSTStackList = panel.get_stack_list()
 	for i: int in range(40):
@@ -318,7 +361,7 @@ func _run_scroll_state_no_bleed_across_documents(plugin: EditorPlugin, panel: GS
 	# never-captured precondition the switch below depends on) and lands back
 	# on working_doc so the population below runs while fresh_doc is not
 	# active.
-	panel.get_tab_button(working_doc).pressed.emit()
+	await panel.activate_document(working_doc)
 	await plugin.get_tree().process_frame
 
 	for i: int in range(working_total):
@@ -331,7 +374,7 @@ func _run_scroll_state_no_bleed_across_documents(plugin: EditorPlugin, panel: GS
 			break
 	var fresh_anchor_still_unset: bool = fresh_doc.list_scroll_anchor_id == &""
 
-	panel.get_tab_button(fresh_doc).pressed.emit()
+	await panel.activate_document(fresh_doc)
 	await plugin.get_tree().process_frame
 	var fresh_list: GSTStackList = panel.get_stack_list()
 	var fresh_top_id: StringName = fresh_list.get_item_id(0)
@@ -343,12 +386,12 @@ func _run_scroll_state_no_bleed_across_documents(plugin: EditorPlugin, panel: GS
 	var fresh_offset_before: float = fresh_list.get_scroll_offset()
 	var fresh_scroll_moved: bool = fresh_anchor_before != fresh_top_id
 
-	panel.get_tab_button(working_doc).pressed.emit()
+	await panel.activate_document(working_doc)
 	await plugin.get_tree().process_frame
 	var restored_working_list: GSTStackList = panel.get_stack_list()
 	var working_restored_ok: bool = restored_working_list.get_scroll_anchor_id() == working_anchor_before and is_equal_approx(restored_working_list.get_scroll_offset(), working_offset_before)
 
-	panel.get_tab_button(fresh_doc).pressed.emit()
+	await panel.activate_document(fresh_doc)
 	await plugin.get_tree().process_frame
 	var restored_fresh_list: GSTStackList = panel.get_stack_list()
 	var fresh_restored_ok: bool = restored_fresh_list.get_scroll_anchor_id() == fresh_anchor_before and is_equal_approx(restored_fresh_list.get_scroll_offset(), fresh_offset_before)
@@ -361,7 +404,7 @@ func _run_scroll_state_no_bleed_across_documents(plugin: EditorPlugin, panel: GS
 ## being left must be cancelled, not left open against a stack the tab row
 ## is about to point the shared UI away from.
 func _run_stale_picker_cancelled_on_switch(plugin: EditorPlugin, panel: GSTMainPanel, working_doc: GSTDocument, fire_doc: GSTDocument) -> void:
-	panel.get_tab_button(working_doc).pressed.emit()
+	await panel.activate_document(working_doc)
 	await plugin.get_tree().process_frame
 	var history: UndoRedo = working_doc.undo_redo
 	var count_before: int = history.get_history_count()
@@ -369,7 +412,7 @@ func _run_stale_picker_cancelled_on_switch(plugin: EditorPlugin, panel: GSTMainP
 	await plugin.get_tree().process_frame
 	var picker_was_open: bool = panel.is_picker_open()
 
-	panel.get_tab_button(fire_doc).pressed.emit()
+	await panel.activate_document(fire_doc)
 	await plugin.get_tree().process_frame
 	var picker_cancelled: bool = not panel.is_picker_open()
 	var no_stale_mutation: bool = history.get_history_count() == count_before
@@ -379,14 +422,15 @@ func _run_stale_picker_cancelled_on_switch(plugin: EditorPlugin, panel: GSTMainP
 
 ## Finish-before-switch (decision 5, phase 1/2/3 gesture boundary): a numeric
 ## gesture still in flight on the document being left must commit there,
-## never reach the document the tab click switches to. Mirrors
+## never reach the document the switch below moves to. Mirrors
 ## tests/gst_editor_documents_smoke.gd's own numeric_pending_edit check
 ## (synthetic EditorSpinSlider.grabbed + EditorProperty.emit_changed, not an
 ## actual mid-drag mouse interaction -- Shader tabs phase 3 review round 2
-## fix-now S3), driven here through a real tab-button click instead of
-## panel.activate_document called directly.
+## fix-now S3), driven here through panel.activate_document, the same
+## production entry point a real tab click drives
+## (_on_tab_bar_tab_changed).
 func _run_finish_before_switch(plugin: EditorPlugin, panel: GSTMainPanel, working_doc: GSTDocument, fire_doc: GSTDocument) -> void:
-	panel.get_tab_button(working_doc).pressed.emit()
+	await panel.activate_document(working_doc)
 	await plugin.get_tree().process_frame
 	var fbm: GSTLayer = panel.get_stack_list().add_layer_by_entry_id("generative/fbm")
 	panel.get_stack_list().select_layer(fbm.id)
@@ -410,7 +454,7 @@ func _run_finish_before_switch(plugin: EditorPlugin, panel: GSTMainPanel, workin
 		await plugin.get_tree().process_frame
 		var mid_gesture_value: float = float(fbm.get(&"gain"))
 
-		panel.get_tab_button(fire_doc).pressed.emit()
+		await panel.activate_document(fire_doc)
 		await plugin.get_tree().process_frame
 		var switched: bool = panel.get_active_document() == fire_doc
 		finish_before_switch_ok = origin_history.get_history_count() == count_before + 1 and is_equal_approx(float(fbm.get(&"gain")), mid_gesture_value) and not is_equal_approx(mid_gesture_value, original_gain) and switched
@@ -478,7 +522,7 @@ func _run_invalid_document_isolation(plugin: EditorPlugin, panel: GSTMainPanel) 
 	var distinct_material_instances: bool = clean_material != broken_material
 	var clean_shader_differs_from_safe: bool = clean_material != null and clean_material.shader != null and clean_material.shader.code != GSTMaterialSync.SAFE_TRANSPARENT_SHADER_CODE
 
-	panel.get_tab_button(broken_doc).pressed.emit()
+	await panel.activate_document(broken_doc)
 	await plugin.get_tree().process_frame
 	var restored_message: String = panel.get_message_label().text
 	var restored_material: ShaderMaterial = panel.get_shader_material()
@@ -492,11 +536,14 @@ func _run_invalid_document_isolation(plugin: EditorPlugin, panel: GSTMainPanel) 
 ## Long titles (decision 4: "Beat: fixed-width tabs shrinking titles
 ## indefinitely") and horizontal overflow scrolling. Saves the currently
 ## active document (whatever _run_invalid_document_isolation left active)
-## under a deliberately long filename: its tab stays clipped at a bounded
-## width (never grows to fit, never shrinks below its floor) while the
-## tooltip still carries the full path. Then opens enough independent recipe
-## copies (phase 3: never reused) to exceed the row's own visible width,
-## proving the scroll container's horizontal range becomes nonzero.
+## under a deliberately long filename: its tab stays bounded at
+## %ShaderTabs's own max_tab_width (gst_main_panel.tscn, 2026-09-15 TabBar
+## pass; predecessor: a fixed-width, clip_text Button) while the tooltip
+## still carries the full path. Then opens enough independent recipe copies
+## (phase 3: never reused) to exceed the row's own visible width, proving
+## %ShaderTabs's own overflow scroll controls appear
+## (TabBar.get_offset_buttons_visible(); predecessor: an external
+## ScrollContainer's own horizontal scrollbar range).
 func _run_long_title_and_overflow(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var long_doc: GSTDocument = panel.get_active_document()
 	var long_name: String = "a_deliberately_long_shader_filename_for_the_tab_overflow_measurement"
@@ -504,20 +551,33 @@ func _run_long_title_and_overflow(plugin: EditorPlugin, panel: GSTMainPanel) -> 
 	_cleanup([long_path])
 	panel.save_to_path(long_path)
 	await plugin.get_tree().process_frame
-	var long_button: Button = panel.get_tab_button(long_doc)
-	var bounded_width: bool = long_button != null and long_button.size.x <= 200.0
-	var full_tooltip: bool = long_button != null and long_button.tooltip_text == long_path
-	_check("long_title_bounded_and_tooltip_full", bounded_width and full_tooltip, "width=%.1f tooltip='%s'" % [long_button.size.x if long_button != null else -1.0, long_button.tooltip_text if long_button != null else ""])
+	var long_index: int = panel.get_tab_index(long_doc)
+	var long_rect: Rect2 = panel.get_tab_rect(long_doc) if long_index != -1 else Rect2()
+	var long_tooltip: String = panel.get_tab_bar().get_tab_tooltip(long_index) if long_index != -1 else ""
+	var bounded_width: bool = long_index != -1 and long_rect.size.x <= 200.0
+	var full_tooltip: bool = long_index != -1 and long_tooltip == long_path
+	_check("long_title_bounded_and_tooltip_full", bounded_width and full_tooltip, "width=%.1f tooltip='%s'" % [long_rect.size.x if long_index != -1 else -1.0, long_tooltip])
 	_cleanup([long_path])
 
 	for i: int in range(18):
 		panel.open_recipe("fire")
 		await plugin.get_tree().process_frame
-	var scroll: ScrollContainer = panel.get_tab_scroll()
+	var tab_bar: TabBar = panel.get_tab_bar()
+	var overflowed: bool = tab_bar.get_offset_buttons_visible()
+	_check("tab_row_overflow_scrolls", overflowed, "offset_buttons_visible=%s tab_offset=%d tab_count=%d" % [tab_bar.get_offset_buttons_visible(), tab_bar.get_tab_offset(), panel.get_documents().size()])
+
+	# Tab row and toolbar follow-up 2026-09-15: once the tab content no
+	# longer fits, _apply_tab_bar_width's own available-width clamp
+	# (gst_main_panel.gd) pins %ShaderTabs -- and therefore %NewTabButton,
+	# its fixed sibling in ShaderTabRow -- at the row's own right edge
+	# instead of following the (now off-screen) last tab, with %ShaderTabs
+	# scrolling its own content internally to reach it.
 	var row: HBoxContainer = panel.get_tab_row()
-	var h_scroll: HScrollBar = scroll.get_h_scroll_bar()
-	var overflowed: bool = row.size.x > scroll.size.x and h_scroll.max_value > h_scroll.page
-	_check("tab_row_overflow_scrolls", overflowed, "row_width=%.1f scroll_width=%.1f h_max=%.1f h_page=%.1f tab_count=%d" % [row.size.x, scroll.size.x, h_scroll.max_value, h_scroll.page, panel.get_documents().size()])
+	var new_tab_button: Button = panel.get_new_tab_button()
+	var row_right_edge: float = row.get_global_rect().position.x + row.get_global_rect().size.x
+	var button_right_edge: float = new_tab_button.get_global_rect().position.x + new_tab_button.get_global_rect().size.x
+	var button_at_row_edge: bool = absf(button_right_edge - row_right_edge) <= 2.0
+	_check("new_tab_button_pinned_at_row_edge_when_overflowing", overflowed and button_at_row_edge, "button_right=%.1f row_right=%.1f tab_count=%d" % [button_right_edge, row_right_edge, panel.get_documents().size()])
 
 
 ## Narrow layout (docs/DESIGN.md item 22): the tab row stays visible and
@@ -526,18 +586,22 @@ func _run_long_title_and_overflow(plugin: EditorPlugin, panel: GSTMainPanel) -> 
 ## get_layout_measurements() stays governed by the same rules ui_layout_smoke
 ## already covers -- this only checks the new row does not break them.
 ##
-## Round 1 fix 3: the prior pass only checked row_visible/active_button_present
-## regardless of whether the resize actually crossed panel.get_layout_
-## measurements()'s own tab_breakpoint (it did not: narrow read false), which
-## proved nothing about narrow layout specifically. This measures the wide
-## breakpoint and tab-row height first, resizes below that recorded
-## breakpoint, and requires the crossing to have actually happened, plus
-## (with the ~21 tabs already open from _run_long_title_and_overflow, so the
-## row already overflows at every width) that the overflow scrollbar stays
-## visible, the tab row's own height is unchanged by the narrower main split,
-## and the active tab stays scrolled into view (gst_main_panel.gd's
-## _on_tab_scroll_resized, round 1 fix 3: a resize alone, with no tab
-## rebuild, must still keep it visible).
+## Round 1 fix 3 (Button-row era): the prior pass only checked
+## row_visible/active_button_present regardless of whether the resize
+## actually crossed panel.get_layout_measurements()'s own tab_breakpoint (it
+## did not: narrow read false), which proved nothing about narrow layout
+## specifically. This measures the wide breakpoint and tab-row height first,
+## resizes below that recorded breakpoint, and requires the crossing to have
+## actually happened, plus (with the ~21 tabs already open from
+## _run_long_title_and_overflow, so the row already overflows at every
+## width) that %ShaderTabs's own overflow controls stay visible
+## (get_offset_buttons_visible()), the tab row's own height is unchanged by
+## the narrower main split, and the active tab stays scrolled into view
+## (gst_main_panel.gd's _on_tab_scroll_resized, round 1 fix 3, reproduced
+## for TabBar.ensure_tab_visible: a resize alone, with no tab rebuild, must
+## still keep it visible). No manual ensure_tab_visible/scroll call is made
+## here: the whole point is proving production's own resized-signal handler
+## already did it.
 func _run_narrow_layout(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var original_window_size: Vector2i = DisplayServer.window_get_size()
 	# Establishes a known wide baseline first (matching ui_layout_smoke.gd's
@@ -551,18 +615,19 @@ func _run_narrow_layout(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 		await plugin.get_tree().process_frame
 	var wide_measured: Dictionary = panel.get_layout_measurements()
 	var row: HBoxContainer = panel.get_tab_row()
-	var scroll: ScrollContainer = panel.get_tab_scroll()
+	var tab_bar: TabBar = panel.get_tab_bar()
 	var row_height_wide: float = row.size.y
 	var narrow_threshold: float = float(wide_measured["tab_breakpoint"])
 
-	# Round 1 fix 3: a plain window resize alone does not reliably cross the
-	# breakpoint (measured: 1366->1024 actual window width at this editor's
-	# own docked-panel/side-panel proportions barely moved editing_rect.size.x
-	# at all). ui_layout_smoke.gd's own established responsive_tabs check
-	# never relies on the window resize alone either -- it additionally drags
-	# %MainSplit itself once the window resize is not enough. Mirrored here
-	# with the same drag mechanics (real mouse press/motion/release on the
-	# splitter, tests/gst_editor_ui_layout_smoke.gd's own _drag_splitter).
+	# Round 1 fix 3 (Button-row era): a plain window resize alone does not
+	# reliably cross the breakpoint (measured: 1366->1024 actual window width
+	# at this editor's own docked-panel/side-panel proportions barely moved
+	# editing_rect.size.x at all). ui_layout_smoke.gd's own established
+	# responsive_tabs check never relies on the window resize alone either --
+	# it additionally drags %MainSplit itself once the window resize is not
+	# enough. Mirrored here with the same drag mechanics (real mouse
+	# press/motion/release on the splitter, tests/gst_editor_ui_layout_smoke.
+	# gd's own _drag_splitter).
 	DisplayServer.window_set_size(Vector2i(720, 600))
 	for i: int in range(8):
 		await plugin.get_tree().process_frame
@@ -580,26 +645,18 @@ func _run_narrow_layout(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var crossed_breakpoint: bool = bool(measured["narrow"]) and float(measured["editing_rect"].size.x) <= narrow_threshold + 0.5
 	var row_visible: bool = row.is_visible_in_tree()
 	var active_doc: GSTDocument = panel.get_active_document()
-	var active_button: Button = panel.get_tab_button(active_doc)
-	var active_button_present: bool = active_button != null
+	var active_index: int = panel.get_tab_index(active_doc)
+	var active_tab_present: bool = active_index != -1
 	var row_height_narrow: float = row.size.y
 	var row_height_unchanged: bool = is_equal_approx(row_height_narrow, row_height_wide)
-	var h_scroll: HScrollBar = scroll.get_h_scroll_bar()
-	var scrollbar_visible_under_narrow: bool = h_scroll.max_value > h_scroll.page
-	# 2026-09-15 layout pass: each tab's title Button now sits inside its own
-	# per-tab wrapper container (gst_main_panel.gd _refresh_tabs, "tab x
-	# inside the tab"), so its local .position is relative to that wrapper,
-	# not the scrolling row directly -- global rects compared against the
-	# scroll container's own global rect measure "inside the visible scroll
-	# window" correctly regardless of that extra nesting level.
-	var scroll_visible_start: float = scroll.get_global_rect().position.x
-	var scroll_visible_end: float = scroll_visible_start + scroll.size.x
-	var active_global_x: float = active_button.get_global_rect().position.x if active_button_present else 0.0
-	var active_scrolled_into_view: bool = active_button_present and active_global_x >= scroll_visible_start - 2.0 and (active_global_x + active_button.size.x) <= scroll_visible_end + 2.0
-	print("TABS_UI NARROW narrow_threshold=%.1f wide_editing_x=%.1f narrow_editing_x=%.1f row_height_wide=%.1f row_height_narrow=%.1f h_max=%.1f h_page=%.1f active_pos_x=%.1f visible=[%.1f,%.1f] measure=%s" % [narrow_threshold, float(wide_measured["editing_rect"].size.x), float(measured["editing_rect"].size.x), row_height_wide, row_height_narrow, h_scroll.max_value, h_scroll.page, active_global_x if active_button_present else -1.0, scroll_visible_start, scroll_visible_end, measured])
+	var scrollbar_visible_under_narrow: bool = tab_bar.get_offset_buttons_visible()
+	var tab_bar_rect: Rect2 = tab_bar.get_global_rect()
+	var active_rect: Rect2 = panel.get_tab_rect(active_doc) if active_tab_present else Rect2()
+	var active_scrolled_into_view: bool = active_tab_present and active_rect.position.x >= tab_bar_rect.position.x - 2.0 and (active_rect.position.x + active_rect.size.x) <= tab_bar_rect.position.x + tab_bar_rect.size.x + 2.0
+	print("TABS_UI NARROW narrow_threshold=%.1f wide_editing_x=%.1f narrow_editing_x=%.1f row_height_wide=%.1f row_height_narrow=%.1f tab_offset=%d offset_buttons_visible=%s active_pos_x=%.1f tab_bar=[%.1f,%.1f] measure=%s" % [narrow_threshold, float(wide_measured["editing_rect"].size.x), float(measured["editing_rect"].size.x), row_height_wide, row_height_narrow, tab_bar.get_tab_offset(), tab_bar.get_offset_buttons_visible(), active_rect.position.x if active_tab_present else -1.0, tab_bar_rect.position.x, tab_bar_rect.position.x + tab_bar_rect.size.x, measured])
 
-	var ok: bool = crossed_breakpoint and row_visible and active_button_present and row_height_unchanged and scrollbar_visible_under_narrow and active_scrolled_into_view
-	_check("narrow_layout_tab_row_usable", ok, "crossed_breakpoint=%s(%.1f) row_visible=%s active_present=%s height_unchanged=%s(%.1f/%.1f) scrollbar_visible=%s scrolled_into_view=%s" % [crossed_breakpoint, narrow_threshold, row_visible, active_button_present, row_height_unchanged, row_height_wide, row_height_narrow, scrollbar_visible_under_narrow, active_scrolled_into_view])
+	var ok: bool = crossed_breakpoint and row_visible and active_tab_present and row_height_unchanged and scrollbar_visible_under_narrow and active_scrolled_into_view
+	_check("narrow_layout_tab_row_usable", ok, "crossed_breakpoint=%s(%.1f) row_visible=%s active_present=%s height_unchanged=%s(%.1f/%.1f) scrollbar_visible=%s scrolled_into_view=%s" % [crossed_breakpoint, narrow_threshold, row_visible, active_tab_present, row_height_unchanged, row_height_wide, row_height_narrow, scrollbar_visible_under_narrow, active_scrolled_into_view])
 
 	DisplayServer.window_set_size(original_window_size)
 	for i: int in range(4):
@@ -626,7 +683,7 @@ func _run_twenty_layers_and_rects(plugin: EditorPlugin, panel: GSTMainPanel) -> 
 
 	panel.open_recipe("dissolve")
 	await plugin.get_tree().process_frame
-	panel.get_tab_button(doc).pressed.emit()
+	await panel.activate_document(doc)
 	await plugin.get_tree().process_frame
 
 	var preview_after: Rect2 = panel.get_layout_measurements()["preview_rect"]
@@ -636,37 +693,31 @@ func _run_twenty_layers_and_rects(plugin: EditorPlugin, panel: GSTMainPanel) -> 
 	_check("twenty_layers_preview_output_rects_stable", item_count_ok and preview_before.is_equal_approx(preview_after) and output_before.is_equal_approx(output_after) and list_after_switch.get_item_count() == 20, "item_count=%d preview=%s/%s output=%s/%s" % [list_after_switch.get_item_count(), preview_before, preview_after, output_before, output_after])
 
 
-## Real click on doc's own tab Button: press then release InputEventMouseButton
-## at its global-rect center. Re-fetches the Button fresh (never reuses one
-## captured before an earlier click in the same check), since _refresh_tabs()
-## frees and rebuilds every tab Button on every activation.
+## Real click on doc's own tab: press then release InputEventMouseButton at
+## its global-rect center, matching the Button-row era's own established real-
+## click convention. TabBar.ensure_tab_visible(index) runs first and is
+## awaited a frame: a tab outside %ShaderTabs's own current
+## [offset, max_drawn_tab] window reports ofs_cache 0 (tab_bar.cpp
+## TabBar::_update_cache), so panel.get_tab_rect(doc) is only meaningful for
+## a tab %ShaderTabs is actually showing -- this is the click helper's own
+## equivalent of the Button-row era's _click_button's own
+## ensure_control_visible call for a Button that could otherwise share an
+## on-screen position with the row's own fixed trailing New control.
 ##
-## Verified against .now/tabs-validation/godot-4.4-source/scene/main/
-## viewport.cpp: Viewport::_gui_input_event assigns gui.mouse_focus (the
-## actual dispatch target for a press) via its own positional gui_find_
-## control(mpos) lookup, independent of hover state -- confirmed working in
-## this same isolated editor session by _drag_main_split's own real
-## HSplitContainer drag above, which depends on that exact same positional
-## dispatch. BaseButton::on_action_event additionally gates a mouse-button
-## event behind status.hovering specifically (mouse_button.is_null() ||
-## status.hovering), which this session's synthetic Input.parse_input_event/
-## Viewport.push_input calls never establish for a Button: Viewport's own
-## hover tracking (gui.mouse_over/_update_mouse_over) requires the viewport
-## to already believe the OS cursor is inside the window, which no synthetic
-## event drives without a real DisplayServer mouse-enter -- confirmed by
-## Viewport.gui_get_hovered_control() staying null immediately after an
-## injected motion event pushed at the button's own real global-rect center.
-## NOTIFICATION_MOUSE_ENTER is public documented API
-## (Control.NOTIFICATION_MOUSE_ENTER, Object.notification()); calling it here
-## supplies only that one otherwise-unreachable piece of engine state so the
-## rest of the click -- on_action_event's real toggle/button_group logic, the
-## real activate_document call from Button.pressed, and the real focus grab
-## this fix's own gst_main_panel.gd change performs -- all still run through
-## their real, un-mocked production code paths.
+## Verified against .now/tabs-validation/godot-4.4-source/scene/gui/
+## tab_bar.cpp: TabBar::gui_input resolves a click by the event's own
+## position alone (tabs[i].cb_rect.has_point(pos), or the plain tab-body
+## range check, both against the event's own transformed pos) -- unlike
+## BaseButton::on_action_event, there is no status.hovering gate, so, unlike
+## the Button-row era's own _click_tab, no NOTIFICATION_MOUSE_ENTER
+## workaround is needed for the click itself to register.
 func _click_tab(plugin: EditorPlugin, panel: GSTMainPanel, doc: GSTDocument) -> void:
-	var button: Button = panel.get_tab_button(doc)
-	var point: Vector2 = button.get_global_rect().get_center()
-	button.notification(Control.NOTIFICATION_MOUSE_ENTER)
+	var index: int = panel.get_tab_index(doc)
+	if index == -1:
+		return
+	panel.get_tab_bar().ensure_tab_visible(index)
+	await plugin.get_tree().process_frame
+	var point: Vector2 = panel.get_tab_rect(doc).get_center()
 	_push_mouse(plugin, point, MOUSE_BUTTON_LEFT, true)
 	await plugin.get_tree().process_frame
 	await plugin.get_tree().process_frame
@@ -677,11 +728,11 @@ func _click_tab(plugin: EditorPlugin, panel: GSTMainPanel, doc: GSTDocument) -> 
 
 ## Drags split's own divider by delta.x through real mouse press/motion/
 ## release (matching tests/gst_editor_ui_layout_smoke.gd's own _drag_splitter
-## exactly): the narrow-layout check below uses this to force %MainSplit
+## exactly): the narrow-layout check above uses this to force %MainSplit
 ## narrower when a window resize alone leaves editing_rect above the
 ## measured breakpoint.
 ## Deliberately independent of _push_mouse (which uses Viewport.push_input
-## for real Button clicks): this instead matches
+## for real tab clicks): this instead matches
 ## tests/gst_editor_ui_layout_smoke.gd's own _drag_splitter exactly,
 ## including its Input.parse_input_event pipeline for all three events,
 ## since that is the already-proven-working mechanism for dragging
@@ -737,19 +788,46 @@ func _push_key(target: Control, keycode: Key, ctrl: bool = false, shift: bool = 
 	target.get_viewport().push_input(event, true)
 
 
-## Evidence hook (2026-09-15 layout pass), mirroring gst_editor_ui_complete_
-## smoke.gd's own GST_UI_COMPLETE_SCREENSHOT/_capture pattern: a no-op unless
-## the env var is set, so it adds nothing to the SMOKE SUMMARY count on an
-## ordinary run and cannot change any existing baseline. Called right after
-## _run_stable_id_switching, the first point three tabs are open at once
-## (saved_doc clean, fire_doc dirty, working_doc pristine) with no dialog or
-## picker in the way, to capture the tab row and toolbar layout for review.
-func _capture_tab_row_evidence(plugin: EditorPlugin) -> void:
-	var path: String = OS.get_environment("GST_TABS_UI_SCREENSHOT_PATH")
+## Tab row and toolbar follow-up 2026-09-15: with three tabs open (none of
+## them overflowing the row), %ShaderTabs no longer stretches across
+## ShaderTabRow (size_flags_horizontal SIZE_SHRINK_BEGIN, gst_main_panel.tscn)
+## so its own width is sized to its tab content by
+## GSTMainPanel._apply_tab_bar_width -- proven here directly: %NewTabButton's
+## own global left edge sits immediately after the last tab's own global
+## right edge plus the row's own separation, not out at the row's far right
+## edge the way the old EXPAND-flag %ShaderTabs left it.
+func _run_new_tab_button_follows_last_tab(panel: GSTMainPanel) -> void:
+	var tab_bar: TabBar = panel.get_tab_bar()
+	var row: HBoxContainer = panel.get_tab_row()
+	var new_tab_button: Button = panel.get_new_tab_button()
+	var last_index: int = tab_bar.get_tab_count() - 1
+	var last_tab_right: float = -1.0
+	if last_index >= 0:
+		var local: Rect2 = tab_bar.get_tab_rect(last_index)
+		last_tab_right = tab_bar.get_global_rect().position.x + local.position.x + local.size.x
+	var separation: float = float(row.get_theme_constant("separation"))
+	var expected_x: float = last_tab_right + separation
+	var actual_x: float = new_tab_button.get_global_rect().position.x
+	var ok: bool = last_index >= 0 and absf(actual_x - expected_x) <= 2.0
+	_check("new_tab_button_follows_last_tab", ok, "expected_x=%.1f actual_x=%.1f last_tab_right=%.1f tab_count=%d" % [expected_x, actual_x, last_tab_right, tab_bar.get_tab_count()])
+
+
+## Evidence hook (2026-09-15 layout pass; parameterized by env_var/check_name
+## in the "Tab row and toolbar follow-up 2026-09-15" pass so the same helper
+## captures both the three-tab and the 24-tab-overflow evidence shots),
+## mirroring gst_editor_ui_complete_smoke.gd's own
+## GST_UI_COMPLETE_SCREENSHOT/_capture pattern: a no-op unless the named env
+## var is set, so it adds nothing to the SMOKE SUMMARY count on an ordinary
+## run and cannot change any existing baseline. Called right after
+## _run_stable_id_switching (three tabs: saved_doc clean, fire_doc dirty,
+## working_doc pristine, no dialog or picker in the way) and again right
+## after _run_long_title_and_overflow (24 tabs, the row already overflowing).
+func _capture_tab_row_evidence(plugin: EditorPlugin, env_var: String, check_name: String) -> void:
+	var path: String = OS.get_environment(env_var)
 	if path.is_empty():
 		return
 	var error: Error = plugin.get_viewport().get_texture().get_image().save_png(path)
-	_check("tab_row_evidence_screenshot", error == OK, "path='%s' error=%d" % [path, error])
+	_check(check_name, error == OK, "path='%s' error=%d" % [path, error])
 
 
 func _cleanup(paths: Array[String]) -> void:

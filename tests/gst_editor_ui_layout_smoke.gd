@@ -85,9 +85,29 @@ func _check_preview_and_output(measured: Dictionary) -> void:
 	_check("output_below_preview", below_preview and output_rect.size.y > 0.0, "preview=%s output=%s" % [preview_rect, output_rect])
 
 
+## Tab row and toolbar follow-up 2026-09-15: %FileMenu draws as a flat
+## MenuButton by construction (MenuButton::MenuButton, menu_button.cpp:217)
+## independent of its own flat property, so gst_main_panel.gd's
+## _style_file_menu_as_button() copies %SaveButton's own "Button"-theme-type
+## styleboxes onto %FileMenu as per-instance overrides. Proven here against
+## the "normal" stylebox specifically (the one visible with neither hover nor
+## focus, i.e. what this button looks like at rest): same resource, or -- a
+## theme swap that legitimately supplies a distinct-but-equivalent StyleBox
+## instance for each -- identical content margins on all four sides, which is
+## what actually governs whether the two draw as the same button shape.
+func _check_file_menu_button_style(panel: GSTMainPanel, file_menu: MenuButton) -> void:
+	var save_button: Button = panel.get_node("%SaveButton") as Button
+	var file_style: StyleBox = file_menu.get_theme_stylebox("normal")
+	var save_style: StyleBox = save_button.get_theme_stylebox("normal")
+	var same_resource: bool = file_style != null and file_style == save_style
+	var margins_match: bool = file_style != null and save_style != null and is_equal_approx(file_style.get_margin(SIDE_LEFT), save_style.get_margin(SIDE_LEFT)) and is_equal_approx(file_style.get_margin(SIDE_RIGHT), save_style.get_margin(SIDE_RIGHT)) and is_equal_approx(file_style.get_margin(SIDE_TOP), save_style.get_margin(SIDE_TOP)) and is_equal_approx(file_style.get_margin(SIDE_BOTTOM), save_style.get_margin(SIDE_BOTTOM))
+	_check("file_menu_button_style", same_resource or margins_match, "file_normal=%s save_normal=%s same_resource=%s margins_match=%s" % [file_style, save_style, same_resource, margins_match])
+
+
 func _check_file_menu(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var file_menu: MenuButton = panel.get_node("%FileMenu") as MenuButton
 	var popup: PopupMenu = file_menu.get_popup()
+	_check_file_menu_button_style(panel, file_menu)
 	var labels: Array[String] = []
 	for i: int in range(popup.item_count):
 		if not popup.is_item_separator(i):

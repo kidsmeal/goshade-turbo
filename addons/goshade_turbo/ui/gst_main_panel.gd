@@ -62,8 +62,8 @@ signal stack_changed
 @onready var _codegen_message: Label = %CodegenMessage
 @onready var _editing_content: VBoxContainer = %EditingContent
 @onready var _preview_area: VBoxContainer = %PreviewArea
-@onready var _shader_tabs_scroll: ScrollContainer = %ShaderTabsScroll
-@onready var _shader_tabs: HBoxContainer = %ShaderTabs
+@onready var _shader_tab_row: HBoxContainer = %ShaderTabRow
+@onready var _shader_tabs: TabBar = %ShaderTabs
 @onready var _new_tab_button: Button = %NewTabButton
 
 const COORD_SPACE_NAMES: Array[String] = ["uv", "screen_uv", "local"]
@@ -85,8 +85,9 @@ var _library: GSTLibrary = null
 var _documents: Array[GSTDocument] = []
 ## The document currently bound to the shared UI (stack list, inspector
 ## column, output block, coord-space dropdown, preview). Changed by
-## New/Open/Reopen Shader/Recipes, the shader-tab row's own Button.pressed
-## handlers (phase 4, _refresh_tabs), and the internal fixture seams below.
+## New/Open/Reopen Shader/Recipes, %ShaderTabs's own tab_changed handler
+## (_on_tab_bar_tab_changed, 2026-09-15 TabBar pass), and the internal
+## fixture seams below.
 var _active_document: GSTDocument = null
 ## Mirrors _active_document.undo_redo/.undo so every existing call site in
 ## this file (get_watched_history(), get_undo(), keyboard undo/redo, every
@@ -186,24 +187,22 @@ var _picker_context: Dictionary = {}
 var _picker_focus: WeakRef = null
 var _applying_choice: bool = false
 var _control_refusals: Dictionary = {}
-## GSTDocument.session_id -> its own shader-tab Button (phase 4), rebuilt
-## wholesale by _refresh_tabs() every time it runs (matching
-## gst_stack_list.gd's own full-rebuild-per-change convention). An editor
-## smoke seam (get_tab_button); production code never reads this map.
-var _tab_buttons: Dictionary = {}
-## GSTDocument.session_id -> its own tab close Button (phase 6), rebuilt
-## alongside _tab_buttons on every _refresh_tabs() call.
-var _tab_close_buttons: Dictionary = {}
-## Shared by every tab Button (phase 4 review round 1 fix 1): a plain
-## toggle_mode Button with no group reverts status.pressed to false on a
-## second click (BaseButton::on_action_event unconditionally toggles, then
-## _unpress_group() only forces it back to true when a button_group is
-## present -- base_button.cpp, verified against .now/tabs-validation/
-## godot-4.4-source). One ButtonGroup instance, reused across every
-## _refresh_tabs() rebuild, keeps re-clicking the already-active tab a no-op
-## instead of visibly un-pressing it. ButtonGroup.allow_unpress defaults to
-## false, which is exactly this radio-button behavior.
-var _tab_button_group: ButtonGroup = ButtonGroup.new()
+## Tab index -> GSTDocument.session_id, rebuilt wholesale by _refresh_tabs()
+## every time it runs (matching gst_stack_list.gd's own full-rebuild-per-
+## change convention), 1:1 with %ShaderTabs's own tabs (index i here is
+## always tab i). tab_changed/tab_close_pressed resolve back to a document
+## through this array plus _find_document_by_session_id, the same stable-id
+## pattern every other pending/deferred response in this file already uses,
+## rather than trusting a raw tab index alone to still mean the same document
+## by the time a signal actually reaches its handler.
+var _tab_session_ids: Array[int] = []
+## Guards %ShaderTabs.current_tab writes made to reflect _active_document
+## (2026-09-15 TabBar pass): TabBar.set_current_tab() emits tab_changed
+## whenever the index actually moves, so a programmatic write in
+## _refresh_tabs() must not re-enter _on_tab_bar_tab_changed's own
+## activate_document call (mirrors _syncing_coord_space's own guard for the
+## same reason).
+var _syncing_tabs: bool = false
 ## Guards _preset_option.select() calls made to reflect a newly activated
 ## document's own stored preview_preset (mirrors _syncing_coord_space's own
 ## guard for the same reason: OptionButton.select() does not itself emit
@@ -294,27 +293,45 @@ func _ready() -> void:
 	file_popup.add_item("Save As...", FILE_SAVE_AS)
 	file_popup.add_item("Reopen Shader...", FILE_REOPEN_SHADER)
 	file_popup.id_pressed.connect(_on_file_menu_pressed)
+	_style_file_menu_as_button()
 
 	_recipes_button.pressed.connect(_on_recipes_pressed)
 	_randomize_button.pressed.connect(_on_randomize_pressed)
 	_set_recipe_open(false)
 
 	_new_tab_button.pressed.connect(_on_new_pressed)
+	# 2026-09-15 TabBar pass: tab_changed only fires when %ShaderTabs's own
+	# current_tab index actually moves (TabBar.set_current_tab, tab_bar.cpp),
+	# so a reclick on the already-active tab is already a no-op at the engine
+	# level -- no ButtonGroup/toggle bookkeeping needed the way the old
+	# per-tab Button row required. tab_close_pressed fires on the close icon
+	# specifically (tab_bar.cpp's own cb_rect hit-test), independent of
+	# tab_changed/tab_clicked.
+	_shader_tabs.tab_changed.connect(_on_tab_bar_tab_changed)
+	_shader_tabs.tab_close_pressed.connect(_on_tab_bar_close_pressed)
 	# Phase 4 Cross-cutting "Explicitly control GSTPreview update mode...":
 	# pauses the shared preview SubViewport while the GoShade main-screen tab
 	# is hidden (plugin.gd's _make_visible(false)) and resumes it when shown
 	# again. Fires once immediately below too, since plugin.gd calls
 	# _panel.hide() right after this node's own _ready() already ran.
 	visibility_changed.connect(_on_panel_visibility_changed)
-	# Round 1 fix 3: _refresh_tabs()'s own deferred scroll-into-view call
-	# only re-fires when the tab row itself is rebuilt (a document/stack
-	# change). A resize alone (main window, editor-scale, or the narrow-
-	# layout breakpoint toggling) can shrink _shader_tabs_scroll without
-	# rebuilding anything, which could otherwise scroll the still-correct
-	# active tab Button out of view. The tab row spans the whole panel width
-	# regardless of the main split, so this container's own resized signal
-	# covers every one of those cases directly.
-	_shader_tabs_scroll.resized.connect(_on_tab_scroll_resized)
+	# Round 1 fix 3 (Button-row era) / 2026-09-15 TabBar pass: %ShaderTabs's
+	# own ensure_tab_visible() call in _refresh_tabs() only re-fires when the
+	# tab row itself is rebuilt (a document/stack change). A resize alone
+	# (main window, editor-scale, or the narrow-layout breakpoint toggling)
+	# can shrink %ShaderTabs without rebuilding anything, which could
+	# otherwise leave the still-correct active tab scrolled out of view. The
+	# tab row spans the whole panel width regardless of the main split, so
+	# %ShaderTabs's own resized signal covers every one of those cases
+	# directly.
+	_shader_tabs.resized.connect(_on_tab_scroll_resized)
+	# 2026-09-15 tab-row-width pass: %ShaderTabs no longer stretches across
+	# ShaderTabRow (size_flags_horizontal is now SIZE_SHRINK_BEGIN,
+	# gst_main_panel.tscn), so its own width is driven entirely by
+	# custom_minimum_size.x, recomputed by _apply_tab_bar_width() whenever
+	# either side of that calculation can change: the row's own available
+	# width (this resize) or the tab content itself (_refresh_tabs()).
+	_shader_tab_row.resized.connect(_on_tab_row_resized)
 
 	_open_dialog = EditorFileDialog.new()
 	_open_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
@@ -408,11 +425,77 @@ func _on_panel_visibility_changed() -> void:
 	_preview.set_active(is_visible_in_tree())
 
 
-## Wired-by: _shader_tabs_scroll.resized (_ready()).
+## Wired-by: %ShaderTabs.resized (_ready()).
 func _on_tab_scroll_resized() -> void:
 	if _active_document == null:
 		return
-	_await_scroll_active_tab_into_view(_tab_buttons.get(_active_document.session_id) as Button)
+	_await_ensure_active_tab_visible(get_tab_index(_active_document))
+
+
+## Wired-by: %ShaderTabRow.resized (_ready()).
+func _on_tab_row_resized() -> void:
+	_apply_tab_bar_width()
+
+
+## Sizes %ShaderTabs to its own tab content instead of stretching across
+## ShaderTabRow (2026-09-15 tab-row-width pass). %ShaderTabs's own
+## size_flags_horizontal is SIZE_SHRINK_BEGIN (gst_main_panel.tscn), so
+## HBoxContainer gives it exactly its combined minimum size; clip_tabs stays
+## true (gst_main_panel.tscn), which forces TabBar::get_minimum_size() to
+## report 0 regardless of tab content (tab_bar.cpp:103-105), so that combined
+## minimum size is entirely custom_minimum_size.x, written here. Bounded to
+## the row's own available width minus %NewTabButton and the row's own
+## separation: %NewTabButton sits immediately after the last tab when every
+## tab fits, and stays pinned at the row's own right edge, with %ShaderTabs
+## scrolling its own content internally, once they do not -- matching
+## Godot's own scene tab strip. Called from _refresh_tabs() (tab count/
+## content changed) and _on_tab_row_resized (row width changed, e.g. a window
+## resize) -- the only two things either side of this calculation depends on.
+func _apply_tab_bar_width() -> void:
+	if _shader_tab_row == null or _shader_tabs == null or _new_tab_button == null:
+		return
+	var content_width: float = _measure_tab_bar_content_width()
+	var separation: float = float(_shader_tab_row.get_theme_constant("separation"))
+	var available: float = maxf(0.0, _shader_tab_row.size.x - _new_tab_button.size.x - separation)
+	_shader_tabs.custom_minimum_size.x = minf(content_width, available)
+
+
+## %ShaderTabs's own true, unclipped tab content width. TabBar::
+## get_minimum_size (tab_bar.cpp) sums every tab's real styled width and only
+## zeroes the result at the very end when clip_tabs is true (:103-105), so
+## toggling clip_tabs off for one synchronous read recovers that sum without
+## needing a separate per-tab-rect loop; clip_tabs is restored to true
+## immediately after, since that is also what keeps %ShaderTabs's own native
+## overflow scroll arrows available for the many-tabs case
+## _apply_tab_bar_width's own available-width clamp produces.
+func _measure_tab_bar_content_width() -> float:
+	_shader_tabs.clip_tabs = false
+	var width: float = _shader_tabs.get_minimum_size().x
+	_shader_tabs.clip_tabs = true
+	return width
+
+
+## FileMenu draws as a flat MenuButton by construction regardless of its own
+## flat property (MenuButton::MenuButton calls set_flat(true) unconditionally,
+## confirmed .now/tabs-validation/godot-4.4-source/scene/gui/menu_button.cpp:
+## 217): gst_main_panel.tscn's flat = false ("Tab row and toolbar layout
+## 2026-09-15" pass) has no visible effect on its own, since the editor theme
+## still supplies MenuButton's own distinct styleboxes under the "MenuButton"
+## theme type independent of the flat property. Copying Button's own
+## styleboxes/font colors onto %FileMenu as per-instance overrides makes it
+## draw identically to %SaveButton/%RecipesButton/%RandomizeButton/
+## %ExportButton (all plain Buttons, "Button" theme type) without touching
+## flatness, get_popup(), or any popup-id wiring. has_theme_stylebox/
+## has_theme_color gate each copy so a theme that omits one name (e.g. no
+## hover_pressed) leaves %FileMenu's own default for it untouched rather than
+## overriding with a missing resource.
+func _style_file_menu_as_button() -> void:
+	for style_name: StringName in [&"normal", &"hover", &"pressed", &"disabled", &"focus", &"hover_pressed"]:
+		if has_theme_stylebox(style_name, &"Button"):
+			_file_menu.add_theme_stylebox_override(style_name, get_theme_stylebox(style_name, &"Button"))
+	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_disabled_color", &"font_focus_color"]:
+		if has_theme_color(color_name, &"Button"):
+			_file_menu.add_theme_color_override(color_name, get_theme_color(color_name, &"Button"))
 
 
 func _build_start_screen() -> void:
@@ -954,98 +1037,104 @@ func _restore_document_preview_controls(doc: GSTDocument) -> void:
 	_resync_material()
 
 
-## Rebuilds the shader-tab row from _documents (phase 4), matching
-## gst_stack_list.gd's own full-rebuild-per-change convention rather than
-## patching individual buttons in place. Called after every
-## activation/creation (_activate_document) and every active-document stack
-## or property edit (_on_stack_changed/_on_property_changed) and successful
-## save (_save_stack_to_path, :1622), so titles and dirty stars stay current
-## without a separate per-document watcher. Each tab's own close Button is
-## rebuilt here alongside its title Button, both inside one per-tab
-## HBoxContainer (zero separation, below) so the title and its close control
-## read as one tab unit (2026-09-15 layout pass); the wrapper is internal,
-## get_tab_button/get_tab_close_button still return the inner Buttons
-## directly. _new_tab_button lives inside _shader_tabs too, as the trailing
-## child after every tab wrapper, so it scrolls with the row; it is skipped
-## by the clear loop below (it is not rebuilt) and re-homed to the end after
-## every rebuild.
+## Rebuilds %ShaderTabs (a native TabBar, 2026-09-15 pass) from _documents
+## (phase 4), matching gst_stack_list.gd's own full-rebuild-per-change
+## convention rather than patching individual tabs in place. Called after
+## every activation/creation (_activate_document) and every active-document
+## stack or property edit (_on_stack_changed/_on_property_changed) and
+## successful save (_save_stack_to_path, :1622), so titles and dirty stars
+## stay current without a separate per-document watcher. clear_tabs()/
+## add_tab() below replace the old per-document Button row entirely: a
+## TabBar draws each tab's title and its CLOSE_BUTTON_SHOW_ALWAYS close icon
+## as one native tab shape (matching Godot's own scene tabs), so there is no
+## wrapper Control and no separate close Button to track. _tab_session_ids is
+## rebuilt 1:1 with %ShaderTabs's own tab indices in the same pass, so
+## _on_tab_bar_tab_changed/_on_tab_bar_close_pressed can resolve a tab index
+## back to the document it belongs to by stable session id rather than
+## trusting the raw index alone. _new_tab_button is %ShaderTabs's own fixed
+## sibling in ShaderTabRow (gst_main_panel.tscn), never touched here.
 ##
-## Round 1 fix 2: every rebuild frees and recreates every tab Button, which
-## would silently drop keyboard undo focus (_owns_undo_focus() reads
-## get_viewport().gui_get_focus_owner() directly) whenever the control that
-## held it was itself one of the freed tab Buttons -- exactly what a real
-## tab click leaves focused just before the click's own activate_document
-## call reaches here. focus_was_tab_button is captured before anything is
-## freed; when true, focus is transferred onto the new active document's own
-## rebuilt Button below, so a Ctrl+Z immediately after a tab click still
-## passes that gate. A refresh triggered by an unrelated stack/property edit
-## (focus on an inspector row, the stack list, a native popup, etc.) leaves
-## that focus alone.
+## %ShaderTabs itself is never freed or recreated (unlike the old per-tab
+## Button row), so keyboard-undo focus (_owns_undo_focus()) surviving a
+## rebuild is no longer this function's concern: if the TabBar held focus
+## before this call, it still holds the same Control instance, and therefore
+## still holds focus, after it. _syncing_tabs suppresses
+## _on_tab_bar_tab_changed while the current_tab write below runs, so
+## restoring the active tab's own index here can never re-enter
+## activate_document against the document _refresh_tabs() is already
+## reflecting.
 func _refresh_tabs() -> void:
-	var current_focus: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	var focus_was_tab_button: bool = current_focus != null and (_tab_buttons.values().has(current_focus) or _tab_close_buttons.values().has(current_focus))
-	for child: Node in _shader_tabs.get_children():
-		if child == _new_tab_button:
-			continue
-		_shader_tabs.remove_child(child)
-		child.queue_free()
-	_tab_buttons.clear()
-	_tab_close_buttons.clear()
+	_syncing_tabs = true
+	_shader_tabs.clear_tabs()
+	_tab_session_ids.clear()
 	var untitled_index: int = 0
-	var active_button: Button = null
+	var active_index: int = -1
 	for doc: GSTDocument in _documents:
 		if doc.current_path.is_empty() and doc.recipe_name.is_empty():
 			untitled_index += 1
-		var button: Button = Button.new()
-		button.toggle_mode = true
-		button.button_group = _tab_button_group
-		button.button_pressed = doc == _active_document
-		button.clip_text = true
-		button.custom_minimum_size.x = 96.0
-		button.text = _tab_title(doc, untitled_index)
-		button.tooltip_text = _tab_tooltip(doc)
-		button.pressed.connect(activate_document.bind(doc))
-		_tab_buttons[doc.session_id] = button
+		_shader_tabs.add_tab(_tab_title(doc, untitled_index))
+		var index: int = _shader_tabs.get_tab_count() - 1
+		_shader_tabs.set_tab_tooltip(index, _tab_tooltip(doc))
+		_tab_session_ids.append(doc.session_id)
 		if doc == _active_document:
-			active_button = button
-		# Phase 6 (docs/SHADER_TABS_reviewed-plan.md): "Wire close buttons".
-		# A real native Button, not a plain-text glyph on the title button
-		# itself, so the close gesture has its own hit target and its own
-		# tooltip separate from the title's full-path tooltip.
-		var close_button: Button = Button.new()
-		close_button.text = "x"
-		close_button.tooltip_text = "Close tab"
-		close_button.flat = true
-		close_button.custom_minimum_size.x = 24.0
-		close_button.pressed.connect(close_document.bind(doc))
-		_tab_close_buttons[doc.session_id] = close_button
-		var tab_wrapper: HBoxContainer = HBoxContainer.new()
-		tab_wrapper.add_theme_constant_override("separation", 0)
-		tab_wrapper.add_child(button)
-		tab_wrapper.add_child(close_button)
-		_shader_tabs.add_child(tab_wrapper)
-	_shader_tabs.move_child(_new_tab_button, _shader_tabs.get_child_count() - 1)
-	if focus_was_tab_button and active_button != null:
-		active_button.grab_focus()
-	# Fix 3 (round 1): keep the active tab scrolled into view under overflow,
-	# including right after a narrow-layout resize. _await_scroll_active_tab_
-	# into_view re-validates the target since another _refresh_tabs() call
-	# (e.g. two edits in the same frame) can free it again before it runs.
-	_await_scroll_active_tab_into_view(active_button)
+			active_index = index
+	if active_index != -1:
+		_shader_tabs.current_tab = active_index
+	_syncing_tabs = false
+	# Fix 3 (round 1, Button-row era) / 2026-09-15 TabBar pass: keep the
+	# active tab scrolled into view under overflow, including right after a
+	# narrow-layout resize. _await_ensure_active_tab_visible re-reads
+	# active_index's own current validity since another _refresh_tabs() call
+	# (e.g. two edits in the same frame) can rebuild the tab list again
+	# before it runs.
+	_await_ensure_active_tab_visible(active_index)
+	_apply_tab_bar_width()
 
 
-## A freshly rebuilt Button's own laid-out position/size, and
-## _shader_tabs_scroll's own internal scrollbar clamp for its current size
-## (ScrollContainer::_reposition_children, scene/gui/scroll_container.cpp),
-## are not guaranteed final until the next real frame boundary -- measured
-## at a 150% editor scale (round 1 fix 3): a same-frame call_deferred call
-## here read a stale scroll transform and landed short of the true end by a
-## fixed amount every time. Awaiting process_frame instead of using
-## call_deferred lets both settle first.
-func _await_scroll_active_tab_into_view(button: Button) -> void:
+## %ShaderTabs's own laid-out size is not guaranteed final until the next
+## real frame boundary -- measured at a 150% editor scale (round 1 fix 3,
+## Button-row era, reproduced identically for TabBar.ensure_tab_visible's own
+## get_size().width read, tab_bar.cpp): a same-frame call here read a stale
+## size and landed short of the true end by a fixed amount every time.
+## Awaiting process_frame first lets layout settle.
+func _await_ensure_active_tab_visible(index: int) -> void:
 	await get_tree().process_frame
-	if is_instance_valid(button) and button.is_inside_tree():
-		_shader_tabs_scroll.ensure_control_visible(button)
+	if is_instance_valid(_shader_tabs) and index >= 0 and index < _shader_tabs.get_tab_count():
+		_shader_tabs.ensure_tab_visible(index)
+
+
+## %ShaderTabs.tab_changed: fires only when TabBar's own current_tab index
+## actually moves (TabBar::set_current_tab, tab_bar.cpp), so a reclick on the
+## already-active tab never reaches here at all -- no toggle/button_group
+## bookkeeping needed the way the old per-tab Button row required.
+## _syncing_tabs rejects the case this same signal fires for _refresh_tabs()'s
+## own programmatic current_tab write, which must not re-enter
+## activate_document against the document already being reflected.
+## Wired-by: %ShaderTabs.tab_changed (_ready()).
+func _on_tab_bar_tab_changed(tab: int) -> void:
+	if _syncing_tabs or tab < 0 or tab >= _tab_session_ids.size():
+		return
+	var doc: GSTDocument = _find_document_by_session_id(_tab_session_ids[tab])
+	if doc == null:
+		return
+	activate_document(doc)
+
+
+## %ShaderTabs.tab_close_pressed: the close icon's own cb_rect hit-test
+## (tab_bar.cpp), independent of tab_changed/tab_clicked. Resolves through
+## _tab_session_ids/_find_document_by_session_id, same as
+## _on_tab_bar_tab_changed above, rather than indexing _documents directly,
+## so a stale signal delivered after some other rebuild already ran resolves
+## to null instead of closing whatever document now happens to occupy that
+## index.
+## Wired-by: %ShaderTabs.tab_close_pressed (_ready()).
+func _on_tab_bar_close_pressed(tab: int) -> void:
+	if tab < 0 or tab >= _tab_session_ids.size():
+		return
+	var doc: GSTDocument = _find_document_by_session_id(_tab_session_ids[tab])
+	if doc == null:
+		return
+	close_document(doc)
 
 
 ## Presentation (decision 4, docs/SHADER_TABS_reviewed.md): filename without
@@ -1085,9 +1174,11 @@ func _tab_tooltip(doc: GSTDocument) -> String:
 ## not move to doc while a commit is still in flight, since that commit
 ## would otherwise land after _install_document_state/_inspector_column.setup
 ## have already rebound _undo/the inspector column to doc's own adapter.
-## Wired-by: _refresh_tabs()'s own per-tab Button.pressed connection (phase
-## 4); also the New/Open/Reopen/Recipes handlers' own canonical-path-reuse
-## path (open_path below) and an editor smoke seam for
+## Wired-by: %ShaderTabs.tab_changed, through _on_tab_bar_tab_changed (2026-
+## 09-15 TabBar pass, predecessor: _refresh_tabs()'s own per-tab
+## Button.pressed connection, phase 4); also the New/Open/Reopen/Recipes
+## handlers' own canonical-path-reuse path (open_path below) and an editor
+## smoke seam for
 ## tests/gst_editor_documents_smoke.gd, tests/gst_editor_tabs_smoke.gd, and
 ## the navigation/history-preservation assertions in tests/gst_editor_smoke.gd.
 func activate_document(doc: GSTDocument) -> void:
@@ -1114,16 +1205,66 @@ func get_documents() -> Array[GSTDocument]:
 	return _documents.duplicate()
 
 
-## doc's own tab Button, or null if doc is not open (phase 4).
+## %ShaderTabs itself (2026-09-15 TabBar pass, predecessor: get_tab_button/
+## get_tab_close_button, which returned per-document Buttons a TabBar has no
+## equivalent of).
 ## Wired-by: none (editor smoke seam)
-func get_tab_button(doc: GSTDocument) -> Button:
-	return _tab_buttons.get(doc.session_id) as Button
+func get_tab_bar() -> TabBar:
+	return _shader_tabs
 
 
-## doc's own tab close Button, or null if doc is not open (phase 6).
+## doc's own tab index within %ShaderTabs, or -1 if doc is not open.
 ## Wired-by: none (editor smoke seam)
-func get_tab_close_button(doc: GSTDocument) -> Button:
-	return _tab_close_buttons.get(doc.session_id) as Button
+func get_tab_index(doc: GSTDocument) -> int:
+	if doc == null:
+		return -1
+	return _tab_session_ids.find(doc.session_id)
+
+
+## doc's own tab body rect, in global/screen coordinates. Rect2() if doc is
+## not open.
+## Wired-by: none (editor smoke seam)
+func get_tab_rect(doc: GSTDocument) -> Rect2:
+	var index: int = get_tab_index(doc)
+	if index == -1:
+		return Rect2()
+	var local: Rect2 = _shader_tabs.get_tab_rect(index)
+	return Rect2(_shader_tabs.get_global_rect().position + local.position, local.size)
+
+
+## doc's own tab close-icon hit rect, in global/screen coordinates. Rect2() if
+## doc is not open. See _tab_close_rect_local below for the derivation.
+## Wired-by: none (editor smoke seam)
+func get_tab_close_rect(doc: GSTDocument) -> Rect2:
+	var index: int = get_tab_index(doc)
+	if index == -1:
+		return Rect2()
+	var local: Rect2 = _tab_close_rect_local(index)
+	return Rect2(_shader_tabs.get_global_rect().position + local.position, local.size)
+
+
+## Replicates TabBar's own internal close-button hit rect (TabBar::_draw_tab's
+## cb_rect, tab_bar.cpp), algebraically, from the same public StyleBox/
+## Texture2D theme items that function itself reads -- cb_rect is private,
+## with no getter. No shader tab is ever given an icon or a right_button, so
+## cb_rect's right edge is exactly the tab's own right edge offset by the tab
+## style's own right margin minus the close button's own highlight-style
+## right margin, and its size is that highlight style's own minimum size plus
+## the close icon's own size. Verified against
+## .now/tabs-validation/godot-4.4-source/scene/gui/tab_bar.cpp:604-626 (the
+## draw-time cb_rect assignment) algebraically cancelled against
+## get_minimum_size's own matching width accounting at :40-108, so this reads
+## only get_tab_rect's own already-final size_cache plus theme items, never a
+## re-derivation of text width.
+func _tab_close_rect_local(index: int) -> Rect2:
+	var tab_rect: Rect2 = _shader_tabs.get_tab_rect(index)
+	var tab_style: StyleBox = _shader_tabs.get_theme_stylebox("tab_selected" if index == _shader_tabs.current_tab else "tab_unselected")
+	var button_style: StyleBox = _shader_tabs.get_theme_stylebox("button_highlight")
+	var close_icon: Texture2D = _shader_tabs.get_theme_icon("close")
+	var size: Vector2 = button_style.get_minimum_size() + close_icon.get_size()
+	var right: float = tab_rect.position.x + tab_rect.size.x - tab_style.get_margin(SIDE_RIGHT) + button_style.get_margin(SIDE_RIGHT)
+	var top: float = tab_style.get_margin(SIDE_TOP) + ((tab_rect.size.y - tab_style.get_minimum_size().y) - size.y) / 2.0
+	return Rect2(Vector2(right - size.x, top), size)
 
 
 ## Wired-by: none (editor smoke seam)
@@ -1131,14 +1272,13 @@ func get_new_tab_button() -> Button:
 	return _new_tab_button
 
 
-## Wired-by: none (editor smoke seam)
-func get_tab_scroll() -> ScrollContainer:
-	return _shader_tabs_scroll
-
-
+## The full tab row (%ShaderTabs plus the trailing New-tab Button). Unchanged
+## by the 2026-09-15 TabBar pass; get_tab_scroll() (the ScrollContainer
+## %ShaderTabs used to sit inside) is gone -- %ShaderTabs now scrolls its own
+## tab content internally (scrolling_enabled, gst_main_panel.tscn).
 ## Wired-by: none (editor smoke seam)
 func get_tab_row() -> HBoxContainer:
-	return _shader_tabs
+	return _shader_tab_row
 
 
 ## Canonical path comparison logic, exposed statically and gated by an
@@ -1279,7 +1419,9 @@ func open_document(new_stack: GSTStack, new_path: String, new_recipe_open: bool,
 
 
 ## Public close entry point (decision 9, docs/SHADER_TABS_reviewed-plan.md
-## phase 6): wired by each tab's own close Button (_refresh_tabs). A clean
+## phase 6): wired by %ShaderTabs's own tab_close_pressed signal, through
+## _on_tab_bar_close_pressed (2026-09-15 TabBar pass, predecessor: each tab's
+## own close Button, _refresh_tabs). A clean
 ## (non-dirty) document closes immediately; a dirty one is offered
 ## Save/Discard/Cancel through _close_dialog. Finishes any active native
 ## gesture on doc first, but only when doc is the active document -- an
@@ -1292,7 +1434,7 @@ func open_document(new_stack: GSTStack, new_path: String, new_recipe_open: bool,
 ## "Finish continuous native edits before evaluating dirty state"). Registers
 ## no undo action anywhere (Cross-cutting "Keep closing and entry navigation
 ## outside stack undo").
-## Wired-by: _refresh_tabs()'s own per-tab close Button.pressed connection.
+## Wired-by: %ShaderTabs.tab_close_pressed, through _on_tab_bar_close_pressed.
 func close_document(doc: GSTDocument) -> void:
 	if doc == null or not _documents.has(doc):
 		return

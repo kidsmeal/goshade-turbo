@@ -19,17 +19,16 @@ script = ExtResource("1")
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="ShaderTabsScroll" type="ScrollContainer" parent="ShaderTabRow"]
+[node name="ShaderTabs" type="TabBar" parent="ShaderTabRow"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
-vertical_scroll_mode = 0
+size_flags_horizontal = 0
+tab_close_display_policy = 2
+max_tab_width = 160
+scrolling_enabled = true
+select_with_rmb = false
 
-[node name="ShaderTabs" type="HBoxContainer" parent="ShaderTabRow/ShaderTabsScroll"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="NewTabButton" type="Button" parent="ShaderTabRow/ShaderTabsScroll/ShaderTabs"]
+[node name="NewTabButton" type="Button" parent="ShaderTabRow"]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "New shader"
