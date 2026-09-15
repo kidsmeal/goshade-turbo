@@ -459,6 +459,53 @@ func _on_tab_row_resized() -> void:
 ## Godot's own scene tab strip. Called from _refresh_tabs() (tab count/
 ## content changed) and _on_tab_row_resized (row width changed, e.g. a window
 ## resize) -- the only two things either side of this calculation depends on.
+##
+## 2026-09-15 offset-arrows fix (user-reported defect): two compounding
+## causes, both confirmed directly against
+## .now/tabs-validation/godot-4.4-source/scene/gui/tab_bar.cpp, made
+## %ShaderTabs show its native overflow scroll arrows
+## (get_offset_buttons_visible()) right after a tab add or close even with
+## only three or four tabs open, nowhere near overflowing the row.
+##
+## Cause 1 (stale size): setting custom_minimum_size.x alone never widens
+## %ShaderTabs's own actual Control.size before this function returns --
+## Container::queue_sort() (the pass that would apply it) is deferred
+## (call_deferred), landing on a later idle-frame flush, not synchronously
+## here. TabBar::_update_cache (:1016) decides buttons_visible from
+## get_size().width (:1022), a stale, still-too-small value left over from
+## before this rebuild; _measure_tab_bar_content_width's own trailing
+## clip_tabs = true call (:502) re-enters _update_cache through
+## TabBar::set_clip_tabs (:1429) against that exact stale size.
+## reset_size() below forces Control::set_size (control.cpp:1449) to run
+## synchronously against the custom_minimum_size.x just written
+## (get_combined_minimum_size() clamps the requested (0, 0) up to it), which
+## fires NOTIFICATION_RESIZED in-line (control.cpp:1748, no deferral).
+##
+## Cause 2 (hover/unselected style mismatch): TabBar::_update_cache's own
+## per-tab get_tab_width(i) (:1482-1531), the function that actually decides
+## overflow, deliberately uses tab_hovered_style instead of tab_unselected_
+## style for every non-current tab whenever the hovered style is wider
+## ("Always pick the widest style between hovered and unselected, to avoid an
+## infinite loop when switching tabs with the mouse", :1491) -- regardless of
+## whether that tab is actually hovered right now. get_minimum_size() (:39-
+## 108), what _measure_tab_bar_content_width reads, only applies tab_hovered_
+## style to the one tab TabBar's own `hover` field currently names (:60-61),
+## so on this project's editor theme (tab_hovered wider than tab_unselected)
+## its sum under-counts get_tab_width()'s real per-tab sum, and which tabs
+## are affected shifts with the real OS mouse position between calls --
+## confirmed directly in this session: identical, genuinely non-overflowing
+## tab content flipped buttons_visible between true and false across
+## otherwise-identical successive rebuilds.
+##
+## reset_size()'s own NOTIFICATION_RESIZED already re-runs _update_cache
+## once against the corrected size, but that alone still left cause 2's own
+## hover-state sensitivity able to land on true; a second clip_tabs off/on
+## round trip forces one more _update_cache pass, now against both the
+## already-corrected size and whatever the real mouse position is by the
+## time this function actually returns -- confirmed empirically (four real
+## add/close cycles, 4.4) to settle buttons_visible correctly every time,
+## false through every genuinely non-overflowing tab count and true only
+## once real overflow starts.
 func _apply_tab_bar_width() -> void:
 	if _shader_tab_row == null or _shader_tabs == null or _new_tab_button == null:
 		return
@@ -466,6 +513,9 @@ func _apply_tab_bar_width() -> void:
 	var separation: float = float(_shader_tab_row.get_theme_constant("separation"))
 	var available: float = maxf(0.0, _shader_tab_row.size.x - _new_tab_button.size.x - separation)
 	_shader_tabs.custom_minimum_size.x = minf(content_width, available)
+	_shader_tabs.reset_size()
+	_shader_tabs.clip_tabs = false
+	_shader_tabs.clip_tabs = true
 
 
 ## %ShaderTabs's own true, unclipped tab content width. TabBar::

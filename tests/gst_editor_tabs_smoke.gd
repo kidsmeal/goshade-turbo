@@ -112,12 +112,34 @@ func run(plugin: EditorPlugin) -> void:
 	_run_new_tab_button_follows_last_tab(panel)
 	await _run_reclick_stays_selected_and_keyboard_undo_focus(plugin, panel, saved_doc, fire_doc)
 	await _run_selection_and_scroll_restoration(plugin, panel, working_doc, fire_doc)
+	# 2026-09-15 offset-arrows fix (user-reported defect): run right here, not
+	# at _run_stable_id_switching's own three-tab point, because working_doc
+	# is still pristine there (current_path.is_empty() and not is_dirty()) --
+	# open_document's own _find_reusable_pristine_document (gst_main_panel.gd)
+	# would reuse it instead of allocating a genuinely new fourth tab, and a
+	# reuse rebuilds the same three tabs' worth of content, never widening
+	# %ShaderTabs, so the bug this proves (TabBar::_update_cache reading a
+	# stale, pre-resize Control.size.x right after a real content-width
+	# change) would not even be exercised. _run_selection_and_scroll_
+	# restoration just above added 12 layers onto working_doc, so by this
+	# point saved_doc (current_path set), fire_doc ("Fire*", dirty), and
+	# working_doc (now dirty) are all unreusable -- the real click below is
+	# guaranteed a genuinely new fourth document, exactly the "only two or
+	# three tabs open, far from overflowing" shape from the report.
+	var below_overflow_three_tabs: Dictionary = await _run_no_offset_buttons_below_overflow_three_tabs(plugin, panel)
 	await _run_scroll_state_no_bleed_across_documents(plugin, panel, working_doc, fire_doc, saved_doc)
 	await _run_stale_picker_cancelled_on_switch(plugin, panel, working_doc, fire_doc)
 	await _run_finish_before_switch(plugin, panel, working_doc, fire_doc)
 	await _run_active_only_viewport_updates(plugin, panel)
 	await _run_invalid_document_isolation(plugin, panel)
 	await _run_long_title_and_overflow(plugin, panel)
+	# Real-overflow counterpart to below_overflow_three_tabs above, combined
+	# into one "no_offset_buttons_below_overflow" check: _run_long_title_and_
+	# overflow's own tab_row_overflow_scrolls check just proved
+	# get_offset_buttons_visible() true with 24 tabs open; nothing below
+	# touches tab content or %ShaderTabs's own size before this reads it, so
+	# that same true value still holds.
+	_finish_no_offset_buttons_below_overflow(panel, below_overflow_three_tabs)
 	# Tab row and toolbar follow-up 2026-09-15: captured here, right after the
 	# 24-tab overflow state _run_long_title_and_overflow's own
 	# tab_row_overflow_scrolls/new_tab_button_pinned_at_row_edge_when_
@@ -306,6 +328,68 @@ func _run_selection_and_scroll_restoration(plugin: EditorPlugin, panel: GSTMainP
 	var anchor_restored: bool = restored_list.get_scroll_anchor_id() == anchor_before
 	var offset_restored: bool = is_equal_approx(restored_list.get_scroll_offset(), offset_before)
 	_check("selection_and_list_position_restored", layers_built_ok and selection_restored and anchor_restored and offset_restored, "layers_built=%s selection_restored=%s anchor=%s/%s offset=%.3f/%.3f" % [layers_built_ok, selection_restored, anchor_before, restored_list.get_scroll_anchor_id(), offset_before, restored_list.get_scroll_offset()])
+
+
+## 2026-09-15 offset-arrows fix (user-reported defect, tabrow-arrows-2026-09-15):
+## reproduces "after pressing the + new-tab button, with only two or three
+## tabs open, %ShaderTabs showed its overflow scroll arrows" through the same
+## real controls a user drives -- %NewTabButton (a plain Button, needing the
+## NOTIFICATION_MOUSE_ENTER workaround _click_new_tab_button below documents,
+## matching tests/gst_editor_document_close_smoke.gd's own _click_button
+## precedent) and the new tab's own close icon (_click_tab_close below,
+## matching that same file's cursor-warp precedent for TabBar's own
+## close-button hit test). Checked once right after each real click settles
+## (no further process_frame awaited yet: everything from _on_new_pressed's
+## own click-driven cascade down through _refresh_tabs()/_apply_tab_bar_width()
+## already ran synchronously inside that click's own release-event dispatch,
+## gst_main_panel.gd) and once more a frame later, both directions
+## (add and close) -- proving get_offset_buttons_visible() never reads true
+## across that boundary, not just eventually settling back to false.
+## Returns a Dictionary the caller folds into one combined
+## "no_offset_buttons_below_overflow" check alongside the real-overflow (24
+## tabs) counterpart _run_long_title_and_overflow already proves true, via
+## _finish_no_offset_buttons_below_overflow.
+func _run_no_offset_buttons_below_overflow_three_tabs(plugin: EditorPlugin, panel: GSTMainPanel) -> Dictionary:
+	var tab_bar: TabBar = panel.get_tab_bar()
+	var before_count: int = panel.get_documents().size()
+
+	await _click_new_tab_button(plugin, panel.get_new_tab_button())
+	var added_doc: GSTDocument = panel.get_active_document()
+	var added_distinct: bool = added_doc != null and panel.get_documents().size() == before_count + 1
+	var no_arrows_same_frame_after_add: bool = not tab_bar.get_offset_buttons_visible()
+	var arrows_path: String = OS.get_environment("GST_TABS_UI_ARROWS_SCREENSHOT_PATH")
+	if not arrows_path.is_empty():
+		var error: Error = plugin.get_viewport().get_texture().get_image().save_png(arrows_path)
+		_check("tab_row_arrows_evidence_screenshot", error == OK, "path='%s' error=%d" % [arrows_path, error])
+	await plugin.get_tree().process_frame
+	var no_arrows_next_frame_after_add: bool = not tab_bar.get_offset_buttons_visible()
+	if panel.is_picker_open():
+		panel.get_picker().cancelled.emit()
+		await plugin.get_tree().process_frame
+
+	await _click_tab_close(plugin, panel, added_doc)
+	var closed_back_down: bool = panel.get_documents().size() == before_count
+	var no_arrows_same_frame_after_close: bool = not tab_bar.get_offset_buttons_visible()
+	await plugin.get_tree().process_frame
+	var no_arrows_next_frame_after_close: bool = not tab_bar.get_offset_buttons_visible()
+
+	return {
+		"ok": added_distinct and closed_back_down and no_arrows_same_frame_after_add and no_arrows_next_frame_after_add and no_arrows_same_frame_after_close and no_arrows_next_frame_after_close,
+		"detail": "added_distinct=%s closed_back_down=%s no_arrows_same_add=%s no_arrows_next_add=%s no_arrows_same_close=%s no_arrows_next_close=%s" % [added_distinct, closed_back_down, no_arrows_same_frame_after_add, no_arrows_next_frame_after_add, no_arrows_same_frame_after_close, no_arrows_next_frame_after_close],
+	}
+
+
+## Combines below-overflow's own two real-click phases (three_tab_phase,
+## captured above right when only three tabs -- soon four, then three again --
+## were open) with the real-overflow counterpart _run_long_title_and_overflow
+## already proved (24 tabs, get_offset_buttons_visible() true) into the one
+## "no_offset_buttons_below_overflow" check this fix pass adds. Nothing
+## between that call and this one touches tab content or %ShaderTabs's own
+## size, so re-reading get_offset_buttons_visible() here still reflects it.
+func _finish_no_offset_buttons_below_overflow(panel: GSTMainPanel, three_tab_phase: Dictionary) -> void:
+	var overflow_true_at_24_tabs: bool = panel.get_tab_bar().get_offset_buttons_visible()
+	var ok: bool = bool(three_tab_phase.get("ok", false)) and overflow_true_at_24_tabs
+	_check("no_offset_buttons_below_overflow", ok, "%s overflow_true_at_24_tabs=%s tab_count=%d" % [String(three_tab_phase.get("detail", "")), overflow_true_at_24_tabs, panel.get_documents().size()])
 
 
 ## Fix-now S2 (phase 4 review round 2): a document that has never had its own
@@ -773,6 +857,57 @@ func _push_mouse(plugin: EditorPlugin, position: Vector2, button: MouseButton, p
 	event.button_index = button
 	event.pressed = pressed
 	plugin.get_viewport().push_input(event, true)
+
+
+## Real click on %NewTabButton's own global-rect center (never
+## Button.pressed.emit()). NOTIFICATION_MOUSE_ENTER supplies the one piece of
+## engine state a synthetic InputEventMouseButton never establishes on its own
+## in this session (BaseButton::on_action_event gates a mouse-button event
+## behind status.hovering; Viewport's own hover tracking requires a real
+## DisplayServer mouse-enter) -- matches
+## tests/gst_editor_document_close_smoke.gd's own _click_button exactly, this
+## file's only plain-Button click target (every tab title/close click instead
+## goes through _click_tab/_click_tab_close, which need no such workaround:
+## TabBar's own gui_input resolves a click by the event's own position alone,
+## tab_bar.cpp).
+func _click_new_tab_button(plugin: EditorPlugin, button: Button) -> void:
+	await plugin.get_tree().process_frame
+	var point: Vector2 = button.get_global_rect().get_center()
+	button.notification(Control.NOTIFICATION_MOUSE_ENTER)
+	_push_mouse(plugin, point, MOUSE_BUTTON_LEFT, true)
+	await plugin.get_tree().process_frame
+	await plugin.get_tree().process_frame
+	_push_mouse(plugin, point, MOUSE_BUTTON_LEFT, false)
+	await plugin.get_tree().process_frame
+
+
+## Real click on doc's own tab close icon: press then release
+## InputEventMouseButton at panel.get_tab_close_rect(doc)'s own global-rect
+## center (never panel.close_document() called directly). Warps the real OS
+## cursor to the close icon first (restored after) -- matches
+## tests/gst_editor_document_close_smoke.gd's own _click_tab_close exactly:
+## unlike a tab body click, TabBar's own close-button press handling
+## (tab_bar.cpp TabBar::gui_input's cb_pressing branch) calls _update_hover(),
+## which reads the real OS cursor position for this panel's own root
+## Viewport, not the synthetic event's own .position field a tab body click
+## already resolves against directly.
+func _click_tab_close(plugin: EditorPlugin, panel: GSTMainPanel, doc: GSTDocument) -> void:
+	var index: int = panel.get_tab_index(doc)
+	if index == -1:
+		return
+	panel.get_tab_bar().ensure_tab_visible(index)
+	await plugin.get_tree().process_frame
+	var point: Vector2 = panel.get_tab_close_rect(doc).get_center()
+	var original_mouse: Vector2 = DisplayServer.mouse_get_position()
+	DisplayServer.warp_mouse(Vector2i(point))
+	await plugin.get_tree().process_frame
+	_push_mouse(plugin, point, MOUSE_BUTTON_LEFT, true)
+	await plugin.get_tree().process_frame
+	await plugin.get_tree().process_frame
+	_push_mouse(plugin, point, MOUSE_BUTTON_LEFT, false)
+	await plugin.get_tree().process_frame
+	await plugin.get_tree().process_frame
+	DisplayServer.warp_mouse(Vector2i(original_mouse))
 
 
 func _push_key(target: Control, keycode: Key, ctrl: bool = false, shift: bool = false) -> void:

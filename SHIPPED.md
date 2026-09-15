@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-15
+- Tab row: size the TabBar synchronously after add and close so the scroll arrows appear only on real overflow
 - Tab row: draw the new-tab button as the editor's flat Add icon, matching the scene tabs
 - Tab strip as native TabBar: close x inside the tab, + after the newest tab, File menu drawn with the Button style
 - Tab row: close control beside the title, New tab after the newest tab, File drawn as a button, Export in the left toolbar group

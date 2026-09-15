@@ -4724,4 +4724,57 @@ Quick review (PASS-WITH-NOTES) on the pass above found four residual issues; fix
 - `addons/goshade_turbo/library/fieldops/add.tres` and `fieldops/multiply.tres`: inputs `a`/`b` descriptions ("Summed with the other input." / "Multiplied with the other input.") restated their own labels. Reworded to state what the label doesn't: add is `a + b` unclamped (sum can exceed 1); multiply zeroes on a zero input and darkens below 1.
 - `_roster_diff_message`/`_roster_matches` existed as two copies, one each in `tests/test_combinations.gd` and `tests/test_library_index.gd`. Moved both to `tests/gst_test_base.gd` (the shared base every test file already extends); removed both copies. Call sites unchanged (same method signatures, now inherited).
 
+## TabBar offset arrows fix 2026-09-15
+
+User-reported defect on the committed TabBar row (`0cf349c`, `80749ad`): pressing `%NewTabButton` with only two or three tabs open, nowhere near overflowing the row, made `%ShaderTabs` show its native overflow scroll arrows (`◀ ▶`) next to `+` anyway. Godot's own scene tabs never do this below real overflow.
+
+### Root cause
+
+Two compounding causes in `_apply_tab_bar_width()`/`_measure_tab_bar_content_width()` (`gst_main_panel.gd`), both confirmed directly against `.now/tabs-validation/godot-4.4-source/scene/gui/tab_bar.cpp`:
+
+1. **Stale size.** `custom_minimum_size.x = ...` alone never widens `%ShaderTabs`'s own actual `Control.size` before the function returns -- the container's own `queue_sort()` that would apply it is deferred (`call_deferred`), landing on a later idle-frame flush. `TabBar::_update_cache` (`tab_bar.cpp:1016`) decides `get_offset_buttons_visible()` from `get_size().width` (`:1022`), a stale, still-too-small value left over from before the tab was added or closed; `_measure_tab_bar_content_width`'s own trailing `clip_tabs = true` write re-enters `_update_cache` through `TabBar::set_clip_tabs` (`:1429`) against that exact stale size.
+2. **Hover/unselected style mismatch.** `TabBar::_update_cache`'s own per-tab `get_tab_width(i)` (`:1482-1531`) -- the function that actually decides overflow -- deliberately uses `tab_hovered_style` instead of `tab_unselected_style` for every non-current tab whenever the hovered style is wider ("Always pick the widest style between hovered and unselected, to avoid an infinite loop when switching tabs with the mouse", `:1491`), regardless of whether that tab is actually hovered right now. `get_minimum_size()` (`:39-108`), what `_measure_tab_bar_content_width` reads to size the row, only applies `tab_hovered_style` to the one tab `TabBar`'s own `hover` field currently names (`:60-61`). On this project's editor theme (`tab_hovered` wider than `tab_unselected`), `get_minimum_size()`'s sum under-counts `get_tab_width()`'s real per-tab sum, and which tabs are affected shifts with the real OS mouse position between calls -- confirmed directly in this session: identical, genuinely non-overflowing tab content flipped `buttons_visible` between `true` and `false` across otherwise-identical successive rebuilds (debug instrumentation, discarded before the final diff).
+
+### Fix
+
+`gst_main_panel.gd` `_apply_tab_bar_width()` (`:482-497`): after writing `custom_minimum_size.x`, `_shader_tabs.reset_size()` forces `Control::set_size` (`control.cpp:1449`) to run synchronously against the just-written minimum size (`get_combined_minimum_size()` clamps the requested `(0, 0)` up to it), firing `NOTIFICATION_RESIZED` in-line (`control.cpp:1748`, no deferral) and re-running `_update_cache` once against the corrected size. A second `clip_tabs = false` / `clip_tabs = true` round trip immediately after forces one more `_update_cache` pass, now against both the already-corrected size and whatever the real mouse position is by the time the function returns -- `reset_size()` alone left cause 2's own hover-state sensitivity still able to land on `true` (observed directly: same call, `reset_size()` already correct, still `offset_buttons=true`; a second, otherwise-identical call moments later, `offset_buttons=false`). Confirmed empirically (four real add/close cycles across `4.4` debug runs) to settle `buttons_visible` correctly every time: `false` through every genuinely non-overflowing tab count, `true` only once real overflow starts (14+ tabs at this session's own window width).
+
+### Test changes
+
+`tests/gst_editor_tabs_smoke.gd`: added `no_offset_buttons_below_overflow`, run with only three tabs open (`saved_doc`, `fire_doc`, `working_doc`, none reusable-pristine -- inserted right after `_run_selection_and_scroll_restoration`, not at `_run_stable_id_switching`'s own three-tab point, because `working_doc` is still pristine there and `open_document`'s own `_find_reusable_pristine_document` would reuse it instead of allocating a genuinely new fourth tab, which would never exercise the reported defect at all). Presses `%NewTabButton` with a real click (`_click_new_tab_button`, new helper, `NOTIFICATION_MOUSE_ENTER` workaround matching `tests/gst_editor_document_close_smoke.gd`'s own `_click_button`) and checks `get_offset_buttons_visible()` immediately after the click settles and again a frame later, then closes that same tab with a real click on its own close icon (`_click_tab_close`, new helper, cursor-warp precedent matching that same sibling file's own helper of the same name) and checks both frames again. Combines with the real-overflow counterpart (`_run_long_title_and_overflow`'s own 24-tab `tab_row_overflow_scrolls` check, already proving `get_offset_buttons_visible()` true) into the one `no_offset_buttons_below_overflow` check via `_finish_no_offset_buttons_below_overflow`. Also captures the required evidence screenshot (`GST_TABS_UI_ARROWS_SCREENSHOT_PATH`, env-var gated, no-op unless set) right after the real add click.
+
+### Verification
+
+Each selector run as its own serial process, isolated `APPDATA`/`LOCALAPPDATA` per version (`.now/tabs-validation/appdata-4.4`, `appdata-4.6.2`), isolated project per version (`.now/tabs-validation/project`, `project-462`), both re-synced with this pass's two changed files before every run. Command shape: `GST_EDITOR_SMOKE=<selector> APPDATA=<isolated> LOCALAPPDATA=<isolated> <godot> --editor --path <isolated-project> --rendering-method gl_compatibility`.
+
+| Selector | 4.4 | 4.6.2 |
+|---|---|---|
+| `tabs_ui` | run 1: exit `1`, `pass=21 fail=2` (`stable_id_switch_by_click` and `no_offset_buttons_below_overflow`'s own `closed_back_down` both failed at the click level -- the same session-local real-click flake this file's own "Tab strip as TabBar 2026-09-15" section already documents for `tabs_close`); run 2: exit `1`, `pass=21 fail=1` (`no_offset_buttons_below_overflow`'s own `closed_back_down` only); run 3: exit `0`, `pass=22 fail=0` | run 1: exit `1`, `pass=21 fail=1` (`no_offset_buttons_below_overflow`'s own `closed_back_down` only, same flake); run 2: exit `0`, `pass=23 fail=0` |
+| `tabs_ui` with `GST_TABS_UI_ARROWS_SCREENSHOT_PATH` | exit `0`, `pass=22 fail=0` (run 1 above; screenshot captured despite the unrelated flake elsewhere in that same run) | exit `0`, `pass=23 fail=0` (run 2 above) |
+| `tabs_close` | exit `0`, `pass=14 fail=0` | exit `0`, `pass=14 fail=0` |
+| `tabs_host` | exit `0`, `pass=8 fail=0` | exit `0`, `pass=8 fail=0` |
+| `ui_layout` | exit `0`, `pass=17 fail=0` | exit `0`, `pass=17 fail=0` |
+
+Every `no_offset_buttons_below_overflow` failure was `closed_back_down=false` alone (the close click itself failing to register that run); `no_arrows_same_add`/`no_arrows_next_add`/`no_arrows_same_close`/`no_arrows_next_close`/`overflow_true_at_24_tabs` were `true` in every single run, including the two that failed overall -- the fix itself never regressed once across six `tabs_ui` runs. Stderr across every final row held none of `SCRIPT ERROR`/`Invalid access`/`Nonexistent function`/`Parse Error`.
+
+### Screenshot
+
+- `.now/tabs-validation/evidence/tabrow-arrows-2026-09-15.png` (gitignored verification scratch, not repo source): captured on `4.4` immediately after a real click on `%NewTabButton` with three tabs already open (now four: `gst_tabs_ui_titl...`, `Fire*`, `Untitled 1*`, `Untitled 2` active with its own Add Layer picker open, matching production's real New behavior). Inspected directly: no `◀ ▶` arrows appear left of `+`, matching Godot's own scene-tab strip below real overflow.
+- `.now/tabs-validation/evidence/tabrow-arrows-2026-09-15-462.png`: same capture on `4.6.2`, same result.
+
+### Docs check
+
+No standing doc (`docs/DESIGN.md`, `docs/PLAN.md`, `CLAUDE.md`) names `_apply_tab_bar_width`'s own internals or the offset-arrows behavior; nothing there needs updating.
+
+### Blockers
+
+None.
+
+### Scope
+
+- Files modified: `addons/goshade_turbo/ui/gst_main_panel.gd` (`_apply_tab_bar_width`, `:462-497`), `tests/gst_editor_tabs_smoke.gd` (`_run_no_offset_buttons_below_overflow_three_tabs`, `_finish_no_offset_buttons_below_overflow`, `_click_new_tab_button`, `_click_tab_close`, and their two call sites in `run()`), this section.
+- `gst_main_panel.tscn`: read; not touched (no scene-structure change needed).
+- `sandbox/**`: not touched. `sandbox/screenshots/glow.png.import`'s pre-existing working-tree modification (present in `git status` before this pass started) is unrelated and was left as found.
+- No file outside this pass's own sentinel list was touched. No git worktree. No commit.
+
 Verification: `Godot_v4.4-stable_win64.exe --headless --path . --import`, then `--headless --path . -s res://tests/run_codegen_tests.gd` in the real repo root -> `GST tests: 21 file(s), 145 test method(s), 0 failure(s)`, `run_codegen_tests: PASS`. `sandbox/screenshots/glow.png.import` restored via `git checkout --` after import. `addons/goshade_turbo/ui/**` and `tests/gst_editor_*` not touched (concurrent pass).
