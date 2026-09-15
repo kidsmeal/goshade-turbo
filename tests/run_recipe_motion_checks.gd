@@ -10,7 +10,22 @@ var _material: ShaderMaterial
 var _failed: bool = false
 
 
+## The README's `--import` prerequisite leaves .recovery_mode_lock in the
+## user data dir on Godot 4.4/4.6 (removed only 1s after the editor's first
+## filesystem scan; an --import run quits before that timer fires, and
+## 4.4/4.6 also skip the Main::cleanup() removal 4.7 added). This wrapper
+## never passes --editor or --import itself, so it never creates that lock;
+## it only cleans up whatever the prerequisite left behind, once at start
+## and once before quit, so the next editor launch never sees it.
+func _remove_stale_recovery_lock() -> void:
+	var lock_path: String = OS.get_user_data_dir().path_join(".recovery_mode_lock")
+	if FileAccess.file_exists(lock_path):
+		DirAccess.remove_absolute(lock_path)
+		print("removed stale %s (Godot's --import prerequisite leaves this on 4.4/4.6; see README.md Tests)" % lock_path)
+
+
 func _initialize() -> void:
+	_remove_stale_recovery_lock()
 	_run.call_deferred()
 
 
@@ -61,6 +76,7 @@ func _run() -> void:
 			if not capture_dir.is_empty():
 				_check(baseline.save_png(capture_dir.path_join("%s-%ds.png" % [recipe, int(time)])) == OK, recipe + " capture", str(time))
 	print("RECIPE_MOTION SUMMARY %s" % ("FAIL" if _failed else "PASS"))
+	_remove_stale_recovery_lock()
 	quit(1 if _failed else 0)
 
 

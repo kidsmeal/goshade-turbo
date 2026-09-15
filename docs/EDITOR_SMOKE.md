@@ -4777,4 +4777,70 @@ None.
 - `sandbox/**`: not touched. `sandbox/screenshots/glow.png.import`'s pre-existing working-tree modification (present in `git status` before this pass started) is unrelated and was left as found.
 - No file outside this pass's own sentinel list was touched. No git worktree. No commit.
 
+## Recovery Mode lock after --import, 2026-09-15
+
+User-reported defect: after following README.md's test prerequisite
+(`godot --headless --path . --import`) and running the unit wrapper, the
+next Project Manager launch offered Recovery Mode on a project that had
+not crashed. Misread as the plugin's quit path leaving a real crash marker.
+
+### Root cause
+
+Godot creates `<user_data_dir>/.recovery_mode_lock` at every `--editor` or
+`--import` launch (`main/main.cpp` `create_lock_file`) and removes it only
+1s after the editor's first filesystem scan (`EditorNode::_sources_changed`,
+then a one-shot timer to `_remove_lock_file`). `godot --headless --path .
+--import` quits before that timer fires, so the lock stays; the next
+Project Manager launch sees it and offers Recovery Mode. Godot 4.7 also
+removes the lock in `Main::cleanup()` on a clean exit; 4.4 and 4.6 do not.
+None of the three test wrappers pass `--editor` or `--import` themselves
+(they run `--headless -s ...` or `-s ...`), so none of them create the
+lock; the wrapper's own quit path was already clean. The lock is entirely
+a side effect of the README's separate `--import` prerequisite step on
+4.4/4.6.
+
+### Fix
+
+`tests/run_codegen_tests.gd`, `tests/run_render_checks.gd`,
+`tests/run_recipe_motion_checks.gd`: each gained
+`_remove_stale_recovery_lock()`, called once at wrapper start
+(`_initialize()`) and once more before the wrapper's own `quit()` (for
+`run_codegen_tests.gd`, also right after the child process exits). It
+checks `FileAccess.file_exists()` against
+`OS.get_user_data_dir().path_join(".recovery_mode_lock")` and, only if
+present, removes it via `DirAccess.remove_absolute()` and prints one line
+naming the path and the reason. No-op when the file is absent; nothing
+else in the user data dir is touched.
+
+README.md Tests section: two sentences after the `--import` prerequisite
+stating the 4.4/4.6 lock behavior, the wrappers' own cleanup, the manual
+delete path per OS (`%APPDATA%\Godot\app_userdata\GoShade
+Turbo\.recovery_mode_lock` on Windows and the Linux/macOS equivalents), and
+that an isolated `APPDATA`/`LOCALAPPDATA` avoids it entirely.
+
+`docs/RUNTIME_VERIFICATION_QUEUE.md`: added Active check 4, "Recovery Mode
+prompt after test runs," closes on the user confirming no prompt next
+session.
+
+### Verification
+
+Real repo, real `%APPDATA%`, Godot 4.4
+(`C:\Users\atk67\Downloads\Godot_v4.4-stable_win64.exe\Godot_v4.4-stable_win64.exe`).
+
+| Step | Lock before | Command | Result | Lock after |
+|---|---|---|---|---|
+| 1 | absent | `--headless --path . --import` | (progress-dialog stderr noise only, expected for `--import`) | present, confirmed via `ls` on `%APPDATA%\Godot\app_userdata\GoShade Turbo\.recovery_mode_lock` |
+| 2 | present | `--headless --path . -s res://tests/run_codegen_tests.gd` | `removed stale ... .recovery_mode_lock (...)`, `GST tests: 21 file(s), 145 test method(s), 0 failure(s)`, `run_codegen_tests: PASS` | absent |
+| 3 (re-imported first) | present | `--path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd` | `removed stale ... .recovery_mode_lock (...)`, `run_render_checks: PASS, 81 stack(s) checked` | absent |
+| 4 (re-imported first) | present | `--path . --rendering-driver opengl3 -s res://tests/run_recipe_motion_checks.gd` | `removed stale ... .recovery_mode_lock (...)`, `RECIPE_MOTION SUMMARY PASS` | absent |
+
+`sandbox/screenshots/glow.png.import` was rewritten by the 4.4 `--import`
+steps (pre-existing cross-version drift, `NOW.md` "Loose ends"); restored
+via `git checkout --` before finishing. No other `sandbox/**` file touched,
+`addons/**` untouched, no worktree, no commit.
+
+### Blockers
+
+None.
+
 Verification: `Godot_v4.4-stable_win64.exe --headless --path . --import`, then `--headless --path . -s res://tests/run_codegen_tests.gd` in the real repo root -> `GST tests: 21 file(s), 145 test method(s), 0 failure(s)`, `run_codegen_tests: PASS`. `sandbox/screenshots/glow.png.import` restored via `git checkout --` after import. `addons/goshade_turbo/ui/**` and `tests/gst_editor_*` not touched (concurrent pass).

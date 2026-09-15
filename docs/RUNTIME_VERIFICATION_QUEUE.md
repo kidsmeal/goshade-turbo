@@ -57,6 +57,21 @@ are easy to retire. Curate with `/claudhd:audit`.
 
 ---
 
+### 4. Recovery Mode prompt after test runs
+
+**Why:** `godot --headless --path . --import` (README.md Tests prerequisite) leaves `.recovery_mode_lock` in the user data dir on Godot 4.4/4.6 (`main/main.cpp` `create_lock_file`, removed only 1s after the editor's first filesystem scan via `EditorNode::_sources_changed`; an `--import` run quits before that timer fires, and 4.4/4.6 also skip the `Main::cleanup()` removal 4.7 added). The next Project Manager launch then offers Recovery Mode on a project that never crashed.
+
+**Code checks already done:**
+- `tests/run_codegen_tests.gd`, `tests/run_render_checks.gd`, `tests/run_recipe_motion_checks.gd` each remove a stale `.recovery_mode_lock` at wrapper start and again before quit, printing one line when removed (2026-09-15 fix).
+- README.md Tests section documents the lock and the manual delete path per OS.
+
+**Manual check:**
+- Run the README import step, then the unit wrapper, on 4.4. Then open the project from the Project Manager. Pass: no Recovery Mode prompt.
+
+**Close when:** the user confirms no prompt on their next session.
+
+---
+
 ## Closed / stale items
 
 - Sandbox `clouds.tres` picked up by render checks (NOW.md loose end): closed, phase 8 render runs report 79, then 81 stacks on all versions.

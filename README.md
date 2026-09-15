@@ -78,6 +78,15 @@ Build the script class cache once per clone, and again after adding any
 godot --headless --path . --import
 ```
 
+On Godot 4.4 and 4.6, this import step leaves `.recovery_mode_lock` in the
+project's user data folder, and the next editor launch asks to open in
+Recovery Mode. The test wrappers below delete it before and after they run.
+If you run only the import step, delete
+`%APPDATA%\Godot\app_userdata\GoShade Turbo\.recovery_mode_lock` (Windows),
+or the equivalent under `~/.local/share/godot/app_userdata/` (Linux) or
+`~/Library/Application Support/Godot/app_userdata/` (macOS). Running the
+import with an isolated `APPDATA`/`LOCALAPPDATA` avoids it entirely.
+
 Codegen and unit tests, headless:
 
 ```

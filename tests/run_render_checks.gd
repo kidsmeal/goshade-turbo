@@ -35,7 +35,22 @@ const SETTLE_FRAMES: int = 3
 const WRITE_SCREENSHOTS_ARG: String = "--write-screenshots"
 
 
+## The README's `--import` prerequisite leaves .recovery_mode_lock in the
+## user data dir on Godot 4.4/4.6 (removed only 1s after the editor's first
+## filesystem scan; an --import run quits before that timer fires, and
+## 4.4/4.6 also skip the Main::cleanup() removal 4.7 added). This wrapper
+## never passes --editor or --import itself, so it never creates that lock;
+## it only cleans up whatever the prerequisite left behind, once at start
+## and once before quit, so the next editor launch never sees it.
+func _remove_stale_recovery_lock() -> void:
+	var lock_path: String = OS.get_user_data_dir().path_join(".recovery_mode_lock")
+	if FileAccess.file_exists(lock_path):
+		DirAccess.remove_absolute(lock_path)
+		print("removed stale %s (Godot's --import prerequisite leaves this on 4.4/4.6; see README.md Tests)" % lock_path)
+
+
 func _initialize() -> void:
+	_remove_stale_recovery_lock()
 	call_deferred("_run")
 
 
@@ -68,6 +83,7 @@ func _run() -> void:
 		all_passed = false
 
 	print("run_render_checks: %s, %d stack(s) checked" % ["PASS" if all_passed else "FAIL", paths.size()])
+	_remove_stale_recovery_lock()
 	quit(0 if all_passed else 1)
 
 

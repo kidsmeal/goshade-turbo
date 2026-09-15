@@ -16,11 +16,28 @@ extends SceneTree
 ## Prerequisite, once after clone and after adding any new class_name
 ## script: `godot --headless --path . --import`. Without it, class_name
 ## globals fail with a Parse error in the child run.
+##
+## That --import prerequisite leaves .recovery_mode_lock in the user data
+## dir on Godot 4.4/4.6 (removed only 1s after the editor's first
+## filesystem scan; an --import run quits before that timer fires, and
+## 4.4/4.6 also skip the Main::cleanup() removal 4.7 added). This wrapper
+## never passes --editor or --import itself, so it never creates that lock;
+## it only cleans up whatever the prerequisite left behind, once before and
+## once after the child run, so the next editor launch never sees it.
 
 const INNER_SCRIPT: String = "res://tests/gst_test_runner.gd"
 
 
+func _remove_stale_recovery_lock() -> void:
+	var lock_path: String = OS.get_user_data_dir().path_join(".recovery_mode_lock")
+	if FileAccess.file_exists(lock_path):
+		DirAccess.remove_absolute(lock_path)
+		print("removed stale %s (Godot's --import prerequisite leaves this on 4.4/4.6; see README.md Tests)" % lock_path)
+
+
 func _initialize() -> void:
+	_remove_stale_recovery_lock()
+
 	var godot_path: String = OS.get_executable_path()
 	var project_path: String = ProjectSettings.globalize_path("res://")
 	var arguments: PackedStringArray = PackedStringArray([
@@ -30,6 +47,8 @@ func _initialize() -> void:
 	])
 	var output: Array = []
 	var exit_code: int = OS.execute(godot_path, arguments, output, true)
+
+	_remove_stale_recovery_lock()
 
 	var combined_output: String = ""
 	for chunk: Variant in output:
