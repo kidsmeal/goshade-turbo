@@ -22,7 +22,7 @@ The best current anchors. A session can rely on these.
 
 Docs or systems with mixed signals. Name the stale claim and what the code actually shows.
 
-### docs/SHADER_TABS_reviewed.md decision 10 (line 25)
+### docs/SHADER_TABS_reviewed.md decision 10 (line 25), resolved 2026-09-15
 Claims `_get_unsaved_status("")` lists dirty shader documents and `_save_external_data()` cannot veto shutdown. Code: `gst_main_panel.gd` lists documents where `GSTDocument.needs_shutdown_attention()` is true (dirty with no current recovery record), because Godot 4.4 `editor_node.cpp:3071` re-gates the quit with `p_confirmed = false` after `save_external_data()`, and a permanently dirty recovered document would loop the confirmation. Read as: the shipped behavior is the reviewed intent; amend the decision text, do not change code.
 
 ### docs/EDITOR_UI_DESIGN_reviewed.md decisions 6 and 7 (lines 35 and 37)
@@ -48,9 +48,9 @@ Should not pull attention unless a bug points back here.
 Written by the review relay when a phase diff made a standing doc stale. Cleared by `/claudhd:audit`.
 Format: `- [ ] <doc path>: <one line, what the diff invalidated> (phase N, <feature or plan name>)`.
 
-- [ ] docs/EDITOR_UI_DESIGN_reviewed.md:35: decision 6 message-label lifetime no longer describes file-operation messages, which are per-document and re-shown on activation (phase 5, Multiple shader tabs)
-- [ ] docs/EDITOR_UI_DESIGN_reviewed.md:37: decision 7 says stack edits stay in `EditorUndoRedoManager`; phase 2 moved them to a per-document `UndoRedo` (phase 2, Multiple shader tabs; found at audit 2026-09-15)
-- [ ] docs/SHADER_TABS_reviewed.md:25: decision 10 lists "dirty shader documents" and says shutdown cannot be vetoed; code lists `needs_shutdown_attention()` documents and the engine re-gates the quit (phase 7, Multiple shader tabs)
+- [x] docs/EDITOR_UI_DESIGN_reviewed.md:35 (superseded note appended 2026-09-15): decision 6 message-label lifetime no longer describes file-operation messages, which are per-document and re-shown on activation (phase 5, Multiple shader tabs)
+- [x] docs/EDITOR_UI_DESIGN_reviewed.md:37 (superseded note appended 2026-09-15): decision 7 says stack edits stay in `EditorUndoRedoManager`; phase 2 moved them to a per-document `UndoRedo` (phase 2, Multiple shader tabs; found at audit 2026-09-15)
+- [x] docs/SHADER_TABS_reviewed.md:25 (decision 10 rewritten 2026-09-15): decision 10 lists "dirty shader documents" and says shutdown cannot be vetoed; code lists `needs_shutdown_attention()` documents and the engine re-gates the quit (phase 7, Multiple shader tabs)
 
 ## Deferred review notes
 
