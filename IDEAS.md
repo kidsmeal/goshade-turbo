@@ -10,6 +10,7 @@ Legend: `[ ]` new, `[~]` promoted (to ROADMAP.md, or to the quick-fixes batch), 
 
 ## Inbox
 
+- [ ] 2026-09-14 22:06 (while: Multiple shader tabs) mouse: coord center follows the mouse via a uniform written by a script on the exported node. Kicked back from the quick-fix batch 2026-09-14: needs a coord-block/codegen contract change plus a new runtime script plus a decision on where that script ships (library, sandbox, or docs snippet); more than two files and a design call
 - [~] 2026-09-10 08:07 (while: Paused: multiple shader tabs) mouse: coord center follows the mouse via a uniform written by a script on the exported node
 - [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) filter/plot: draw a field as a curve against UV.y, book-of-shaders style, as a teaching view for the code panel
 - [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) exercise entries, all own construction: fieldops tent, band, quantize, pingpong, wave, threshold; generative rings, rays, spiral, dots, grain, scanlines; filter vignette, mirror, kaleidoscope, wave_distort; color tint, alpha_from_luma, two_tone

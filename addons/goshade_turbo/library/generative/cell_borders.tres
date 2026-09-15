@@ -1,0 +1,51 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/cell_borders"
+function = "cell_borders"
+description = "exact distance to the Voronoi cell border, via Inigo Quilez's two-pass bisector method; 0 at the border, increasing toward each cell center. Feed a field op like smoothstep or band downstream to set the edge width."
+source_math = "Two-pass exact Euclidean distance to Voronoi edges over a jittered grid, per Inigo Quilez, \"Voronoi Edges\" (improved/exact version), https://iquilezles.org/articles/voronoilines/: pass one finds the nearest feature point, pass two takes the minimum distance from p to the perpendicular bisector plane between that nearest point and every other feature point within a wider neighborhood."
+source_code_url = "https://iquilezles.org/articles/voronoilines/, second (\"better\"/exact) code sample"
+source_code_license = "MIT, per Inigo Quilez's stated license for code published on iquilezles.org. Ported to this project's own generative/hash() in place of the article's hash2(), and to this project's own coordinate and loop-variable naming; the bisector-distance math is unchanged."
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([])
+coord = true
+samples_source = false
+depends = Array[String](["generative/hash"])
+code = "float cell_borders(vec2 p) {
+	vec2 cell = floor(p);
+	vec2 local_f = fract(p);
+	vec2 nearest_offset = vec2(0.0);
+	vec2 nearest_rel = vec2(0.0);
+	float nearest_dist_sq = 8.0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 offset = vec2(float(x), float(y));
+			vec2 point = vec2(hash(cell + offset), hash(cell + offset + vec2(37.0, 17.0)));
+			vec2 rel = offset + point - local_f;
+			float dist_sq = dot(rel, rel);
+			if (dist_sq < nearest_dist_sq) {
+				nearest_dist_sq = dist_sq;
+				nearest_rel = rel;
+				nearest_offset = offset;
+			}
+		}
+	}
+	float border_dist = 8.0;
+	for (int y = -2; y <= 2; y++) {
+		for (int x = -2; x <= 2; x++) {
+			vec2 offset = nearest_offset + vec2(float(x), float(y));
+			vec2 point = vec2(hash(cell + offset), hash(cell + offset + vec2(37.0, 17.0)));
+			vec2 rel = offset + point - local_f;
+			if (dot(nearest_rel - rel, nearest_rel - rel) > 0.00001) {
+				border_dist = min(border_dist, dot(0.5 * (nearest_rel + rel), normalize(rel - nearest_rel)));
+			}
+		}
+	}
+	return border_dist;
+}
+"

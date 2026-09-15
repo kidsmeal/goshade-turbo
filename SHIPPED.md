@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9f765a96026d938e415ae85be1e66eb0a24fa25e -->
 
 ### 2026-09-14
+- Quick fixes: trim the recovery module to one validated-index loader, cellular_edges returns raw F2 - F1, add generative/cell_borders (iq bisector, MIT); log phase 8 deferred notes
 - Shader tabs phase 8: verify the full lifecycle on Godot 4.4, 4.6.2, and 4.7, fixing the native color popup undo boundary on 4.6.2 and 4.7
 
 ### 2026-09-12
