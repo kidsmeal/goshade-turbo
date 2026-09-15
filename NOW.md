@@ -11,9 +11,9 @@ This file is generated (design section 4): the facts below (Mode, Position, from
 Mode: (none - idle)
 Position: idle - pick a mode with /claudhd:start or /claudhd:design
 from: (unplanned work)
-Counts: queue 0 · quick fixes 1 · ideas untriaged 7
+Counts: queue 0 · quick fixes 0 · ideas untriaged 7
 
-Last touched: 2026-09-14
+Last touched: 2026-09-15
 
 ## Active thread (only one)
 

@@ -4,6 +4,9 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9f765a96026d938e415ae85be1e66eb0a24fa25e -->
 
+### 2026-09-15
+- DESIGN.md: re-verify prior art 2026-09-15, add Sprite Shader Mixer, CompositeMaterial, Material Maker 1.6, Godot 4.7 inline preview
+
 ### 2026-09-14
 - NOW.md: mouse coord-center chore moved from quick fixes to IDEAS.md
 - Quick fixes: trim the recovery module to one validated-index loader, cellular_edges returns raw F2 - F1, add generative/cell_borders (iq bisector, MIT); log phase 8 deferred notes
