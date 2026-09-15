@@ -37,7 +37,6 @@ What is eligible to become active next, in order. The readiness gate lives at ac
 
 Small, self-contained chores that need no plan and aren't worth their own thread. Capped at 3 - overflow means clear some or promote one out, so this stays a batch and never a second backlog. Add with `/claudhd:quick <text>`, clear them in one focused pass with `/claudhd:quick`. The active thread has right of way: clear these between threads, not mid-thread. A fix that turns out to need real thinking gets kicked back to IDEAS.md.
 
-- [ ] mouse: coord center follows the mouse via a uniform written by a script on the exported node (kicked back 2026-09-14: no exported-node/runtime-script infrastructure exists; needs a codegen/coord-block contract change plus a new runtime script and a ship-location decision -- see docs/EDITOR_SMOKE.md "Quick fixes 2026-09-14")
 - [x] cellular_edges: drop the width param, return raw F2 - F1 and let smoothstep/band set width downstream
 - [x] generative/cell_borders: exact distance to voronoi edge, iq two-pass bisector algorithm, MIT port with source_code_license set
 - [x] gst_document_recovery.gd: trim round-by-round doc comments to contract statements and fold _find_validated_record into _load_index's result; behavior unchanged, tabs_recovery must still pass 39/0 and 5/0 on 4.4 and 4.6.2
