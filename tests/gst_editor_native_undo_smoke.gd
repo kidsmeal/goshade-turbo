@@ -91,11 +91,17 @@ func run(plugin: EditorPlugin) -> void:
 	await _check_implicit_default(plugin, panel, inspector, history, fbm)
 	await _check_rgb_popup(plugin, panel, inspector, history, stack_list)
 	await _check_color_popup_unchanged(plugin, panel, inspector, history, stack_list)
+	await _reassert_main_screen(plugin)
+	await _check_color_popup_subunit_edit_preserved(plugin, panel, inspector, history, stack_list)
+	await _reassert_main_screen(plugin)
+	await _check_color_popup_field_shortcut_single_connection(plugin, panel, inspector, history, stack_list)
 	await _check_forced_finish_color_save(plugin, panel, inspector, history, stack_list)
 	await _reassert_main_screen(plugin)
 	await _check_forced_finish_color_save_as(plugin, panel, inspector, history, stack_list)
 	await _reassert_main_screen(plugin)
 	await _check_forced_finish_color_rebind(plugin, panel, inspector, history, stack_list)
+	await _reassert_main_screen(plugin)
+	await _check_color_popup_subunit_pending_forced_finish(plugin, panel, inspector, history, stack_list)
 	await _reassert_main_screen(plugin)
 	await _check_popup_focused_shortcut(plugin, panel, inspector, history, stack_list)
 	await _check_host_scene_isolation(plugin, panel, history)
@@ -378,6 +384,105 @@ func _check_color_popup_unchanged(plugin: EditorPlugin, panel: GSTMainPanel, ins
 	_check("color_popup_unchanged_serialization", history.get_history_count() == actions_before and serialization_unchanged, "actions=%d->%d serialization_unchanged=%s" % [actions_before, history.get_history_count(), serialization_unchanged])
 
 
+## Item: a real, intentional color edit whose final value lands within one
+## 1/255 hex step of the original must still register as one action and be
+## preserved, not discarded by _gesture_values_equal's own quantization
+## tolerance (that tolerance exists only to catch a popup opened and closed
+## with no real edit at all). Types "7f7f7f" -- the manifest default
+## Color(0.5, 0.5, 0.5, 1.0)'s other nearest 8-bit hex grid neighbor
+## (0x7f/255 = 0.498039..., versus 0x80/255 = 0.501960... on the other side
+## of the same exact float) -- and commits it with a real Enter, the same
+## organic commit path _check_rgb_popup already uses, so this row's own live
+## color_changed is never routed through this column's own forced-finish
+## release_focus()/hide() calls. Picks this grid neighbor rather than the
+## popup's own already-displayed "808080": ColorPicker's own hex-commit
+## skips re-applying a submitted string identical to what it already shows,
+## so that string would never reach property_changed/color_changed at all.
+func _check_color_popup_subunit_edit_preserved(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
+	EditorInterface.set_main_screen_editor("GoShade Turbo")
+	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
+	stack_list.select_layer(palette.id)
+	panel.set_narrow_tab(1)
+	await _frames(plugin, 4)
+	var property: EditorProperty = inspector.find_editor_property(&"a", palette)
+	if property != null:
+		inspector.get_settings_scroll().ensure_control_visible(property)
+		await _frames(plugin, 2)
+	var button: ColorPickerButton = _find_color_button(property)
+	if button == null:
+		_check("color_popup_subunit_edit_present", false, "no ColorPickerButton row found for color/palette 'a'")
+		return
+	var original: Color = button.color
+	var actions_before: int = history.get_history_count()
+	button.grab_focus()
+	button.get_popup().popup()
+	await _frames(plugin, 2)
+	var hex_edit: LineEdit = _find_hex_line_edit(button.get_picker())
+	if hex_edit != null:
+		await _replace_line_edit(plugin, hex_edit, "7f7f7f")
+	if hex_edit != null and hex_edit.has_focus():
+		hex_edit.release_focus()
+		await _frames(plugin, 2)
+	if button.get_popup().visible:
+		button.get_popup().hide()
+	await _frames(plugin, 3)
+	var expected: Color = Color(0x7f / 255.0, 0x7f / 255.0, 0x7f / 255.0, 1.0)
+	var within_one_step: bool = absf(expected.r - original.r) < (1.0 / 255.0)
+	var committed_as_change: bool = history.get_history_count() == actions_before + 1
+	var value_preserved: bool = palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(expected) and not (palette.get(&"a") as Color).is_equal_approx(original)
+	_check("color_popup_subunit_edit_preserved", hex_edit != null and within_one_step and committed_as_change and value_preserved, "hex_found=%s within_one_step=%s original=%s expected=%s actions=%d->%d final=%s" % [hex_edit != null, within_one_step, original, expected, actions_before, history.get_history_count(), palette.get(&"a")])
+	if not (committed_as_change and value_preserved):
+		return
+	history.undo()
+	await _frames(plugin, 2)
+	var undo_ok: bool = palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(original)
+	history.redo()
+	await _frames(plugin, 2)
+	var redo_ok: bool = palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(expected)
+	_check("color_popup_subunit_edit_undo_redo", undo_ok and redo_ok, "undo_ok=%s redo_ok=%s" % [undo_ok, redo_ok])
+
+
+## Item: the popup's own hex/RGB LineEdit keyboard-shortcut handler
+## (gst_inspector_column.gd's _connect_color_popup_field_shortcuts,
+## connected on every about_to_popup) must read exactly one connection
+## immediately after the first open, and exactly one after each later
+## reopen of the same popup -- checking only after the last of several
+## opens cannot distinguish "connected once, first time" from "connected
+## once, only on the last attempt."
+func _check_color_popup_field_shortcut_single_connection(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
+	EditorInterface.set_main_screen_editor("GoShade Turbo")
+	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
+	stack_list.select_layer(palette.id)
+	panel.set_narrow_tab(1)
+	await _frames(plugin, 4)
+	var property: EditorProperty = inspector.find_editor_property(&"a", palette)
+	if property != null:
+		inspector.get_settings_scroll().ensure_control_visible(property)
+		await _frames(plugin, 2)
+	var button: ColorPickerButton = _find_color_button(property)
+	if button == null:
+		_check("color_popup_field_shortcut_single_connection", false, "no ColorPickerButton row found for color/palette 'a'")
+		return
+	for open_index: int in range(3):
+		button.grab_focus()
+		button.get_popup().popup()
+		await _frames(plugin, 3)
+		var hex_edit: LineEdit = _find_hex_line_edit(button.get_picker())
+		var check_name: String = "color_popup_field_shortcut_single_connection_open_%d" % [open_index + 1]
+		if hex_edit == null:
+			_check(check_name, false, "hex LineEdit not found on open %d" % [open_index + 1])
+			return
+		var matching: int = 0
+		for connection: Dictionary in hex_edit.gui_input.get_connections():
+			var callable: Callable = connection["callable"] as Callable
+			if callable.get_method() == &"_on_color_popup_field_gui_input":
+				matching += 1
+		_check(check_name, matching == 1, "open=%d matching_connections=%d" % [open_index + 1, matching])
+		if button.get_popup().visible:
+			button.get_popup().hide()
+		await _frames(plugin, 2)
+
+
 ## Exact serialization for the no-op checks above (fix pass, round 3 item 3):
 ## saves the open stack to `path`, reloads it, and returns a Dictionary of
 ## every field the .tres schema actually carries (docs/SHADER_TABS_reviewed-
@@ -458,12 +563,19 @@ func _check_forced_finish_pending_text(plugin: EditorPlugin, panel: GSTMainPanel
 		_check("forced_finish_pending_text", false, "no focused numeric LineEdit found after a real ui_accept key press")
 		return
 	await _type_into_line_edit(plugin, line_edit, "0.44")
+	# A delivery miss (the typed text never reaching this LineEdit at all)
+	# would leave fbm.get("gain") at its pre-edit value, which also satisfies
+	# "still pending" -- indistinguishable from a genuine pending edit unless
+	# the field's own text is checked directly, so a dropped-delivery FAIL
+	# cannot silently read as the same result as a correctly-pending one.
+	var typed_text: String = line_edit.text
+	var text_delivered: bool = typed_text == "0.44"
 	var pending_before_finish: bool = not is_equal_approx(float(fbm.get("gain")), 0.44)
 	await panel._finish_pending_edits()
 	await _frames(plugin, 2)
 	var one_action: bool = history.get_history_count() == actions_before + 1
 	var delivered: bool = is_equal_approx(float(fbm.get("gain")), 0.44)
-	_check("forced_finish_pending_text", pending_before_finish and one_action and delivered, "pending_before_finish=%s actions=%d->%d value=%s" % [pending_before_finish, actions_before, history.get_history_count(), fbm.get("gain")])
+	_check("forced_finish_pending_text", text_delivered and pending_before_finish and one_action and delivered, "line_edit_text=%s pending_before_finish=%s actions=%d->%d value=%s" % [typed_text, pending_before_finish, actions_before, history.get_history_count(), fbm.get("gain")])
 	if not delivered:
 		return
 	history.undo()
@@ -515,6 +627,11 @@ func _check_forced_finish_save(plugin: EditorPlugin, panel: GSTMainPanel, inspec
 		_check("forced_finish_before_save", false, "no focused numeric LineEdit found after a real ui_accept key press")
 		return
 	await _type_into_line_edit(plugin, line_edit, "0.28")
+	# See _check_forced_finish_pending_text's own comment: the field's own
+	# text is checked directly so a delivery miss cannot read as the same
+	# failure as a genuinely dropped forced-finish flush.
+	var typed_text: String = line_edit.text
+	var text_delivered: bool = typed_text == "0.28"
 	var pending_before_save: bool = not is_equal_approx(float(fbm.get("gain")), 0.28)
 	var save_path: String = "user://gst_native_undo_smoke_forced_save.tres"
 	if FileAccess.file_exists(save_path):
@@ -526,7 +643,7 @@ func _check_forced_finish_save(plugin: EditorPlugin, panel: GSTMainPanel, inspec
 	var reloaded: GSTStack = load_result["stack"] as GSTStack if load_result["ok"] else null
 	var saved_layer: GSTLayer = GSTStackOps.find_layer(reloaded, fbm.id) if reloaded != null else null
 	var saved_gain: float = float(saved_layer.get("gain")) if saved_layer != null else -1.0
-	_check("forced_finish_before_save", pending_before_save and reloaded != null and saved_layer != null and is_equal_approx(delivered_value, 0.28) and is_equal_approx(saved_gain, delivered_value), "pending_before_save=%s delivered=%s saved=%s" % [pending_before_save, delivered_value, saved_gain])
+	_check("forced_finish_before_save", text_delivered and pending_before_save and reloaded != null and saved_layer != null and is_equal_approx(delivered_value, 0.28) and is_equal_approx(saved_gain, delivered_value), "line_edit_text=%s pending_before_save=%s delivered=%s saved=%s" % [typed_text, pending_before_save, delivered_value, saved_gain])
 	if FileAccess.file_exists(save_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 
@@ -551,6 +668,11 @@ func _check_forced_finish_save_as(plugin: EditorPlugin, panel: GSTMainPanel, ins
 		_check("forced_finish_before_save_as", false, "no focused numeric LineEdit found after a real ui_accept key press")
 		return
 	await _type_into_line_edit(plugin, line_edit, "0.71")
+	# See _check_forced_finish_pending_text's own comment: the field's own
+	# text is checked directly so a delivery miss cannot read as the same
+	# failure as a genuinely dropped forced-finish flush.
+	var typed_text: String = line_edit.text
+	var text_delivered: bool = typed_text == "0.71"
 	var pending_before_save: bool = not is_equal_approx(float(fbm.get("gain")), 0.71)
 	var save_path: String = "user://gst_native_undo_smoke_forced_save_as.tres"
 	if FileAccess.file_exists(save_path):
@@ -562,7 +684,7 @@ func _check_forced_finish_save_as(plugin: EditorPlugin, panel: GSTMainPanel, ins
 	var reloaded: GSTStack = load_result["stack"] as GSTStack if load_result["ok"] else null
 	var saved_layer: GSTLayer = GSTStackOps.find_layer(reloaded, fbm.id) if reloaded != null else null
 	var saved_gain: float = float(saved_layer.get("gain")) if saved_layer != null else -1.0
-	_check("forced_finish_before_save_as", pending_before_save and reloaded != null and saved_layer != null and is_equal_approx(delivered_value, 0.71) and is_equal_approx(saved_gain, delivered_value), "pending_before_save=%s delivered=%s saved=%s" % [pending_before_save, delivered_value, saved_gain])
+	_check("forced_finish_before_save_as", text_delivered and pending_before_save and reloaded != null and saved_layer != null and is_equal_approx(delivered_value, 0.71) and is_equal_approx(saved_gain, delivered_value), "line_edit_text=%s pending_before_save=%s delivered=%s saved=%s" % [typed_text, pending_before_save, delivered_value, saved_gain])
 	if FileAccess.file_exists(save_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 
@@ -855,6 +977,91 @@ func _check_forced_finish_color_rebind(plugin: EditorPlugin, panel: GSTMainPanel
 	await _frames(plugin, 3)
 
 
+## Item (phase 8 review round 2 fix 3): a forced-finish release_focus()/
+## hide() previously marked every resulting color-field commit as
+## suppress_live_edit unconditionally, so a genuine pending hex edit within
+## one 1/255 step of the row's own current value stayed genuine_edit=false
+## and could be discarded by _gesture_values_equal's own quantization
+## tolerance instead of committed (gst_inspector_column.gd
+## _flush_pending_row_text/_force_close_color_popups/_on_color_live_changed).
+## Never submits the typed text (no Enter): the only path that can deliver
+## it is a forced finish, exercised here through Save, a document-switch
+## rebind, and a real keyboard Undo in turn, each against a freshly typed
+## sub-1/255 neighbor of whatever the row currently displays.
+func _check_color_popup_subunit_pending_forced_finish(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
+	EditorInterface.set_main_screen_editor("GoShade Turbo")
+	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
+	stack_list.select_layer(palette.id)
+	panel.set_narrow_tab(1)
+	await _frames(plugin, 4)
+
+	var original_save: Color = palette.get(&"a")
+	var expected_save: Color = Color(0x7f / 255.0, 0x7f / 255.0, 0x7f / 255.0, 1.0)
+	var actions_before_save: int = history.get_history_count()
+	var pending_save: Dictionary = await _start_pending_color_edit(plugin, inspector, palette, &"a", "7f7f7f")
+	if not bool(pending_save["ok"]):
+		_check("color_popup_subunit_pending_forced_finish_save", false, "pending color edit not reachable (hex_found=%s)" % [pending_save["hex_edit"] != null])
+		return
+	var pending_before_save: bool = not (palette.get(&"a") as Color).is_equal_approx(expected_save)
+	var save_path: String = "user://gst_native_undo_smoke_subunit_forced_save.tres"
+	if FileAccess.file_exists(save_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
+	await panel.save_to_path(save_path)
+	await _frames(plugin, 2)
+	var one_action_save: bool = history.get_history_count() == actions_before_save + 1
+	var delivered_save: Color = palette.get(&"a")
+	_check("color_popup_subunit_pending_forced_finish_save", pending_before_save and one_action_save and delivered_save.is_equal_approx(expected_save) and not delivered_save.is_equal_approx(original_save), "pending_before_save=%s actions=%d->%d delivered=%s" % [pending_before_save, actions_before_save, history.get_history_count(), delivered_save])
+	if FileAccess.file_exists(save_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
+	if not one_action_save:
+		return
+
+	var other: GSTLayer = stack_list.add_layer_by_entry_id("fieldops/invert")
+	stack_list.select_layer(palette.id)
+	await _frames(plugin, 3)
+	var original_switch: Color = palette.get(&"a")
+	var expected_switch: Color = Color(0x7e / 255.0, 0x7e / 255.0, 0x7e / 255.0, 1.0)
+	var pending_switch: Dictionary = await _start_pending_color_edit(plugin, inspector, palette, &"a", "7e7e7e")
+	if not bool(pending_switch["ok"]):
+		_check("color_popup_subunit_pending_forced_finish_switch", false, "pending color edit not reachable (hex_found=%s)" % [pending_switch["hex_edit"] != null])
+		return
+	var actions_before_switch: int = history.get_history_count()
+	stack_list.select_layer(other.id)
+	await _frames(plugin, 4)
+	var one_action_switch: bool = history.get_history_count() == actions_before_switch + 1
+	var delivered_switch: Color = palette.get(&"a")
+	_check("color_popup_subunit_pending_forced_finish_switch", one_action_switch and delivered_switch.is_equal_approx(expected_switch) and not delivered_switch.is_equal_approx(original_switch), "actions=%d->%d delivered=%s original=%s" % [actions_before_switch, history.get_history_count(), delivered_switch, original_switch])
+	stack_list.select_layer(palette.id)
+	await _frames(plugin, 3)
+	if not one_action_switch:
+		return
+
+	var original_undo: Color = palette.get(&"a")
+	var actions_before_undo: int = history.get_history_count()
+	var position_before_undo: int = history.get_current_action()
+	var pending_undo: Dictionary = await _start_pending_color_edit(plugin, inspector, palette, &"a", "7d7d7d")
+	if not bool(pending_undo["ok"]):
+		_check("color_popup_subunit_pending_forced_finish_undo", false, "pending color edit not reachable (hex_found=%s)" % [pending_undo["hex_edit"] != null])
+		return
+	var undo_button: ColorPickerButton = pending_undo["button"]
+	var undo_hex_edit: LineEdit = pending_undo["hex_edit"]
+	var undo_popup: Window = undo_button.get_popup()
+	var attempts: int = 0
+	while attempts < 5 and history.get_history_count() == actions_before_undo:
+		attempts += 1
+		if is_instance_valid(undo_hex_edit):
+			undo_hex_edit.grab_focus()
+		await plugin.get_tree().create_timer(0.2).timeout
+		_push_popup_key(undo_popup, KEY_Z, true)
+		await _frames(plugin, 4)
+	var committed_then_undone: bool = history.get_history_count() == actions_before_undo + 1 and history.get_current_action() == position_before_undo
+	var restored_to_original: bool = (palette.get(&"a") as Color).is_equal_approx(original_undo)
+	_check("color_popup_subunit_pending_forced_finish_undo", committed_then_undone and restored_to_original, "attempts=%d actions=%d->%d position=%d->%d value=%s original=%s" % [attempts, actions_before_undo, history.get_history_count(), position_before_undo, history.get_current_action(), palette.get(&"a"), original_undo])
+	if history.has_redo():
+		history.redo()
+		await _frames(plugin, 2)
+
+
 ## Item (fix pass, round 3 item 1): a real Ctrl+Z sent through the root
 ## viewport, while a native color popup currently holds embedded-subwindow
 ## focus and a hex edit is genuinely pending (typed, not submitted), reaches
@@ -912,6 +1119,15 @@ func _check_popup_focused_shortcut(plugin: EditorPlugin, panel: GSTMainPanel, in
 	var focused: Control = hex_edit.get_viewport().gui_get_focus_owner()
 	var owns_focus_ok: bool = inspector.owns_popup_focus(focused)
 	var final_color: Color = Color(0x11 / 255.0, 0x22 / 255.0, 0x33 / 255.0, 1.0)
+	# Delivered to the popup's own Window, not the root viewport: a real OS
+	# keystroke is routed to whichever window currently holds focus, and
+	# Godot 4.6.2/4.7 (unlike 4.4) drop a root-viewport push entirely while
+	# this native, non-embedded popup subwindow holds it. Window extends
+	# Viewport, so the identical push_input() call is correct
+	# both here and if the popup were instead embedded into the root
+	# viewport (single_window_mode), where popup.get_window_id() and
+	# push_input() resolve to that same embedded configuration.
+	var popup: Window = button.get_popup()
 	var attempts: int = 0
 	# Loops on get_history_count(), not get_current_action(): committing the
 	# pending edit then immediately undoing it (this function's own expected
@@ -925,7 +1141,7 @@ func _check_popup_focused_shortcut(plugin: EditorPlugin, panel: GSTMainPanel, in
 		if is_instance_valid(hex_edit):
 			hex_edit.grab_focus()
 		await plugin.get_tree().create_timer(0.2).timeout
-		_push_key(EditorInterface.get_base_control(), KEY_Z, true)
+		_push_popup_key(popup, KEY_Z, true)
 		await _frames(plugin, 4)
 	var committed_then_undone: bool = history.get_history_count() == actions_before + 1 and history.get_current_action() == position_before
 	var restored_to_original: bool = palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(original)
@@ -941,6 +1157,9 @@ func _check_popup_focused_shortcut(plugin: EditorPlugin, panel: GSTMainPanel, in
 		return
 	var redo_button: ColorPickerButton = pending_redo["button"]
 	var redo_hex_edit: LineEdit = pending_redo["hex_edit"]
+	# Same popup-viewport delivery as the undo half above, not the root
+	# viewport, for the identical reason.
+	var redo_popup: Window = redo_button.get_popup()
 	var redo_attempts: int = 0
 	# Genuine redo advances the position (unlike the undo case above's
 	# commit-then-undo, which nets back to the same position), so this loops
@@ -950,7 +1169,7 @@ func _check_popup_focused_shortcut(plugin: EditorPlugin, panel: GSTMainPanel, in
 		if is_instance_valid(redo_hex_edit):
 			redo_hex_edit.grab_focus()
 		await plugin.get_tree().create_timer(0.2).timeout
-		_push_key(EditorInterface.get_base_control(), KEY_Z, true, true)
+		_push_popup_key(redo_popup, KEY_Z, true, true)
 		await _frames(plugin, 4)
 	var redo_landed: bool = history.get_current_action() == position_before + 1 and history.get_history_count() == redo_history_count_before
 	var redo_value_ok: bool = palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(final_color)
@@ -1195,6 +1414,29 @@ func _push_key(target: Control, keycode: Key, ctrl: bool = false, shift: bool = 
 	event = event.duplicate()
 	event.pressed = false
 	target.get_viewport().push_input(event, true)
+
+
+## Delivers a synthetic key event to a native color popup's own Window
+## instead of the root viewport (_push_key above), matching how a real OS
+## keystroke is routed to whichever window currently holds focus. A Window
+## is itself a Viewport, so push_input() here is the same call
+## gst_inspector_column.gd's own _on_color_popup_window_input already
+## proves correct for that popup; used by _check_popup_focused_shortcut and
+## _check_color_popup_subunit_pending_forced_finish, both of which open a
+## native, non-embedded popup and push a keyboard shortcut while it holds
+## focus.
+func _push_popup_key(popup: Window, keycode: Key, ctrl: bool = false, shift: bool = false) -> void:
+	var event: InputEventKey = InputEventKey.new()
+	event.keycode = keycode
+	event.physical_keycode = keycode
+	event.pressed = true
+	event.ctrl_pressed = ctrl
+	event.shift_pressed = shift
+	event.window_id = popup.get_window_id()
+	popup.push_input(event, true)
+	event = event.duplicate()
+	event.pressed = false
+	popup.push_input(event, true)
 
 
 ## Delivered through Input.parse_input_event (the full engine input path a

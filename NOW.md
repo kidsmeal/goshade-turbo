@@ -11,9 +11,9 @@ This file is generated (design section 4): the facts below (Mode, Position, from
 Mode: (none - idle)
 Position: idle - pick a mode with /claudhd:start or /claudhd:design
 from: (unplanned work)
-Counts: queue 0 · quick fixes 3 · ideas untriaged 6
+Counts: queue 0 · quick fixes 4 · ideas untriaged 6
 
-Last touched: 2026-09-12
+Last touched: 2026-09-14
 
 ## Active thread (only one)
 
@@ -21,7 +21,7 @@ Last touched: 2026-09-12
 
 Next physical action:
 
-- [ ] Phase 7 committed (shutdown recovery, 7 review rounds); next: /claudhd:build docs/SHADER_TABS_reviewed-plan.md 8 (cross-version lifecycle verification 4.4/4.6.2/4.7), auto-commit granted, reviewer is Sol
+- [ ] Phase 8 committed; plan complete (8 phases). Next: clear the quick-fix batch (4/3, recovery module trim first), then /claudhd:audit to reconcile deferred notes and the decision 10 wording
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
@@ -40,6 +40,7 @@ Small, self-contained chores that need no plan and aren't worth their own thread
 - [ ] mouse: coord center follows the mouse via a uniform written by a script on the exported node
 - [ ] cellular_edges: drop the width param, return raw F2 - F1 and let smoothstep/band set width downstream
 - [ ] generative/cell_borders: exact distance to voronoi edge, iq two-pass bisector algorithm, MIT port with source_code_license set
+- [ ] gst_document_recovery.gd: trim round-by-round doc comments to contract statements and fold _find_validated_record into _load_index's result; behavior unchanged, tabs_recovery must still pass 39/0 and 5/0 on 4.4 and 4.6.2
 
 ## Idea flow (do not open a new chat)
 

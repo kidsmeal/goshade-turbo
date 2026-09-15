@@ -360,9 +360,21 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	var popup: PopupPanel = color_button.get_popup()
 	var hex_edit: LineEdit = _find_hex_line_edit(picker)
 	var popup_ready: bool = popup.visible and picker.visible and not picker.edit_alpha and hex_edit != null and hex_edit.is_visible_in_tree()
+	# popup is a Window (PopupPanel extends Popup extends Window), so its own
+	# get_texture() -- not plugin.get_tree().root's, which would miss a
+	# real, non-embedded popup's own separate render target -- is the
+	# correct capture surface for the popup while it is actually open.
+	if popup_ready:
+		var popup_screenshot_path: String = OS.get_environment("GST_UI_SCREENSHOT_PATH")
+		if not popup_screenshot_path.is_empty():
+			var popup_image: Image = popup.get_texture().get_image()
+			var popup_screenshot_error: Error = popup_image.save_png(popup_screenshot_path.get_basename() + "-palette-popup-open.png")
+			_check("screenshot_palette_popup_open", popup_screenshot_error == OK, "path='%s' error=%d size=%s" % [popup_screenshot_path.get_basename() + "-palette-popup-open.png", popup_screenshot_error, popup_image.get_size()])
 	var initial_fields: Array[String] = _visible_line_edit_texts(picker)
 	var requested_hex: String = "3366cc"
 	var actual_hex_control: bool = false
+	var history: UndoRedo = _history_for()
+	var history_count_before_edit: int = history.get_history_count()
 	var close_state: Dictionary = {"committed": false}
 	var commit_observer: Callable = func(path: StringName, _value: Variant, _field: StringName, changing: bool) -> void:
 		if path == &"a" and not changing:
@@ -374,10 +386,6 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 		actual_hex_control = hex_edit.has_focus() and hex_edit.is_visible_in_tree()
 		await _replace_line_edit(plugin, hex_edit, requested_hex)
 	popup.hide()
-	# Complete the popup's focus exit before invoking editor-level undo.
-	# Escape cancels this native picker and would discard the requested color.
-	if hex_edit != null:
-		hex_edit.release_focus()
 	color_button.grab_focus()
 	var close_deadline: int = Time.get_ticks_msec() + 2000
 	while Time.get_ticks_msec() < close_deadline and (not close_state["committed"] or popup.visible or not color_button.has_focus()):
@@ -389,35 +397,78 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	var expected_raw: Vector3 = Vector3(expected_color.r, expected_color.g, expected_color.b)
 	var uniform_name: String = GSTUniformNames.param_uniform(palette.id, "palette", "a")
 	var uniform_value: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
-	var history: UndoRedo = _history_for()
 	var edit_applied: bool = close_complete and popup_ready and actual_hex_control and palette.params.get("a") is Vector3 and (palette.params.get("a") as Vector3).is_equal_approx(expected_raw) and palette.get(&"a") is Color and (palette.get(&"a") as Color).is_equal_approx(expected_color) and uniform_value is Vector3 and (uniform_value as Vector3).is_equal_approx(expected_raw) and history.has_undo()
 	_check("palette_color_edit", edit_applied, "popup=%s hex=%s initial_fields=%s raw=%s displayed=%s uniform=%s history=%s" % [popup_ready, actual_hex_control, initial_fields, palette.params.get("a"), color_button.color, uniform_value, history.has_undo()])
 	if not edit_applied:
 		return
 
+	# Gates history.undo() below on the actual history-registration write:
+	# that write is GSTUndo.commit_property_change, run by this column's
+	# own _finish_color_popup on a CONNECT_DEFERRED popup_closed handler,
+	# not synchronously inside popup.hide() above (close_state["committed"]
+	# only proves EditorPropertyColor's own close handler ran). Undoing
+	# before that deferred write lands would undo the wrong action, then
+	# have the late write stomp the result -- bounded by wall-clock time,
+	# not a fixed frame count, so a slower process still settles instead of
+	# racing undo() (phase 8 review round 2 fix 1).
+	var settle_deadline: int = Time.get_ticks_msec() + 2000
+	var settle_attempts: int = 0
+	while Time.get_ticks_msec() < settle_deadline and history.get_history_count() == history_count_before_edit:
+		settle_attempts += 1
+		await plugin.get_tree().process_frame
+	var history_settled: bool = history.get_history_count() == history_count_before_edit + 1
+	_check("palette_color_history_settled", history_settled, "attempts=%d history=%d->%d" % [settle_attempts, history_count_before_edit, history.get_history_count()])
+	if not history_settled:
+		return
+
+	# Godot's own EditorPropertyColor/ColorPicker internals can still land an
+	# object write of their own a moment after a real history.undo()/redo()
+	# call, independent of this column's own commit (docs/EDITOR_SMOKE.md
+	# "Shader tabs phase 2 review round 4 fixes"). Each of undo()/redo() is
+	# called exactly once; only the settle wait afterward is bounded and
+	# re-polled -- re-driving the history operation itself would mask a
+	# genuine one-shot regression behind a retry (phase 8 review round 3
+	# fix 2).
+	var undo_position_before: int = history.get_current_action()
 	history.undo()
-	for i: int in range(3):
+	var undo_position_after: int = history.get_current_action()
+	var undo_button: ColorPickerButton = null
+	var undo_displayed: Color = Color.TRANSPARENT
+	var undo_raw: Variant = null
+	var undo_uniform: Variant = null
+	var undo_ok: bool = false
+	var undo_settle_deadline: int = Time.get_ticks_msec() + 2000
+	while true:
+		undo_button = _find_color_button(inspector.find_editor_property(&"a", palette))
+		undo_displayed = undo_button.color if undo_button != null else Color.TRANSPARENT
+		undo_raw = palette.params.get("a")
+		undo_uniform = panel.get_shader_material().get_shader_parameter(uniform_name)
+		# sprite_holographic.tres never sets an explicit "a" param (its
+		# palette layer's params hold only "t"): undo must restore that
+		# exact absence, not an explicit entry equal to the manifest
+		# default (gst_inspector_column.gd captures original param
+		# presence before the popup ever opens).
+		undo_ok = undo_button != null and not palette.params.has("a") and undo_uniform is Vector3 and (undo_button.color as Color).is_equal_approx(Color(0.5, 0.5, 0.5, 1.0)) and (undo_uniform as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5))
+		if undo_ok or Time.get_ticks_msec() >= undo_settle_deadline:
+			break
 		await plugin.get_tree().process_frame
-	var undo_button: ColorPickerButton = _find_color_button(inspector.find_editor_property(&"a", palette))
-	var undo_displayed: Color = undo_button.color if undo_button != null else Color.TRANSPARENT
-	var undo_raw: Variant = palette.params.get("a")
-	var undo_uniform: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
-	# sprite_holographic.tres never sets an explicit "a" param (its palette
-	# layer's params hold only "t"): undo must restore that exact absence,
-	# not an explicit entry equal to the manifest default (phase 2 review
-	# round 2 fix pass: gst_inspector_column.gd now captures original param
-	# presence before the popup ever opens, so this reads the true pre-edit
-	# state instead of a key EditorPropertyColor's own close handler had
-	# already created by the time old_present used to be queried).
-	var undo_ok: bool = undo_button != null and not palette.params.has("a") and undo_uniform is Vector3 and (undo_button.color as Color).is_equal_approx(Color(0.5, 0.5, 0.5, 1.0)) and (undo_uniform as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5))
+	var redo_position_before: int = history.get_current_action()
 	history.redo()
-	for i: int in range(3):
+	var redo_position_after: int = history.get_current_action()
+	var redo_button: ColorPickerButton = null
+	var redo_raw: Variant = null
+	var redo_uniform: Variant = null
+	var redo_ok: bool = false
+	var redo_settle_deadline: int = Time.get_ticks_msec() + 2000
+	while true:
+		redo_button = _find_color_button(inspector.find_editor_property(&"a", palette))
+		redo_raw = palette.params.get("a")
+		redo_uniform = panel.get_shader_material().get_shader_parameter(uniform_name)
+		redo_ok = redo_button != null and redo_raw is Vector3 and redo_uniform is Vector3 and (redo_button.color as Color).is_equal_approx(expected_color) and (redo_raw as Vector3).is_equal_approx(expected_raw) and (redo_uniform as Vector3).is_equal_approx(expected_raw)
+		if redo_ok or Time.get_ticks_msec() >= redo_settle_deadline:
+			break
 		await plugin.get_tree().process_frame
-	var redo_button: ColorPickerButton = _find_color_button(inspector.find_editor_property(&"a", palette))
-	var redo_raw: Variant = palette.params.get("a")
-	var redo_uniform: Variant = panel.get_shader_material().get_shader_parameter(uniform_name)
-	var redo_ok: bool = redo_button != null and redo_raw is Vector3 and redo_uniform is Vector3 and (redo_button.color as Color).is_equal_approx(expected_color) and (redo_raw as Vector3).is_equal_approx(expected_raw) and (redo_uniform as Vector3).is_equal_approx(expected_raw)
-	_check("palette_color_undo_redo", undo_ok and redo_ok, "undo=%s/%s/%s redo=%s/%s/%s" % [undo_displayed, undo_raw, undo_uniform, redo_button.color if redo_button != null else Color.TRANSPARENT, redo_raw, redo_uniform])
+	_check("palette_color_undo_redo", undo_ok and redo_ok, "undo=%s/%s/%s redo=%s/%s/%s undo_pos=%d->%d redo_pos=%d->%d" % [undo_displayed, undo_raw, undo_uniform, redo_button.color if redo_button != null else Color.TRANSPARENT, redo_raw, redo_uniform, undo_position_before, undo_position_after, redo_position_before, redo_position_after])
 
 	var raw_before_randomize: Dictionary = palette.params.duplicate(true)
 	var random_history: UndoRedo = panel.get_watched_history()

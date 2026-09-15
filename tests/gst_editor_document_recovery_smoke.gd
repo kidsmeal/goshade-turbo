@@ -1464,17 +1464,40 @@ func _frames(plugin: EditorPlugin, count: int) -> void:
 ## established _click_button precedent exactly (including the
 ## NOTIFICATION_MOUSE_ENTER workaround BaseButton::on_action_event's own
 ## status.hovering gate requires for a synthetic InputEventMouseButton).
+## Guards every await against a plugin already freed mid-continuation (phase
+## 8 review round 1 fix 10): clicking "Save and Quit" here is this stage's
+## own real quit trigger, so the mouse-up push below can make the process
+## start exiting -- freeing plugin -- while this coroutine is still
+## suspended on a later await. Resuming that suspended await then called
+## plugin.get_tree() on an already-freed instance, printing
+## "SCRIPT ERROR: Cannot call method 'get_tree' on a previously freed
+## instance" after an otherwise-successful confirmed quit. Returning before
+## each await once plugin is no longer valid lets this stage exit cleanly
+## instead of continuing a callback chain the process is already tearing
+## down for.
 func _click_button(plugin: EditorPlugin, button: Button) -> void:
-	if button == null or not is_instance_valid(button):
+	if button == null or not is_instance_valid(button) or not is_instance_valid(plugin):
 		return
 	await plugin.get_tree().process_frame
+	if not is_instance_valid(plugin):
+		return
 	var point: Vector2 = button.get_global_rect().get_center()
 	button.notification(Control.NOTIFICATION_MOUSE_ENTER)
 	_push_mouse(button, point, MOUSE_BUTTON_LEFT, true)
+	if not is_instance_valid(plugin):
+		return
 	await plugin.get_tree().process_frame
+	if not is_instance_valid(plugin):
+		return
 	await plugin.get_tree().process_frame
+	if not is_instance_valid(plugin):
+		return
 	_push_mouse(button, point, MOUSE_BUTTON_LEFT, false)
+	if not is_instance_valid(plugin):
+		return
 	await plugin.get_tree().process_frame
+	if not is_instance_valid(plugin):
+		return
 	await plugin.get_tree().process_frame
 
 

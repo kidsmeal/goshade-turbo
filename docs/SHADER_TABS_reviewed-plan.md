@@ -329,7 +329,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 
 ## Phase 8: Verify complete lifecycle across supported versions
 
-**Status:** pending
+**Status:** committed (2026-09-14) (fix-now round 5 applied, 2026-09-14)
 
 **Goal:** Establish integrated tab, native-editing, lifecycle, and rendering compatibility on Godot `4.4`, `4.6.2`, and `4.7`.
 
@@ -355,6 +355,10 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 - `tests/fixtures/shader_tabs_shutdown_plugin.gd`.
 - `tests/fixtures/shader_tabs_shutdown_plugin.cfg`.
 - `docs/EDITOR_SMOKE.md`.
+- `tests/gst_editor_tabs_host_smoke.gd` (new, selector `tabs_host`) and its generated `.uid`.
+- `addons/goshade_turbo/ui/gst_inspector_column.gd` and `addons/goshade_turbo/ui/gst_main_panel.gd` (phase 2 defects returned by this phase's matrix, fixed here and reviewed against phase 2's contract).
+- `NOW.md` (ClauDHD bookkeeping: the Active thread next-action lines and the Quick fixes lane, which captures chores mid-thread by design), `ROADMAP.md` (the unit-failure intent recorded by the user's fix 8 overrule), `docs/CURRENTNESS_AUDIT.md` (ledger ticks), and this plan's Status line.
+- Selector `tabs_proof` (phase 1's mechanism proof, `tests/gst_editor_document_proof.gd`) is superseded verification: phases 2 to 7 replaced each proved mechanism with production code and its own selector, so phase 8's "all new tab selectors" means `tabs_native`, `tabs_documents`, `tabs_ui`, `tabs_files`, `tabs_close`, `tabs_host`, and `tabs_recovery`; `tabs_proof` is exempt.
 
 **Verification:**
 
@@ -370,6 +374,8 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 **Exit criteria:** Supported-version matrices pass with no unresolved isolation/data-loss failures; every reviewed edge case has evidence. Production fixes discovered here return to the owning phase and receive review before affected checks repeat.
 
 **Blockers:** Phases `1` through `7` must pass. Release tuning remains the user's separate open checklist item.
+
+**Reviewer overrules (user, 2026-09-14):** round 1 required fix 8 ("fix all 20 unit failures and rerun the unit wrapper cleanly") is overruled for this plan. The 20 `tests/run_codegen_tests.gd` failures (a `generative/clock` shader compile error plus library-index counts) predate this plan and have been recorded as the unchanged baseline in every phase since phase 2; they belong to the shader library, not shader tabs, and are tracked on ROADMAP.md. Phase 8 records them as a known plan-external baseline, not as a pass.
 
 ## Cross-cutting concerns
 

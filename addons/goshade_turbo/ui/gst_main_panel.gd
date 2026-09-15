@@ -2516,11 +2516,12 @@ func _input(event: InputEvent) -> void:
 ## the event alone so Godot's own scene Undo keeps working unaffected
 ## (docs/SHADER_TABS_reviewed-plan.md Cross-cutting "Never clear or rewrite
 ## Godot scene/global history"). Only reachable through the root viewport:
-## a focused native color popup's own embedded-Window input never reaches
-## here at all (Godot's embedded-subwindow forwarding, scene/main/
-## viewport.cpp, claims it first), so gst_inspector_column.gd's own
-## color_popup_undo_redo_requested signal (connected in _ready() straight to
-## _apply_keyboard_undo_redo) is that case's own separate entry point.
+## on Godot 4.6.2/4.7, a key event never reaches here while a native,
+## non-embedded color popup subwindow holds real focus.
+## gst_inspector_column.gd's own color_popup_undo_redo_requested signal
+## (connected in _ready() straight to _apply_keyboard_undo_redo) is that
+## case's own entry point on every version, driven by that popup's own
+## focused LineEdit field intercepting the key directly.
 func _handle_undo_redo_shortcut(event: InputEvent) -> void:
 	if not is_visible_in_tree() or not event is InputEventKey:
 		return
@@ -2542,8 +2543,9 @@ func _handle_undo_redo_shortcut(event: InputEvent) -> void:
 ## Undo/Redo entry points: _handle_undo_redo_shortcut above (a real Ctrl+Z/
 ## Ctrl+Shift+Z reaching the root viewport's own _input()) and
 ## gst_inspector_column.gd's color_popup_undo_redo_requested signal (the
-## same keys reaching a focused native color popup's own embedded Window
-## instead, forwarded here since the root viewport never sees them).
+## same keys reaching a focused native color popup's own currently-focused
+## field instead, forwarded here since the root viewport does not reliably
+## see them while that popup holds focus).
 func _apply_keyboard_undo_redo(redo: bool) -> void:
 	await _finish_pending_edits()
 	if redo:
