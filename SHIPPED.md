@@ -2,7 +2,31 @@
 
 Finished work, newest first. Written automatically at the commit boundary; run `/claudhd:audit` to catch up any commit that bypassed the guard. This file records completed work so progress stays visible.
 
-<!-- last-sha: 9f765a96026d938e415ae85be1e66eb0a24fa25e -->
+<!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
+
+### 2026-09-15
+- Audit 2026-09-15: refresh CURRENTNESS_AUDIT.md and RUNTIME_VERIFICATION_QUEUE.md after the shader tabs plan
+
+### 2026-09-11
+- sandbox/vortex: save the particle process params and black fill in the scene (`cb39a72`)
+- Recipes: metaball_portal is the vortex stack, drop dead hue_shift, ball size and spawn knobs (`f6bb0fa`)
+- Export: reload the editor's cached Shader after writing, vortex of vortexes in the particle shader (`589f893`)
+- sandbox/vortex: let the exported shader drive the scene, wire fill into the base mix (`583ea7e`)
+
+### 2026-09-10
+- Triage: quick-fix three ideas, re-capture inbox through vocab.js (`cc2e59f`)
+- Add sandbox/vortex: GPUParticles2D metaball vortex scene on the portal export (`6f32f14`)
+- Add fieldops/ratchet and generative/clock, file session ideas (content) (`00e8128`)
+- Add fieldops/ratchet and generative/clock, file session ideas (`cc5c54e`)
+- Add fieldops/ease and rewrite every input and param tooltip (`2662767`)
+
+### 2026-09-09
+- hook probe 3: minimal command (`1c12c10`)
+- hook probe 2: pending and verify diagnostics (`1fa7a14`)
+- NOW.md: enforcement opt-in and the auto-commit grant (`8b635fb`)
+- NOW.md: Astra reviewer-only measurement protocol (`c1de73a`)
+- NOW.md: clouds stack moved, push debt cleared (`4a24300`)
+- Backfill SHIPPED.md, refresh NOW.md cursor, move clouds stack to sandbox (`017b936`)
 
 ### 2026-09-15
 - DESIGN.md: re-verify prior art 2026-09-15, add Sprite Shader Mixer, CompositeMaterial, Godot 4.7 live preview, Material Maker
