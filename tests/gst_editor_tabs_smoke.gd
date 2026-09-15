@@ -79,6 +79,7 @@ func run(plugin: EditorPlugin) -> void:
 	var saved_doc: GSTDocument = await _run_title_lifecycle(plugin, panel, initial_doc)
 	var fire_doc: GSTDocument = await _run_recipe_title(plugin, panel)
 	var working_doc: GSTDocument = await _run_stable_id_switching(plugin, panel, saved_doc, fire_doc)
+	await _capture_tab_row_evidence(plugin)
 	await _run_reclick_stays_selected_and_keyboard_undo_focus(plugin, panel, saved_doc, fire_doc)
 	await _run_selection_and_scroll_restoration(plugin, panel, working_doc, fire_doc)
 	await _run_scroll_state_no_bleed_across_documents(plugin, panel, working_doc, fire_doc, saved_doc)
@@ -585,10 +586,17 @@ func _run_narrow_layout(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var row_height_unchanged: bool = is_equal_approx(row_height_narrow, row_height_wide)
 	var h_scroll: HScrollBar = scroll.get_h_scroll_bar()
 	var scrollbar_visible_under_narrow: bool = h_scroll.max_value > h_scroll.page
-	var visible_start: float = scroll.scroll_horizontal
-	var visible_end: float = visible_start + scroll.size.x
-	var active_scrolled_into_view: bool = active_button_present and active_button.position.x >= visible_start - 2.0 and (active_button.position.x + active_button.size.x) <= visible_end + 2.0
-	print("TABS_UI NARROW narrow_threshold=%.1f wide_editing_x=%.1f narrow_editing_x=%.1f row_height_wide=%.1f row_height_narrow=%.1f h_max=%.1f h_page=%.1f active_pos_x=%.1f visible=[%.1f,%.1f] measure=%s" % [narrow_threshold, float(wide_measured["editing_rect"].size.x), float(measured["editing_rect"].size.x), row_height_wide, row_height_narrow, h_scroll.max_value, h_scroll.page, active_button.position.x if active_button_present else -1.0, visible_start, visible_end, measured])
+	# 2026-09-15 layout pass: each tab's title Button now sits inside its own
+	# per-tab wrapper container (gst_main_panel.gd _refresh_tabs, "tab x
+	# inside the tab"), so its local .position is relative to that wrapper,
+	# not the scrolling row directly -- global rects compared against the
+	# scroll container's own global rect measure "inside the visible scroll
+	# window" correctly regardless of that extra nesting level.
+	var scroll_visible_start: float = scroll.get_global_rect().position.x
+	var scroll_visible_end: float = scroll_visible_start + scroll.size.x
+	var active_global_x: float = active_button.get_global_rect().position.x if active_button_present else 0.0
+	var active_scrolled_into_view: bool = active_button_present and active_global_x >= scroll_visible_start - 2.0 and (active_global_x + active_button.size.x) <= scroll_visible_end + 2.0
+	print("TABS_UI NARROW narrow_threshold=%.1f wide_editing_x=%.1f narrow_editing_x=%.1f row_height_wide=%.1f row_height_narrow=%.1f h_max=%.1f h_page=%.1f active_pos_x=%.1f visible=[%.1f,%.1f] measure=%s" % [narrow_threshold, float(wide_measured["editing_rect"].size.x), float(measured["editing_rect"].size.x), row_height_wide, row_height_narrow, h_scroll.max_value, h_scroll.page, active_global_x if active_button_present else -1.0, scroll_visible_start, scroll_visible_end, measured])
 
 	var ok: bool = crossed_breakpoint and row_visible and active_button_present and row_height_unchanged and scrollbar_visible_under_narrow and active_scrolled_into_view
 	_check("narrow_layout_tab_row_usable", ok, "crossed_breakpoint=%s(%.1f) row_visible=%s active_present=%s height_unchanged=%s(%.1f/%.1f) scrollbar_visible=%s scrolled_into_view=%s" % [crossed_breakpoint, narrow_threshold, row_visible, active_button_present, row_height_unchanged, row_height_wide, row_height_narrow, scrollbar_visible_under_narrow, active_scrolled_into_view])
@@ -727,6 +735,21 @@ func _push_key(target: Control, keycode: Key, ctrl: bool = false, shift: bool = 
 	event = event.duplicate()
 	event.pressed = false
 	target.get_viewport().push_input(event, true)
+
+
+## Evidence hook (2026-09-15 layout pass), mirroring gst_editor_ui_complete_
+## smoke.gd's own GST_UI_COMPLETE_SCREENSHOT/_capture pattern: a no-op unless
+## the env var is set, so it adds nothing to the SMOKE SUMMARY count on an
+## ordinary run and cannot change any existing baseline. Called right after
+## _run_stable_id_switching, the first point three tabs are open at once
+## (saved_doc clean, fire_doc dirty, working_doc pristine) with no dialog or
+## picker in the way, to capture the tab row and toolbar layout for review.
+func _capture_tab_row_evidence(plugin: EditorPlugin) -> void:
+	var path: String = OS.get_environment("GST_TABS_UI_SCREENSHOT_PATH")
+	if path.is_empty():
+		return
+	var error: Error = plugin.get_viewport().get_texture().get_image().save_png(path)
+	_check("tab_row_evidence_screenshot", error == OK, "path='%s' error=%d" % [path, error])
 
 
 func _cleanup(paths: Array[String]) -> void:

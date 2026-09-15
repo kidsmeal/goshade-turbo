@@ -961,8 +961,14 @@ func _restore_document_preview_controls(doc: GSTDocument) -> void:
 ## or property edit (_on_stack_changed/_on_property_changed) and successful
 ## save (_save_stack_to_path, :1622), so titles and dirty stars stay current
 ## without a separate per-document watcher. Each tab's own close Button is
-## rebuilt here alongside its title Button (below, close_document.bind(doc)),
-## per phase 6 (docs/SHADER_TABS_reviewed-plan.md).
+## rebuilt here alongside its title Button, both inside one per-tab
+## HBoxContainer (zero separation, below) so the title and its close control
+## read as one tab unit (2026-09-15 layout pass); the wrapper is internal,
+## get_tab_button/get_tab_close_button still return the inner Buttons
+## directly. _new_tab_button lives inside _shader_tabs too, as the trailing
+## child after every tab wrapper, so it scrolls with the row; it is skipped
+## by the clear loop below (it is not rebuilt) and re-homed to the end after
+## every rebuild.
 ##
 ## Round 1 fix 2: every rebuild frees and recreates every tab Button, which
 ## would silently drop keyboard undo focus (_owns_undo_focus() reads
@@ -979,6 +985,8 @@ func _refresh_tabs() -> void:
 	var current_focus: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
 	var focus_was_tab_button: bool = current_focus != null and (_tab_buttons.values().has(current_focus) or _tab_close_buttons.values().has(current_focus))
 	for child: Node in _shader_tabs.get_children():
+		if child == _new_tab_button:
+			continue
 		_shader_tabs.remove_child(child)
 		child.queue_free()
 	_tab_buttons.clear()
@@ -997,7 +1005,6 @@ func _refresh_tabs() -> void:
 		button.text = _tab_title(doc, untitled_index)
 		button.tooltip_text = _tab_tooltip(doc)
 		button.pressed.connect(activate_document.bind(doc))
-		_shader_tabs.add_child(button)
 		_tab_buttons[doc.session_id] = button
 		if doc == _active_document:
 			active_button = button
@@ -1011,8 +1018,13 @@ func _refresh_tabs() -> void:
 		close_button.flat = true
 		close_button.custom_minimum_size.x = 24.0
 		close_button.pressed.connect(close_document.bind(doc))
-		_shader_tabs.add_child(close_button)
 		_tab_close_buttons[doc.session_id] = close_button
+		var tab_wrapper: HBoxContainer = HBoxContainer.new()
+		tab_wrapper.add_theme_constant_override("separation", 0)
+		tab_wrapper.add_child(button)
+		tab_wrapper.add_child(close_button)
+		_shader_tabs.add_child(tab_wrapper)
+	_shader_tabs.move_child(_new_tab_button, _shader_tabs.get_child_count() - 1)
 	if focus_was_tab_button and active_button != null:
 		active_button.grab_focus()
 	# Fix 3 (round 1): keep the active tab scrolled into view under overflow,

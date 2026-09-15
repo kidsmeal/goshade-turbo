@@ -29,7 +29,7 @@ vertical_scroll_mode = 0
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="NewTabButton" type="Button" parent="ShaderTabRow"]
+[node name="NewTabButton" type="Button" parent="ShaderTabRow/ShaderTabsScroll/ShaderTabs"]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "New shader"
@@ -44,6 +44,7 @@ layout_mode = 2
 [node name="FileMenu" type="MenuButton" parent="FileToolbar"]
 unique_name_in_owner = true
 layout_mode = 2
+flat = false
 text = "File"
 
 [node name="SaveButton" type="Button" parent="FileToolbar"]
@@ -61,10 +62,6 @@ unique_name_in_owner = true
 layout_mode = 2
 disabled = true
 text = "Randomize"
-
-[node name="ToolbarSpacer" type="Control" parent="FileToolbar"]
-layout_mode = 2
-size_flags_horizontal = 3
 
 [node name="ExportButton" type="Button" parent="FileToolbar"]
 unique_name_in_owner = true
