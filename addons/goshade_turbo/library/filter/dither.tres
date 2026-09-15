@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "source",
 "label": "Image to dither",
-"description": ""
+"description": "Alpha passes through unchanged; only rgb gets the per-pixel dither offset before quantization."
 }])
 params = Array[Dictionary]([{
 "default": 4,

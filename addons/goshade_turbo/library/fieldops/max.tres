@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "a",
 "label": "First comparison value",
-"description": ""
+"description": "Higher of the two wins per pixel."
 }, {
 "kind": 0,
 "name": "b",

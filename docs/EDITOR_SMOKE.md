@@ -4685,3 +4685,43 @@ None.
 - `tests/gst_editor_tabs_smoke.gd`: read; not edited (see "Test changes" above).
 - `sandbox/**`: not touched. `sandbox/screenshots/glow.png.import`'s pre-existing working-tree modification (present in `git status` before this pass started) is unrelated to this change and was left as found.
 - No file outside this pass's own sentinel list was touched. `sandbox/**` not touched. No git worktree. No commit. No write into the real repository's `.godot/`.
+
+## Unit failures fixed 2026-09-15
+
+Roadmap item "Fix the 20 pre-existing `tests/run_codegen_tests.gd` unit failures" (grown to 21 by the time this pass started: `generative/cell_borders` and `fieldops/ratchet`/`fieldops/ease` landed between the roadmap item being written and this pass, each without an editor description or a roster-count bump). Three causes, no assertion weakened.
+
+### Cause 1: `generative/clock` compile failure
+
+`SHADER ERROR: Too many arguments for "clock(float)" call. Expected at most 1 but received 2.` `addons/goshade_turbo/library/generative/clock.tres` (unmodified this pass) already declares `coord = false` and `inputs = []` correctly: it is a pure time source, "Ignores position" per its own `source_math` field, structurally a zero-input operator (same shape as `fieldops/ratchet` and `fieldops/ease`), filed under the `generative/` taxonomy folder for organizational reasons only (`docs/DESIGN.md` decision 15). Production code already honors `coord = false`: `GSTStackOps.add_layer`'s `is_generator` flag is caller-supplied, and every UI call site (`addons/goshade_turbo/ui/gst_undo.gd:91,419,470`) passes the manifest's own `entry.coord`. The bug was in the test harness only: `tests/test_codegen_generator.gd`'s `test_every_generative_manifest_compiles_alone_with_default_params` hardcoded `GSTStackOps.add_layer(stack, id, GSTLayer.Kind.FIELD, true)` for every id under the `generative/` prefix, forcing a coord block (and the coord-transformed `clock(coord0, l0_clock_speed)` call, two arguments) onto an entry whose own data says it takes none. Fixed at `tests/test_codegen_generator.gd:139-145`: reads `lib.get_entry(id).coord` per entry instead of assuming `true`, matching the pattern the sdf-generator loop directly below it already used to separate sdf generators from sdf operators sharing one id prefix.
+
+### Cause 2: 17 inputs with empty editor `description`
+
+(Task text said 16; enumeration below is 17 actual `description` fields across 14 files -- `fieldops/add`, `fieldops/multiply`, and `sdf/smooth_union` each carry two.) One sentence per input, same voice as `fieldops/max` input `b` and `sdf/intersect` input `b`, what the input feeds, no marketing. Files: `addons/goshade_turbo/library/color/brightness_contrast.tres`, `color/hue_shift.tres`, `color/posterize.tres`, `color/saturation.tres`, `fieldops/add.tres`, `fieldops/max.tres`, `fieldops/min.tres`, `fieldops/multiply.tres`, `fieldops/remap.tres`, `fieldops/smoothstep.tres`, `filter/dither.tres`, `sdf/intersect.tres`, `sdf/smooth_union.tres`, `sdf/union.tres`. Covered by `tests/test_library_index.gd`'s `test_every_manifest_input_and_param_has_editor_metadata`.
+
+### Cause 3: hardcoded roster totals
+
+`tests/test_combinations.gd:52-53` (`18 generators`, `11 field ops`), `:119-120` (`10 color ops`, `20 color-kind entries`), `:178-179` (`4 sdf operators`, `7 sdf generators`), and `tests/test_library_index.gd:14` (`54` entries) each replaced with an explicit `Array[String]` roster (`EXPECTED_GENERATOR_IDS`, `EXPECTED_FIELD_OP_IDS`, `EXPECTED_COLOR_OP_IDS`, `EXPECTED_COLOR_ENTRY_IDS`, `EXPECTED_SDF_OPERATOR_IDS`, `EXPECTED_SDF_GENERATOR_IDS` in `test_combinations.gd`; `EXPECTED_LIBRARY_IDS` in `test_library_index.gd`), compared as a sorted array against what `GSTLibrary.scan()` actually discovered, with a `_roster_diff_message`/`_roster_matches` helper (local to each file) that names any missing or extra id by name rather than only reporting a count mismatch. Each roster carries a comment: new entries must be added there on purpose. The combination loops themselves are untouched; they still iterate the discovered sets, not the expected rosters. `generative/cell_borders` (coord) had silently pushed the generator count from 18 to 19; `fieldops/ratchet`/`fieldops/ease` had pushed the all-field-op count from 11 to 13; `generative/clock`, `generative/cell_borders`, `fieldops/ratchet`, `fieldops/ease` together pushed the library total from 54 to 58.
+
+### Verification
+
+Command shape per binary: `--headless --path . --import`, then `--headless --path . -s res://tests/run_codegen_tests.gd` (4.6.2 and 4.7 run against the isolated projects `.now/tabs-validation/project-462` and `project-47` after syncing `addons/` and `tests/` from the real repo, since the real repo's `project.godot` targets 4.4).
+
+| Godot | Command | Result |
+|---|---|---|
+| 4.4 (`C:\Users\atk67\Downloads\Godot_v4.4-stable_win64.exe\Godot_v4.4-stable_win64.exe`, real repo) | `run_codegen_tests.gd` | `GST tests: 21 file(s), 145 test method(s), 0 failure(s)`, `run_codegen_tests: PASS` |
+| 4.6.2 (`C:\Users\atk67\Desktop\Godot_v4.6.2-stable_win64.exe`, `project-462`) | `run_codegen_tests.gd` | `GST tests: 21 file(s), 145 test method(s), 0 failure(s)`, `run_codegen_tests: PASS` |
+| 4.7 (`C:\Users\atk67\Documents\godot\Godot_v4.7-stable_win64.exe`, `project-47`) | `run_codegen_tests.gd` | `GST tests: 21 file(s), 145 test method(s), 0 failure(s)`, `run_codegen_tests: PASS` |
+| 4.4 Compatibility, real repo | `--path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd` (no `--headless`: the dummy renderer under `--headless` cannot read back a texture, confirmed by a first attempt that failed every `PREVIEW_COMPOSITION`/`NOISE_CONTINUITY` check with `texture_2d_get` null-parameter errors) | `run_render_checks: PASS, 81 stack(s) checked` |
+
+No manifest, recipe, or screenshot needed regenerating: this pass never changed `generative/clock.tres`'s own fields or any codegen file, only the test harness's layer-construction call and the three roster assertions, so no stack's rendered output changed. `sandbox/screenshots/glow.png.import` was rewritten by the 4.4 `--import` step (pre-existing cross-version drift, `NOW.md` "Loose ends"); restored via `git checkout --` before the 4.6.2/4.7 runs. `sandbox/**` otherwise untouched. No worktree, no commit.
+
+### Unit failures fixed 2026-09-15, review notes
+
+Quick review (PASS-WITH-NOTES) on the pass above found four residual issues; fixed here, no test weakened.
+
+- `addons/goshade_turbo/library/filter/dither.tres` input `source` description said "Each channel gets a per-pixel dither offset before quantization," implying alpha is affected, but `code` is `GST_OUT = vec4(stepped, c.a)` (alpha unmodified). Reworded to the same "Alpha passes through unchanged; only rgb ..." pattern the four `color/*` entries in this pass already use.
+- `tests/test_codegen_generator.gd:143` (`assert_true(generative_ids.size() >= 11, ...)`) was the one file this pass edited that still carried the hardcoded-count pattern the rest of the pass removed, and `>=` additionally hid both additions and removals down to 11. Added `EXPECTED_GENERATIVE_IDS` (13 entries, matches `tests/test_library_index.gd`'s `generative/*` roster) and replaced the assertion with `_roster_matches`/`_roster_diff_message`.
+- `addons/goshade_turbo/library/fieldops/add.tres` and `fieldops/multiply.tres`: inputs `a`/`b` descriptions ("Summed with the other input." / "Multiplied with the other input.") restated their own labels. Reworded to state what the label doesn't: add is `a + b` unclamped (sum can exceed 1); multiply zeroes on a zero input and darkens below 1.
+- `_roster_diff_message`/`_roster_matches` existed as two copies, one each in `tests/test_combinations.gd` and `tests/test_library_index.gd`. Moved both to `tests/gst_test_base.gd` (the shared base every test file already extends); removed both copies. Call sites unchanged (same method signatures, now inherited).
+
+Verification: `Godot_v4.4-stable_win64.exe --headless --path . --import`, then `--headless --path . -s res://tests/run_codegen_tests.gd` in the real repo root -> `GST tests: 21 file(s), 145 test method(s), 0 failure(s)`, `run_codegen_tests: PASS`. `sandbox/screenshots/glow.png.import` restored via `git checkout --` after import. `addons/goshade_turbo/ui/**` and `tests/gst_editor_*` not touched (concurrent pass).

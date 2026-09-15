@@ -150,7 +150,7 @@ Randomize (v0.1): a button on an open recipe that sets every slider to a random 
 
 ## Release checklist (v0.1)
 
-- [x] Every roster entry above exists as a manifest file and compiles alone in the preview. (evidence: tests/test_codegen_generator.gd, tests/test_codegen_fieldop.gd, tests/test_codegen_color.gd, tests/test_library_index.gd's `test_scan_indexes_the_full_library_roster` (54 entries) plus the sdf compile-alone loops)
+- [x] Every roster entry above exists as a manifest file and compiles alone in the preview. (evidence: tests/test_codegen_generator.gd, tests/test_codegen_fieldop.gd, tests/test_codegen_color.gd, tests/test_library_index.gd's `test_scan_indexes_the_full_library_roster` (explicit 58-id roster since 2026-09-15) plus the sdf compile-alone loops)
 - [x] Every entry has a reference stack with default sliders and a committed screenshot. (evidence: sandbox/stacks/*.tres, sandbox/screenshots/*.png, docs/EDITOR_SMOKE.md Phase 8 section "Headless suite and render checks, 4.6.2 baseline")
 - [x] Headless codegen tests pass: entry to shader text, include walk dedupe, slot conversion insertion, filter input refusal, id stability across reorder, delete of a referenced layer, header roundtrip, overwrite check, `TIME` emitted only with nonzero scroll. (evidence: docs/EDITOR_SMOKE.md "Version matrix, final phase 8 tree", `GST tests: 21 file(s), 123 test method(s), 0 failure(s)` on 4.4, 4.6.2, 4.7)
 - [x] Combination tests: every field op with every generator as input compiles; every color op with every color entry as input compiles. (evidence: tests/test_combinations.gd)

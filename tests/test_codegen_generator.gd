@@ -5,6 +5,18 @@ extends GSTTestBase
 ## (GSTLibrary.scan over addons/goshade_turbo/library/).
 
 
+## Every generative/* manifest id, coord-driven or not (generative/clock has
+## coord == false, a pure time source per decision 4/15). New entries must be
+## added here on purpose (2026-09-15 unit-failure fix pass, review note 3: a
+## hardcoded ">= 11" count hid both additions and removals down to 11).
+const EXPECTED_GENERATIVE_IDS: Array[String] = [
+	"generative/cell_borders", "generative/cellular_edges", "generative/checker", "generative/clock",
+	"generative/fbm", "generative/hash", "generative/linear_gradient", "generative/perlin",
+	"generative/radial_gradient", "generative/snoise", "generative/stripes",
+	"generative/value_noise", "generative/voronoi",
+]
+
+
 func _scanned_library() -> GSTLibrary:
 	var lib: GSTLibrary = GSTLibrary.new()
 	lib.scan()
@@ -128,20 +140,27 @@ func test_transform_scroll_and_warp_emit_in_order() -> void:
 	assert_true(GSTShaderCompile.compiles(code), "a generator with both scroll and warp set compiles")
 
 
+## Not every "generative/" id is coord-driven (design: docs/DESIGN.md decision
+## 4, the taxonomy folder is organizational only, per decision 15). generative/
+## clock has coord == false and no inputs: a pure time source with no spatial
+## dependency, same shape as a zero-input operator. is_generator is read per
+## entry from library data rather than assumed true, matching the sdf loop
+## below that already separates generators from operators sharing one prefix.
 func test_every_generative_manifest_compiles_alone_with_default_params() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var generative_ids: Array[String] = []
 	for id: String in lib.entries.keys():
 		if id.begins_with("generative/"):
 			generative_ids.append(id)
-	assert_true(generative_ids.size() >= 11, "the full v0.1 generative roster is present (11 entries)")
+	assert_true(_roster_matches(generative_ids, EXPECTED_GENERATIVE_IDS), "generative roster matches expected (%s)" % _roster_diff_message(generative_ids, EXPECTED_GENERATIVE_IDS))
 
 	for id: String in generative_ids:
+		var entry: GSTManifestEntry = lib.get_entry(id)
 		var stack: GSTStack = GSTStack.new()
-		var layer: GSTLayer = GSTStackOps.add_layer(stack, id, GSTLayer.Kind.FIELD, true)
+		var layer: GSTLayer = GSTStackOps.add_layer(stack, id, GSTLayer.Kind.FIELD, entry.coord)
 		stack.output_color = layer.id
 		var code: String = GSTCodegen.generate(stack, lib)
-		assert_true(GSTShaderCompile.compiles(code), "%s compiles alone with default params (a generator always carries at least the scale/offset/rotation uniforms)" % id)
+		assert_true(GSTShaderCompile.compiles(code), "%s compiles alone with default params (coord-driven entries carry the scale/offset/rotation uniforms, others compile as a zero-input operator)" % id)
 
 
 ## Phase 8: the 7 sdf generators (circle, box, rounded_box, polygon, star,

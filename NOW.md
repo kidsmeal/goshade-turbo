@@ -17,11 +17,11 @@ Last touched: 2026-09-15
 
 ## Active thread (only one)
 
-**Multiple shader tabs**
+**Fix the 21 unit failures (roadmap)**
 
 Next physical action:
 
-- [ ] Plan complete: 8 phases committed and pushed (last ee12dcd), quick-fix batch cleared; next: /claudhd:audit to reconcile the deferred-note ledger and the decision 10 wording in docs/SHADER_TABS_reviewed.md, then /claudhd:start the next roadmap item
+- [ ] Fixed 2026-09-15 (0 failures on 4.4/4.6.2/4.7): test harness forced coord=true on generative/clock whose manifest says coord=false; 17 empty input descriptions across 14 blocks; 7 hardcoded roster totals replaced by explicit id rosters. Review PASS-WITH-NOTES; fix-now pass in flight; next: commit, then tab-row arrow fix
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

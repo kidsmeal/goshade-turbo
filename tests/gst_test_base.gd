@@ -38,6 +38,37 @@ func has_failures() -> bool:
 	return not failures.is_empty()
 
 
+## Sorted-array diff between a discovered id set and an expected roster, so a
+## mismatch names exactly which ids are missing or unexpectedly extra instead
+## of only reporting a count (2026-09-15 unit-failure fix pass: a hardcoded
+## count let a new block go unlisted). Shared by tests/test_combinations.gd
+## and tests/test_library_index.gd (fix-now note 5: one copy, not two).
+func _roster_diff_message(actual_ids: Array[String], expected_ids: Array[String]) -> String:
+	var actual_sorted: Array[String] = actual_ids.duplicate()
+	actual_sorted.sort()
+	var expected_sorted: Array[String] = expected_ids.duplicate()
+	expected_sorted.sort()
+	var missing: Array[String] = []
+	for id: String in expected_sorted:
+		if not actual_sorted.has(id):
+			missing.append(id)
+	var extra: Array[String] = []
+	for id: String in actual_sorted:
+		if not expected_sorted.has(id):
+			extra.append(id)
+	return "missing: %s, extra: %s" % [str(missing), str(extra)]
+
+
+## True when `actual_ids` and `expected_ids` hold the same ids, ignoring
+## discovery order (Dictionary.keys() order is scan order, not alphabetical).
+func _roster_matches(actual_ids: Array[String], expected_ids: Array[String]) -> bool:
+	var actual_sorted: Array[String] = actual_ids.duplicate()
+	actual_sorted.sort()
+	var expected_sorted: Array[String] = expected_ids.duplicate()
+	expected_sorted.sort()
+	return actual_sorted == expected_sorted
+
+
 ## Every persisted GSTStack field: coord_space, output_color, output_alpha,
 ## next_id, layer count, then layer order and content via _compare_layers.
 ## Returns early on a layer-count mismatch: a per-index layer comparison is

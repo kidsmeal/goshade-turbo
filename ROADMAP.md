@@ -17,7 +17,7 @@ The intent the active thread is currently serving (usually one, sometimes none).
 Committed and ordered, on-deck after Now. Each is a real intent you mean to build, not a someday-maybe. Carry a one-line "done" so it is ready to activate when its turn comes, not re-litigated.
 
 - [ ] GoShade Turbo v0.1 - done: release checklist in `docs/DESIGN.md` all ticked `r-0907-1`
-- [ ] Fix the 20 pre-existing `tests/run_codegen_tests.gd` unit failures (`generative/clock` shader compile error plus library-index counts); overruled out of shader tabs phase 8 review round 1 as plan-external baseline - done: headless unit wrapper reports 0 failures on 4.4, 4.6.2, and 4.7 `r-0914-1`
+- [x] Fix the 20 pre-existing `tests/run_codegen_tests.gd` unit failures (`generative/clock` shader compile error plus library-index counts); overruled out of shader tabs phase 8 review round 1 as plan-external baseline - done: `GST tests: 21 file(s), 145 test method(s), 0 failure(s)` on 4.4, 4.6.2, 4.7 (2026-09-15); `run_render_checks: PASS, 81 stack(s) checked` on 4.4 Compatibility; see `docs/EDITOR_SMOKE.md` "Unit failures fixed 2026-09-15" `r-0914-1`
 
 ## Later
 

@@ -296,7 +296,7 @@ B1, B3, B4, B5 resolved by the user 2026-09-07. B2, B6, B7, B8 resolved by the u
 - `docs/EDITOR_SMOKE.md` (append: phase 8 runs, the version matrix runs on 4.4 and 4.7)
 - `docs/DESIGN.md` (modify: release checklist boxes ticked with the evidence per line)
 - `docs/CURRENTNESS_AUDIT.md` (modify: the two deferred notes retired)
-- `tests/test_library_index.gd`, `tests/test_codegen_generator.gd`, `tests/test_codegen_fieldop.gd` (modify: roster count 54, sdf compile-alone loops)
+- `tests/test_library_index.gd`, `tests/test_codegen_generator.gd`, `tests/test_codegen_fieldop.gd` (modify: roster count 54 at the time; 58 entries and an explicit id roster since 2026-09-15, sdf compile-alone loops)
 - `tests/test_recipe_roundtrip.gd` (modify: every stored recipe and reference-stack param lies inside its manifest range)
 - `addons/goshade_turbo/library/fieldops/smoothstep.tres` (modify: edge range widened to `[-1, 2]` because inputs such as fbm and sdf are unclamped)
 - `addons/goshade_turbo/ui/gst_inspector_column.gd` (modify: `refresh()` for external writes such as randomize)

@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "color",
 "label": "Color to adjust",
-"description": ""
+"description": "Alpha passes through unchanged; only rgb receives the brightness and contrast adjustment."
 }])
 params = Array[Dictionary]([{
 "default": 0.0,

@@ -34,11 +34,61 @@ func _has_color_input(entry: GSTManifestEntry) -> bool:
 	return false
 
 
+## Every entry with coord == true: every generative/* generator plus every
+## sdf/* generator. New entries must be added here on purpose.
+const EXPECTED_GENERATOR_IDS: Array[String] = [
+	"generative/cell_borders", "generative/cellular_edges", "generative/checker",
+	"generative/fbm", "generative/hash", "generative/linear_gradient", "generative/perlin",
+	"generative/radial_gradient", "generative/snoise", "generative/stripes",
+	"generative/value_noise", "generative/voronoi",
+	"sdf/box", "sdf/circle", "sdf/line", "sdf/polygon", "sdf/ring", "sdf/rounded_box", "sdf/star",
+]
+
+## Every fieldops/* entry whose inputs are all field-kind (fieldops/alpha
+## excluded, color-kind input). New entries must be added here on purpose.
+const EXPECTED_FIELD_OP_IDS: Array[String] = [
+	"fieldops/abs", "fieldops/add", "fieldops/ease", "fieldops/fract", "fieldops/invert",
+	"fieldops/max", "fieldops/min", "fieldops/mix", "fieldops/multiply", "fieldops/pow",
+	"fieldops/ratchet", "fieldops/remap", "fieldops/smoothstep",
+]
+
+## Every color/* entry with at least one color-kind input (fill has no
+## inputs, gradient_map and palette take only a field input). New entries
+## must be added here on purpose.
+const EXPECTED_COLOR_OP_IDS: Array[String] = [
+	"color/add", "color/brightness_contrast", "color/hue_shift", "color/mix",
+	"color/multiply", "color/overlay", "color/posterize", "color/saturation",
+	"color/screen", "color/soft_light",
+]
+
+## Every color-kind entry: the color/* roster, the source/* roster, and every
+## filter/* entry (its kind_out is color, decision 21). New entries must be
+## added here on purpose.
+const EXPECTED_COLOR_ENTRY_IDS: Array[String] = [
+	"color/add", "color/brightness_contrast", "color/fill", "color/gradient_map",
+	"color/hue_shift", "color/mix", "color/multiply", "color/overlay", "color/palette",
+	"color/posterize", "color/saturation", "color/screen", "color/soft_light",
+	"filter/box_blur", "filter/chromatic_split", "filter/dither", "filter/outline", "filter/pixelate",
+	"source/screen", "source/texture",
+]
+
+## sdf/* entries with coord == false. New entries must be added here on
+## purpose.
+const EXPECTED_SDF_OPERATOR_IDS: Array[String] = [
+	"sdf/intersect", "sdf/smooth_union", "sdf/subtract", "sdf/union",
+]
+
+## sdf/* entries with coord == true. New entries must be added here on
+## purpose.
+const EXPECTED_SDF_GENERATOR_IDS: Array[String] = [
+	"sdf/box", "sdf/circle", "sdf/line", "sdf/polygon", "sdf/ring", "sdf/rounded_box", "sdf/star",
+]
+
+
 ## Every field op with every generator (generative roster plus the sdf
 ## generators, docs/PLAN.md Phase 8) wired into every one of that field op's
 ## input slots, so a two-input op (e.g. fieldops/max) gets the same generator
-## on both "a" and "b". A generator is any entry with coord == true, which is
-## exactly the generative (11) and sdf-generator (7) union, 18 total.
+## on both "a" and "b". A generator is any entry with coord == true.
 func test_every_field_op_compiles_with_every_generator_as_input() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var generator_ids: Array[String] = []
@@ -49,8 +99,8 @@ func test_every_field_op_compiles_with_every_generator_as_input() -> void:
 			generator_ids.append(id)
 		elif id.begins_with("fieldops/") and _all_inputs_field(entry):
 			field_op_ids.append(id)
-	assert_eq(generator_ids.size(), 18, "18 generators: 11 generative plus 7 sdf")
-	assert_eq(field_op_ids.size(), 11, "11 all-field-input field ops (fieldops/alpha excluded, color input)")
+	assert_true(_roster_matches(generator_ids, EXPECTED_GENERATOR_IDS), "generator roster matches expected (%s)" % _roster_diff_message(generator_ids, EXPECTED_GENERATOR_IDS))
+	assert_true(_roster_matches(field_op_ids, EXPECTED_FIELD_OP_IDS), "all-field-input field op roster matches expected (%s)" % _roster_diff_message(field_op_ids, EXPECTED_FIELD_OP_IDS))
 
 	var checked: int = 0
 	for field_op_id: String in field_op_ids:
@@ -116,8 +166,8 @@ func test_every_color_op_compiles_with_every_color_entry_as_input() -> void:
 			color_op_ids.append(id)
 		if id.begins_with("color/") or id.begins_with("source/") or _is_filter(id):
 			color_entry_ids.append(id)
-	assert_eq(color_op_ids.size(), 10, "10 color ops with a color-kind input (hue_shift, saturation, brightness_contrast, posterize, multiply, screen, overlay, add, soft_light, mix)")
-	assert_eq(color_entry_ids.size(), 20, "20 color-kind entries: the 13-entry color roster plus the 2-entry source roster plus the 5-entry filter roster")
+	assert_true(_roster_matches(color_op_ids, EXPECTED_COLOR_OP_IDS), "color-op roster matches expected (%s)" % _roster_diff_message(color_op_ids, EXPECTED_COLOR_OP_IDS))
+	assert_true(_roster_matches(color_entry_ids, EXPECTED_COLOR_ENTRY_IDS), "color-entry roster matches expected (%s)" % _roster_diff_message(color_entry_ids, EXPECTED_COLOR_ENTRY_IDS))
 
 	var checked: int = 0
 	for color_op_id: String in color_op_ids:
@@ -175,8 +225,8 @@ func test_every_sdf_operator_compiles_with_every_pair_of_sdf_generators() -> voi
 			sdf_generator_ids.append(id)
 		else:
 			sdf_operator_ids.append(id)
-	assert_eq(sdf_operator_ids.size(), 4, "4 sdf operators: union, subtract, intersect, smooth_union")
-	assert_eq(sdf_generator_ids.size(), 7, "7 sdf generators: circle, box, rounded_box, polygon, star, line, ring")
+	assert_true(_roster_matches(sdf_operator_ids, EXPECTED_SDF_OPERATOR_IDS), "sdf-operator roster matches expected (%s)" % _roster_diff_message(sdf_operator_ids, EXPECTED_SDF_OPERATOR_IDS))
+	assert_true(_roster_matches(sdf_generator_ids, EXPECTED_SDF_GENERATOR_IDS), "sdf-generator roster matches expected (%s)" % _roster_diff_message(sdf_generator_ids, EXPECTED_SDF_GENERATOR_IDS))
 
 	var checked: int = 0
 	for sdf_operator_id: String in sdf_operator_ids:

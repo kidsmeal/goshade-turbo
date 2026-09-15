@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 0,
 "name": "a",
 "label": "First shape",
-"description": ""
+"description": "Area inside either remains."
 }, {
 "kind": 0,
 "name": "b",

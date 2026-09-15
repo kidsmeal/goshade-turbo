@@ -15,7 +15,7 @@ inputs = Array[Dictionary]([{
 "kind": 1,
 "name": "color",
 "label": "Color to posterize",
-"description": ""
+"description": "Alpha passes through unchanged; only rgb gets quantized."
 }])
 params = Array[Dictionary]([{
 "default": 6,

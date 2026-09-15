@@ -4,14 +4,40 @@ extends GSTTestBase
 ## addons/goshade_turbo/library/. Design: docs/DESIGN.md, Manifest entry.
 
 
+## Every manifest id the library is expected to index (58 entries, 2026-09-15
+## unit-failure fix pass). A hardcoded roster count let a block be added
+## without being listed, so this is compared as a sorted array against
+## GSTLibrary.scan()'s actual result and reports missing/extra ids by name.
+## New entries must be added here on purpose.
+const EXPECTED_LIBRARY_IDS: Array[String] = [
+	"color/add", "color/brightness_contrast", "color/fill", "color/gradient_map",
+	"color/hue_shift", "color/mix", "color/multiply", "color/overlay", "color/palette",
+	"color/posterize", "color/saturation", "color/screen", "color/soft_light",
+	"fieldops/abs", "fieldops/add", "fieldops/alpha", "fieldops/ease", "fieldops/fract",
+	"fieldops/invert", "fieldops/max", "fieldops/min", "fieldops/mix", "fieldops/multiply",
+	"fieldops/pow", "fieldops/ratchet", "fieldops/remap", "fieldops/smoothstep",
+	"filter/box_blur", "filter/chromatic_split", "filter/dither", "filter/outline", "filter/pixelate",
+	"generative/cell_borders", "generative/cellular_edges", "generative/checker", "generative/clock",
+	"generative/fbm", "generative/hash", "generative/linear_gradient", "generative/perlin",
+	"generative/radial_gradient", "generative/snoise", "generative/stripes", "generative/value_noise",
+	"generative/voronoi",
+	"sdf/box", "sdf/circle", "sdf/intersect", "sdf/line", "sdf/polygon", "sdf/ring",
+	"sdf/rounded_box", "sdf/smooth_union", "sdf/star", "sdf/subtract", "sdf/union",
+	"source/screen", "source/texture",
+]
+
+
 func test_scan_indexes_the_full_library_roster() -> void:
 	var lib: GSTLibrary = GSTLibrary.new()
 	lib.scan()
-	# Phase 1 shipped 3 seed manifests. Phase 2 filled out the v0.1 generative
-	# (11) and fieldops (11) rosters. Phase 3 adds source (2), filter (5),
-	# color (13), and fieldops/alpha (1): 22 + 21 = 43. Phase 8 adds the sdf
-	# roster (7 generators, 4 operators): 43 + 11 = 54.
-	assert_eq(lib.size(), 54, "phase 2's 22 plus phase 3's 21 plus phase 8's sdf roster (11)")
+	var actual_ids: Array[String] = []
+	for id: String in lib.entries.keys():
+		actual_ids.append(id)
+	var actual_sorted: Array[String] = actual_ids.duplicate()
+	actual_sorted.sort()
+	var expected_sorted: Array[String] = EXPECTED_LIBRARY_IDS.duplicate()
+	expected_sorted.sort()
+	assert_eq(actual_sorted, expected_sorted, "library roster matches the expected 58-entry id set (%s)" % _roster_diff_message(actual_ids, EXPECTED_LIBRARY_IDS))
 	assert_not_null(lib.get_entry("generative/hash"), "hash manifest is indexed")
 	assert_not_null(lib.get_entry("generative/snoise"), "snoise manifest is indexed")
 	assert_not_null(lib.get_entry("generative/fbm"), "fbm manifest is indexed")
