@@ -17,6 +17,6 @@ Legend: `[ ]` new, `[~]` promoted (to ROADMAP.md, or to the quick-fixes batch), 
 - [~] 2026-09-10 08:07 (while: Paused: multiple shader tabs) cellular_edges: drop the width param, return raw F2 - F1 and let smoothstep/band set width downstream
 - [~] 2026-09-10 08:07 (while: Paused: multiple shader tabs) generative/cell_borders: exact distance to voronoi edge, iq two-pass bisector algorithm, MIT port with source_code_license set
 - [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) centered origin: uv space defaults offset to -0.5 or gains a centered coord space, so generators stop needing Position -0.5 by hand (recipes do it manually, sprite_opal.tres:38)
-- [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) param driven by a field layer: wire any param to a layer output instead of a slider (clock -> tent -> ratchet.amount); subsumes time-animated params
-- [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) fork-to-entry: from the code panel, write a new .tres from a selected function and swap the layer to it
+- [~] 2026-09-10 08:07 (while: Paused: multiple shader tabs) param driven by a field layer: wire any param to a layer output instead of a slider (clock -> tent -> ratchet.amount); subsumes time-animated params
+- [~] 2026-09-10 08:07 (while: Paused: multiple shader tabs) fork-to-entry: from the code panel, write a new .tres from a selected function and swap the layer to it
 - [ ] 2026-09-10 08:07 (while: Paused: multiple shader tabs) live read-only code panel beside the preview showing codegen output on every stack change (gst_material_sync already has the string)
