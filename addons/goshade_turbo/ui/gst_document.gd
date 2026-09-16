@@ -2,121 +2,79 @@
 class_name GSTDocument
 extends RefCounted
 
-## Runtime ownership for one open shader (phase 3,
-## docs/SHADER_TABS_reviewed-plan.md): its stack, private UndoRedo/GSTUndo
+## Runtime ownership for one open shader: its stack, private UndoRedo/GSTUndo
 ## history, save/origin identity, selected layer, and preview/diagnostic
-## state -- independent of every other open document. gst_main_panel.gd
-## holds every open GSTDocument in its own document list and activates one
-## at a time into the shared UI (stack list, inspector column, output
-## block, coord-space dropdown, preview); the shader-tab row (phase 4) is the
-## visible control that lets a user switch which one is active.
-##
-## Cross-cutting "Shared editor state and history": resource paths and
-## active scenes cannot choose a shader history. This UndoRedo instance is
-## registered on directly by GSTUndo; no GLOBAL_HISTORY lookup or
+## state, independent of every other open document. gst_main_panel.gd holds
+## every open GSTDocument and activates one at a time into the shared UI.
+## GSTUndo registers on this UndoRedo directly; no GLOBAL_HISTORY lookup or
 ## editor-manager context applies.
 
 ## Stable across the document's lifetime; never reused, never derived from
-## array position or display order (phase 4 activates by this id, not
-## index).
+## array position or display order.
 var session_id: int = -1
 
 var stack: GSTStack = null
-## One standalone UndoRedo per document (decision 20, revised). Freed
-## explicitly by teardown(): a plain Object, not a RefCounted or a Node, so
-## nothing frees it automatically.
+## One standalone UndoRedo per document. Freed explicitly by teardown(): a
+## plain Object, so nothing frees it automatically.
 var undo_redo: UndoRedo = UndoRedo.new()
 var undo: GSTUndo = null
 
-## "" for a never-saved stack or one reopened from a .gdshader header
-## (decision 8: it has no .tres of its own to "Save" back onto). A
-## non-empty path is this document's own canonical identity for reuse
+## "" for a never-saved stack or one reopened from a .gdshader header. A
+## non-empty path is this document's identity for reuse
 ## (find_document_by_path in gst_main_panel.gd).
 var current_path: String = ""
-## True only right after this document was installed from a shipped recipe
-## (decision 16): gates the Randomize button. New, Open, and Reopen Shader
-## each create their document with this false.
+## True only right after this document was installed from a shipped recipe;
+## gates the Randomize button.
 var recipe_open: bool = false
-## Name of the shipped recipe this document was opened from, or "" (New,
-## Open, Reopen Shader). Phase 4 displays this in the tab title/tooltip;
-## phase 3 only stores it.
+## Name of the shipped recipe this document was opened from, or "".
 var recipe_name: String = ""
 ## True only right after this document was rebuilt from an exported
-## .gdshader header (decision 8): unsaved import content with no recipe
-## name and no saved path. Phase 4 displays this in the tab tooltip; phase 3
-## only stores it.
+## .gdshader header: unsaved import content with no recipe name and no path.
 var reopened_import: bool = false
 ## Stable layer id last selected in this document's own stack list.
 var selected_layer_id: StringName = &""
 
-## Stack-list scroll position, captured by stable layer id (not a raw
-## scrollbar offset -- rows are rebuilt on every activation) whenever this
-## document stops being the active one (gst_main_panel.gd's
-## _activate_document, phase 4: "restore stable-ID layer selection and list
-## position"). "" means no captured position (never activated away from, or a
-## pristine document that has never scrolled).
+## Stack-list scroll position, captured by stable layer id when this document
+## stops being active (gst_main_panel.gd _activate_document); rows are
+## rebuilt on every activation, so a raw scrollbar offset is not stable. ""
+## means no captured position.
 var list_scroll_anchor_id: StringName = &""
 var list_scroll_offset: float = 0.0
 
-## Document-local preview/diagnostic state (phase 4 restores these on
-## activation; phase 3 only stores them as the active document's own
-## selections change).
+## Document-local preview/diagnostic state, restored on activation.
 var preview_preset: String = ""
 var preview_image_path: String = ""
 ## Diagnostic solo-preview layer id (gst_main_panel.gd's _preview_layer_id).
 var preview_layer_id: StringName = &""
 
-## Each document renders through its own GSTMaterialSync/ShaderMaterial
-## pair so an inactive document's last successful preview survives
-## switching away from it (phase 4 renders only the active one; phase 3
-## only keeps the state isolated).
+## Each document renders through its own GSTMaterialSync/ShaderMaterial pair
+## so an inactive document's last successful preview survives switching.
 var preview_sync: GSTMaterialSync = GSTMaterialSync.new()
 var material: ShaderMaterial = preview_sync.get_material()
 
-## Content fingerprint (compute_fingerprint) at the last successful open or
-## save. Compared against the stack's current fingerprint to report dirty
-## state (consumed by phase 5/6 close/save; established here). A pristine,
-## never-edited document (new or freshly opened) is never dirty.
+## compute_fingerprint(stack) at the last successful open or save; is_dirty()
+## compares the current fingerprint against it.
 var saved_fingerprint: String = ""
 
-## "" for a document that holds no shutdown recovery record right now; the
-## record's own stable identity (GSTDocumentRecovery's "id") otherwise --
-## either because gst_main_panel.gd's save_external_data() just wrote one for
-## this still-dirty, untitled-or-failed-path document during a confirmed
-## quit, or because this document was itself reopened from that record at
-## startup (load_recovery_records()). gst_main_panel.gd reuses this same id
-## on every later shutdown while the document stays dirty (decision 10:
-## "avoid duplicate restoration of one record") and clears it back to ""
-## once the document is saved or explicitly discarded, removing the on-disk
-## record at the same time (Cross-cutting "Keep each record until its
-## document is successfully saved or explicitly discarded").
+## "" when this document holds no shutdown recovery record; otherwise the
+## record's id (GSTDocumentRecovery). gst_main_panel.gd reuses this id on
+## every later shutdown while the document stays dirty and clears it, removing
+## the on-disk record, once the document is saved or discarded.
 var recovery_record_id: String = ""
 
-## compute_fingerprint(stack) at the moment recovery_record_id's own on-disk
-## record last successfully captured this document's content -- "" whenever
-## recovery_record_id is "". Real confirmed quit (docs/EDITOR_SMOKE.md
-## "Shader tabs phase 7" evidence): Godot's own "Save and Quit" handler
-## re-evaluates every plugin's _get_unsaved_status("") after calling
-## _save_external_data(), and never actually exits the process while that
-## still reports anything -- a document is_dirty() forever by design (decision
-## 10: recovery preserves content without silently marking it saved) would
-## therefore leave the real confirmed-quit dialog stuck open indefinitely
-## once recovered. needs_shutdown_attention() below excludes a document only
-## once its own current content is provably the same content already
-## captured on disk, so a genuinely newer edit made after an earlier
-## recovery write (or after reopening one, in the same session, without
-## saving or discarding it) still surfaces normally.
+## compute_fingerprint(stack) when recovery_record_id's on-disk record last
+## captured this content; "" whenever recovery_record_id is "". Godot's
+## "Save and Quit" handler re-evaluates every plugin's _get_unsaved_status("")
+## after _save_external_data() and never exits while it reports anything, so
+## a recovered document that stays is_dirty() would hold the quit dialog open
+## forever. needs_shutdown_attention() excludes a document only once its
+## current content equals the content captured on disk.
 var recovery_fingerprint: String = ""
 
-## True while Godot's own confirmed-quit/scene-close status should still
-## name this document: it is dirty (GSTDocument.is_dirty()) and either holds
-## no recovery record yet or that record's own content is now stale against
-## the live stack. False once a just-written or freshly-reopened recovery
-## record's content matches the current stack exactly, even though is_dirty()
-## itself (the UI dirty star, close-confirmation) stays true until the user
-## actually saves or discards -- decision 10's "Save and Quit" contract is
-## that a successful recovery write is what makes the shutdown itself safe
-## to complete, not a private editing-session concept like the dirty star.
+## True while Godot's confirmed-quit/scene-close status should name this
+## document: it is dirty and either holds no recovery record or that record's
+## content is stale against the live stack. is_dirty() itself stays true
+## until the user saves or discards.
 func needs_shutdown_attention() -> bool:
 	if not is_dirty():
 		return false
@@ -126,17 +84,10 @@ func needs_shutdown_attention() -> bool:
 
 
 ## Latest file-operation diagnostic per control ("Open", "Save", "Export",
-## "Reopen Shader", "Recipes", "Preview" -- Save As failures write "Save",
-## gst_main_panel.gd's _on_save_as_file_selected), phase 5
-## (docs/SHADER_TABS_reviewed-plan.md):
-## "route operation messages to their owning document so a delayed failure
-## cannot replace another document's diagnostics." An empty/absent key means
-## no current message for that control on this document. gst_main_panel.gd's
-## _set_operation_message_for writes it and only rebuilds the shared message
-## label when this document is the active one; _install_stack's own
-## _refresh_operation_message_label call reads it back on every activation,
-## so switching tabs shows each document's own messages instead of whichever
-## operation happened to run last while a different document was active.
+## "Reopen Shader", "Recipes", "Preview"; Save As failures write "Save").
+## An absent key means no current message for that control. gst_main_panel.gd
+## _set_operation_message_for writes it and rebuilds the shared label only
+## when this document is active; _install_stack reads it back on activation.
 var operation_messages: Dictionary = {}
 
 
@@ -148,25 +99,15 @@ func _init() -> void:
 	_next_session_id += 1
 
 
-## Installs new_stack as this document's own content and builds its GSTUndo
-## adapter bound to this document's own undo_redo. on_changed/
-## on_property_changed are the same GSTUndo callback shape
-## gst_main_panel.gd's own _on_stack_changed/_on_property_changed use; the
-## panel binds them to this document (Callable.bind(self)) so an inactive
-## document's replay never touches the active panel UI (Cross-cutting
-## "Public APIs, signals, and callbacks": "capture the owning document in
-## action callbacks").
+## Installs new_stack as this document's content and builds its GSTUndo bound
+## to this document's undo_redo. The panel binds on_changed/on_property_changed
+## to this document (Callable.bind(self)) so an inactive document's replay
+## never touches the active panel UI.
 ##
-## starts_dirty distinguishes a successful open/save baseline from unsaved
-## nonempty recipe/import content (phase 3 fix pass 1, round 1): a pristine
-## New document or a document just loaded from disk has content that
-## matches what marking the baseline here would record, so it starts clean
-## (false); a document opened from a shipped recipe or rebuilt from a
-## .gdshader header's exported header has real content with nowhere on disk
-## it already matches, so it must read dirty immediately (true) instead of
-## marking that content as its own saved baseline. true leaves
-## saved_fingerprint at its unset "" default, which compute_fingerprint's
-## own non-empty format can never produce for a real stack.
+## starts_dirty=false marks the current content as the saved baseline (New,
+## or loaded from disk). true (recipe, .gdshader header import) leaves
+## saved_fingerprint at "", which compute_fingerprint never produces for a
+## real stack, so the document reads dirty immediately.
 func setup(new_stack: GSTStack, library: GSTLibrary, on_changed: Callable, on_property_changed: Callable, starts_dirty: bool = false) -> void:
 	stack = new_stack
 	undo = GSTUndo.new(undo_redo, stack, library, on_changed, on_property_changed)
@@ -174,10 +115,9 @@ func setup(new_stack: GSTStack, library: GSTLibrary, on_changed: Callable, on_pr
 		mark_baseline()
 
 
-## Frees this document's own UndoRedo (an Object with no owner to free it
-## automatically) and releases every bound Callable its recorded actions
-## held. Called by gst_main_panel.gd's _exit_tree for every open document,
-## and by phase 6's close lifecycle for a single discarded document.
+## Frees this document's UndoRedo and releases every bound Callable its
+## recorded actions held. Called by gst_main_panel.gd _exit_tree for every
+## open document and by the close lifecycle for a discarded document.
 func teardown() -> void:
 	if undo_redo != null and is_instance_valid(undo_redo):
 		undo_redo.free()
@@ -189,27 +129,20 @@ func mark_baseline() -> void:
 	saved_fingerprint = compute_fingerprint(stack)
 
 
-## True when the stack's current content differs from the last successful
-## open/save baseline. A never-saved document with unedited pristine
-## content (mark_baseline() at setup()) is not dirty.
+## True when the stack's content differs from the last open/save baseline.
 func is_dirty() -> bool:
 	return compute_fingerprint(stack) != saved_fingerprint
 
 
-## Deterministic content fingerprint: every field the on-disk schema
-## carries (coord_space, next_id, output_color, output_alpha, and each
-## layer's id/entry/kind_out/slots/params/coord), sorted so key-insertion
-## order can never change the result. Excludes paths, layout, selection,
-## history position, and session metadata. Deliberately never uses
-## ResourceSaver's own serialized text: ResourceSaver assigns every
-## sub_resource id="1_xxxxx" a fresh random suffix on every save (Shader
-## tabs phase 2 review round 3 fixes), so two saves of identical content are
-## never byte-identical regardless of fingerprinting needs. Includes
-## next_id (decision 22: ids are never reused, so undoing an add can leave a
-## different next_id even with identical layer content) and raw
-## parameter-key presence (a layer's params dict, not a manifest-resolved
-## default -- absent keys must read as absent here, matching the undo
-## contract in gst_undo.gd's commit_property_change).
+## Deterministic content fingerprint: every field of the on-disk schema
+## (coord_space, next_id, output_color, output_alpha, each layer's
+## id/entry/kind_out/slots/params/coord), keys sorted. Excludes paths, layout,
+## selection, history position, and session metadata. Never uses
+## ResourceSaver's text: it assigns each sub_resource id a fresh random suffix
+## on every save. Includes next_id (ids are never reused, so undoing an add
+## can leave a different next_id with identical layers) and raw params-key
+## presence (absent keys read as absent, matching gst_undo.gd
+## commit_property_change).
 static func compute_fingerprint(stack: GSTStack) -> String:
 	if stack == null:
 		return ""

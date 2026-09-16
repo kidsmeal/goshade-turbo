@@ -2,37 +2,28 @@
 class_name GSTCodegen
 extends RefCounted
 
-## Turns a GSTStack into compiling canvas_item shader text.
-## Design: docs/DESIGN.md, Codegen rules.
-##
-## Phase 3 adds color slot conversion (decision 2), source/filter emission
-## (decision 10, decision 21, docs/PLAN.md Blocker B6), and the full
-## four-mode output block (decision 12, docs/PLAN.md Blocker B7). Field
+## Turns a GSTStack into compiling canvas_item shader text: color slot
+## conversion, source/filter emission, and the four-mode output block. Field
 ## outputs use grayscale with the selected alpha expression; color warp
-## inputs use luminance (docs/EDITOR_UI_DESIGN_reviewed.md).
+## inputs use luminance.
 
 ## Fed into an unset field-kind operator input slot so a single operator
-## compiles alone without an upstream layer wiring it (docs/PLAN.md Phase 2
-## Files: "an operator fed constants").
+## compiles alone without an upstream layer.
 const FALLBACK_FIELD_CONSTANT: String = "0.5"
-## Fed into an unset color-kind operator input slot for the same reason
-## (docs/PLAN.md Phase 3: "every color entry compiles alone").
+## Fed into an unset color-kind operator input slot for the same reason.
 const FALLBACK_COLOR_CONSTANT: String = "vec4(0.5, 0.5, 0.5, 1.0)"
 
 ## Builds the full .gdshader text for `stack`. When `solo_layer_id` is set,
 ## the output line is replaced by that single layer instead of
-## `stack.output_color` (decision 13, solo preview). Thin wrapper over
-## generate_result(); returns "" on a codegen error (docs/PLAN.md
-## Cross-cutting concern "Codegen error reporting": invocation-local, never
-## class-global mutable state).
+## `stack.output_color` (solo preview). Wrapper over generate_result();
+## returns "" on a codegen error.
 static func generate(stack: GSTStack, library: GSTLibrary, solo_layer_id: StringName = &"") -> String:
 	return generate_result(stack, library, solo_layer_id).code
 
 
-## Same as generate(), but the error (currently: an unknown GST_ token left
-## in a filter template after expansion, docs/PLAN.md Blocker B10) travels on
-## the returned GSTCodegenResult instead of "", so a caller can report the
-## reason. Invocation-local: safe for concurrent or nested calls.
+## Same as generate(), but the error (an unknown GST_ token left in a filter
+## template after expansion) travels on the returned GSTCodegenResult, so a
+## caller can report the reason. Invocation-local: safe for nested calls.
 static func generate_result(stack: GSTStack, library: GSTLibrary, solo_layer_id: StringName = &"") -> GSTCodegenResult:
 	var result: GSTCodegenResult = GSTCodegenResult.new()
 	var lines: Array[String] = []
@@ -69,14 +60,11 @@ static func generate_result(stack: GSTStack, library: GSTLibrary, solo_layer_id:
 		lines.append("")
 
 	for entry: GSTManifestEntry in _include_order(stack, library):
-		# A filter's code is an inline body template (B10), expanded per
-		# layer inside fragment() by _filter_body_lines, not a top-level
-		# function declaration. A source entry's code is empty; codegen
-		# reads the built-in directly in _source_body_lines (decision 10)
-		# and never emits a source entry's code at file scope. Neither is
-		# emitted here. Their dependencies (e.g. dither's hash) are separate
-		# entries in the walk and still emit normally. Empty code is never
-		# emitted regardless of entry kind.
+		# A filter's code is an inline body template expanded per layer inside
+		# fragment() by _filter_body_lines. A source entry's code is empty;
+		# _source_body_lines reads the built-in directly. Neither is emitted
+		# at file scope. Their dependencies (e.g. dither's hash) are separate
+		# entries in the walk and still emit normally.
 		if entry.samples_source or entry.is_source():
 			continue
 		if entry.code.is_empty():
@@ -98,9 +86,8 @@ static func generate_result(stack: GSTStack, library: GSTLibrary, solo_layer_id:
 	return result
 
 
-## License notice plus the one-line stack header (design decision 8). The
-## header line itself is produced by gst_header.gd (docs/PLAN.md Phase 6),
-## one call site, so the on-the-wire JSON schema lives in exactly one file.
+## License notice plus the one-line stack header. gst_header.gd produces the
+## header line, so the on-the-wire JSON schema lives in one file.
 static func _header_lines(stack: GSTStack) -> Array[String]:
 	return [
 		"// GoShade Turbo generated shader. MIT License.",
@@ -115,9 +102,8 @@ static func _stack_has_generator(stack: GSTStack) -> bool:
 	return false
 
 
-## True when any "source/screen" layer exists in the stack, whether it is
-## read directly or through a filter's samples_source slot (decision 10,
-## decision 21).
+## True when any "source/screen" layer exists, whether read directly or
+## through a filter's samples_source slot.
 static func _stack_has_screen_source(stack: GSTStack) -> bool:
 	for layer: GSTLayer in stack.layers:
 		if layer.entry == "source/screen":
@@ -125,8 +111,7 @@ static func _stack_has_screen_source(stack: GSTStack) -> bool:
 	return false
 
 
-## True when any "source/texture" layer exists in the stack (decision 12
-## unset-alpha default).
+## True when any "source/texture" layer exists (unset-alpha default).
 static func _stack_has_texture_source(stack: GSTStack) -> bool:
 	for layer: GSTLayer in stack.layers:
 		if layer.entry == "source/texture":
@@ -135,9 +120,9 @@ static func _stack_has_texture_source(stack: GSTStack) -> bool:
 
 
 ## True when any slot, warp assignment, or output alpha mode converts a color
-## layer to a field through luminance (decision 2, decision 12), so
-## _luma_function must be declared. Structural, not a text scan, so it does
-## not depend on fragment() having been generated yet.
+## layer to a field through luminance, so _luma_function must be declared.
+## Structural, not a text scan, so it does not depend on fragment() having
+## been generated yet.
 static func _stack_needs_luma(stack: GSTStack, library: GSTLibrary) -> bool:
 	for layer: GSTLayer in stack.layers:
 		if layer.coord != null:
@@ -169,8 +154,7 @@ static func _output_alpha_needs_luma(stack: GSTStack) -> bool:
 	return layer != null and layer.kind_out == GSTLayer.Kind.COLOR
 
 
-## gst_transform is emitted once, whenever any generator exists (design:
-## docs/DESIGN.md, Codegen rules; naming resolved docs/PLAN.md Blocker B4).
+## gst_transform is emitted once, whenever any generator exists.
 static func _gst_transform_function() -> Array[String]:
 	return [
 		"vec2 gst_transform(vec2 p, vec2 scale, float rotation, vec2 offset) {",
@@ -184,9 +168,8 @@ static func _gst_transform_function() -> Array[String]:
 	]
 
 
-## luma is emitted once, whenever any color-to-field conversion occurs
-## (decision 2). Standard Rec. 601 luma coefficients, matching Capsule
-## Castle's own luminance usage.
+## luma is emitted once, whenever any color-to-field conversion occurs. Rec.
+## 601 coefficients.
 static func _luma_function() -> Array[String]:
 	return [
 		"float luma(vec4 c) {",
@@ -205,8 +188,8 @@ static func _vertex_function() -> Array[String]:
 	]
 
 
-## Every manifest entry the stack's layers reach, dependencies first
-## (Codegen rules: "Include walk: depth first over depends, dedupe by id").
+## Every manifest entry the stack's layers reach, dependencies first (depth
+## first over depends, deduped by id).
 static func _include_order(stack: GSTStack, library: GSTLibrary) -> Array[GSTManifestEntry]:
 	var root_ids: Array[String] = []
 	for layer: GSTLayer in stack.layers:
@@ -244,10 +227,9 @@ static func _layer_uniform_lines(layer: GSTLayer, entry: GSTManifestEntry) -> Ar
 
 
 ## scale/offset/rotation are always emitted for a generator. scroll and its
-## TIME term are emitted together or not at all (design: Codegen rules,
-## "when scroll is zero at export, neither the scroll uniform nor the TIME
-## term is emitted"). warp_strength is emitted only when at least one warp
-## slot is set, alongside the warp term it drives.
+## TIME term are emitted together or not at all (zero scroll emits neither).
+## warp_strength is emitted only when at least one warp slot is set,
+## alongside the warp term it drives.
 static func _coord_uniform_lines(layer: GSTLayer) -> Array[String]:
 	var coord: GSTCoordBlock = layer.coord
 	var lines: Array[String] = []
@@ -271,10 +253,9 @@ static func _coord_uniform_lines(layer: GSTLayer) -> Array[String]:
 	return lines
 
 
-## Uniform types (docs/PLAN.md Phase 3): int/float carry hint_range as
-## before; color carries no range and the source_color hint; vec3 carries no
-## range either, since a single scalar hint_range is not meaningful applied
-## per channel to a color-like triple (palette's a/b/c/d).
+## Uniform types: int/float carry hint_range; color carries no range and the
+## source_color hint; vec3 carries no range, since a scalar hint_range is not
+## meaningful per channel on a color-like triple (palette's a/b/c/d).
 static func _param_uniform_line(layer: GSTLayer, function_name: String, param: Dictionary) -> String:
 	var param_name: String = param["name"]
 	var param_type: String = param["type"]
@@ -327,7 +308,7 @@ static func _fragment_function(stack: GSTStack, library: GSTLibrary, solo_layer_
 
 
 ## uv reads UV, screen_uv reads SCREEN_UV, local reads the varying set in
-## vertex() (design: docs/DESIGN.md decision 11, Codegen rules).
+## vertex().
 static func _space_coord_source(coord_space: GSTStack.CoordSpace) -> String:
 	match coord_space:
 		GSTStack.CoordSpace.SCREEN_UV:
@@ -383,9 +364,9 @@ static func _warp_arg(stack: GSTStack, target_id: StringName) -> String:
 	return "luma(%s)" % local if target != null and target.kind_out == GSTLayer.Kind.COLOR else local
 
 
-## Sources have no function body: codegen reads the built-in directly
-## (decision 10). "texture" reads at the stack's own coordinate space;
-## "screen" always reads SCREEN_UV, independent of coord_space.
+## Sources have no function body: codegen reads the built-in directly.
+## "texture" reads at the stack's coordinate space; "screen" always reads
+## SCREEN_UV, independent of coord_space.
 static func _source_body_lines(entry: GSTManifestEntry, layer: GSTLayer) -> Array[String]:
 	var local: String = GSTUniformNames.local_var(layer.id)
 	if entry.id == "source/screen":
@@ -393,22 +374,19 @@ static func _source_body_lines(entry: GSTManifestEntry, layer: GSTLayer) -> Arra
 	return ["\tvec4 %s = texture(TEXTURE, space_coord);" % local]
 
 
-## Filter calling convention (decision 21, B6, docs/PLAN.md Blocker B10):
-## filters cannot be GLSL functions (TEXTURE cannot cross a function-call
-## boundary, verified). A filter's `code` is instead an inline body
-## template, expanded here into a `{ }` block inside fragment(), one block
-## per filter layer so two filter layers in one stack never collide on the
-## template's own locals (full token list in gst_manifest_entry.gd's
-## samples_source comment).
+## Filter calling convention: filters cannot be GLSL functions (TEXTURE
+## cannot cross a function-call boundary). A filter's `code` is an inline
+## body template, expanded here into a `{ }` block inside fragment(), one
+## block per filter layer so two filter layers never collide on the
+## template's locals (token list in gst_manifest_entry.gd's samples_source
+## comment).
 ##
-## An unwired slot, or a slot whose target does not resolve to a
-## "source/texture" or "source/screen" layer, is not silently sampled as
-## TEXTURE: assign_slot refuses most such assignments (B6), but
-## remove_layer's decision-22 reset can still leave a samples_source slot
-## empty when no source remains below (plan Cross-cutting concern "Manifest
-## `code` contracts (B10)", Unwired filter rule). That case is a codegen-time
-## refusal: this sets an invocation-local error naming the filter layer and
-## its entry on `codegen_result` and emits no lines for this layer.
+## An unwired slot, or one whose target is not a "source/texture" or
+## "source/screen" layer, is not silently sampled as TEXTURE: assign_slot
+## refuses most such assignments, but remove_layer's reset can still leave a
+## samples_source slot empty when no source remains below. That case sets an
+## invocation-local error naming the filter layer and its entry on
+## `codegen_result` and emits no lines for this layer.
 static func _filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack, codegen_result: GSTCodegenResult) -> Array[String]:
 	var input: Dictionary = entry.inputs[0]
 	var target_id: StringName = layer.slots.get(input["name"], &"")
@@ -436,8 +414,7 @@ static func _filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: 
 
 ## GST_SAMPLE( and GST_PARAM( take a balanced parenthesized argument, found
 ## by a scanner rather than a regex so a nested paren in the argument (e.g.
-## GST_SAMPLE(uv + vec2(x, y))) does not break the match (docs/PLAN.md
-## Blocker B10).
+## GST_SAMPLE(uv + vec2(x, y))) does not break the match.
 static func _expand_filter_template(entry: GSTManifestEntry, layer: GSTLayer, sample_tex: String, uv_source: String, out_var: String, codegen_result: GSTCodegenResult) -> String:
 	var body: String = entry.code
 	var sample_mapper: Callable = func(arg: String) -> String:
@@ -511,8 +488,8 @@ static func _operator_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack
 
 
 ## The call argument for one input slot: the wired target's local, wrapped
-## across a kind boundary (decision 2), or a fallback constant of the
-## slot's own expected kind when unwired.
+## across a kind boundary, or a fallback constant of the slot's expected kind
+## when unwired.
 static func _slot_arg(stack: GSTStack, layer: GSTLayer, input: Dictionary) -> String:
 	var input_name: String = input["name"]
 	var expected_kind: int = int(input["kind"])
@@ -529,15 +506,14 @@ static func _slot_arg(stack: GSTStack, layer: GSTLayer, input: Dictionary) -> St
 	return "luma(%s)" % local
 
 
-## Output block (decision 12, docs/PLAN.md Blocker B7).
 static func _output_line(stack: GSTStack, solo_layer_id: StringName) -> String:
 	if solo_layer_id != &"":
 		return _solo_output_line(stack, solo_layer_id)
 	return _main_output_line(stack)
 
 
-## Solo preview replaces the output entirely (decision 13): a color layer
-## shows as-is, a field layer shows grayscale.
+## Solo preview replaces the output entirely: a color layer shows as-is, a
+## field layer shows grayscale.
 static func _solo_output_line(stack: GSTStack, layer_id: StringName) -> String:
 	var layer: GSTLayer = GSTStackOps.find_layer(stack, layer_id)
 	var local: String = GSTUniformNames.local_var(layer_id)
@@ -547,9 +523,8 @@ static func _solo_output_line(stack: GSTStack, layer_id: StringName) -> String:
 
 
 ## When stack.output_color is unset, defaults to the top (highest stack
-## index) color-kind layer (decision 12, docs/PLAN.md Phase 4 amendment item
-## 2). Returns a fixed black opaque line when no color layer exists at all,
-## rather than emitting an undefined GLSL identifier for an empty layer id.
+## index) color-kind layer. Returns a fixed black opaque line when no color
+## layer exists, rather than emitting an undefined GLSL identifier.
 static func _main_output_line(stack: GSTStack) -> String:
 	var output_id: StringName = stack.output_color if stack.output_color != &"" else _default_color_layer_id(stack)
 	if output_id == &"":
@@ -569,13 +544,12 @@ static func _default_color_layer_id(stack: GSTStack) -> StringName:
 	return &""
 
 
-## Four alpha modes (decision 12): none -> 1.0, texture -> texture(TEXTURE,
-## UV).a (same expression regardless of how many texture layers exist, B7),
-## color_alpha -> the output color layer's own alpha, a layer id -> that
-## field layer's local, or luma(local) when the referenced layer is itself
-## color kind. An unset mode (&"") resolves to texture when the stack has a
-## "source/texture" layer, else none; &"none" is always the explicit 1.0,
-## never reinterpreted by that default.
+## Four alpha modes: none -> 1.0, texture -> texture(TEXTURE, UV).a (same
+## expression regardless of how many texture layers exist), color_alpha ->
+## the output color layer's alpha, a layer id -> that field layer's local, or
+## luma(local) when the referenced layer is color kind. An unset mode (&"")
+## resolves to texture when the stack has a "source/texture" layer, else
+## none; &"none" is always the explicit 1.0.
 static func _alpha_expr(stack: GSTStack) -> String:
 	var mode: StringName = stack.output_alpha
 	if mode == &"":

@@ -2,16 +2,13 @@
 class_name GSTStackIO
 extends RefCounted
 
-## Saves and loads a GSTStack .tres (design decision 8: ".tres Resource per
-## stack" is the source of truth). Layers and coord blocks are embedded
-## sub-resources, never external .tres files: a plain GSTLayer.new()/
-## GSTCoordBlock.new() carries no resource_path, and ResourceSaver embeds any
+## Saves and loads a GSTStack .tres, the source of truth per stack. Layers
+## and coord blocks are embedded sub-resources: GSTLayer.new() and
+## GSTCoordBlock.new() carry no resource_path, and ResourceSaver embeds any
 ## sub-resource without one.
 ##
-## GSTManifestEntry is never saved by this file (decision 5, planning
-## decision "Manifests are never re-saved"): manifests are load-only and
-## resolved fresh from `library` on every load(), never carried through the
-## .tres itself.
+## GSTManifestEntry is never saved here: manifests are load-only and resolved
+## from `library` on every load().
 
 
 ## Saves `stack` to `path`. `{ok, reason}`.
@@ -24,17 +21,12 @@ static func save(stack: GSTStack, path: String) -> Dictionary:
 
 ## Loads a GSTStack from `path`. `{ok, stack, reason}`.
 ##
-## CACHE_MODE_IGNORE: a reload must never hand back the same cached instance
-## a previous load() (or the still-open editor stack) already holds, so
-## mutating the loaded copy can never leak back into another caller's stack.
+## CACHE_MODE_IGNORE: a reload must return a fresh instance, never one a
+## previous load() or the open editor stack already holds.
 ##
-## Every layer's `entry` must resolve against `library`, or the load is
-## refused naming the unresolved entry and layer: a layer whose manifest can
-## never be set would otherwise silently fail every downstream codegen and
-## inspector call instead of failing here, at the one point that knows why.
-## On success, every layer's `manifest` is set from `library` (GSTLayer.gd:
-## "a runtime convenience the panel re-resolves through GSTLibrary after
-## loading a stack (phase 6)").
+## Every layer's `entry` must resolve against `library` or the load is
+## refused naming the entry and layer; downstream codegen and inspector calls
+## cannot report the cause. On success every layer's `manifest` is set.
 static func load(path: String, library: GSTLibrary) -> Dictionary:
 	if library == null:
 		return {"ok": false, "stack": null, "reason": "GSTStackIO.load requires a library to resolve layer manifests (caller bug)"}
@@ -60,13 +52,10 @@ static func load(path: String, library: GSTLibrary) -> Dictionary:
 	return {"ok": true, "stack": stack, "reason": ""}
 
 
-## Godot's .tres text format round-trips a StringName inside a typed @export
-## var (GSTStack.output_color/output_alpha, GSTCoordBlock.warp_x/warp_y)
-## correctly by construction: ResourceLoader coerces the loaded value to the
-## exported property's declared type. GSTLayer.slots is a plain untyped
-## Dictionary, so its values carry no such guarantee; this defensively
-## re-wraps any that came back as a bare String (docs/PLAN.md Phase 6 Build:
-## "if StringName values come back as String, normalize on load").
+## ResourceLoader coerces a typed @export StringName (GSTStack.output_color/
+## output_alpha, GSTCoordBlock.warp_x/warp_y) to its declared type on load.
+## GSTLayer.slots is an untyped Dictionary, so its values may come back as
+## String; this re-wraps them.
 static func _normalize_stringnames(stack: GSTStack) -> void:
 	stack.output_color = StringName(stack.output_color)
 	stack.output_alpha = StringName(stack.output_alpha)

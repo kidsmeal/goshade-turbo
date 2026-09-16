@@ -5,8 +5,8 @@ extends SceneTree
 ## Out/Logo sprite in logo.tscn uses:
 ## `godot --headless --path . -s res://sandbox/logo/export_logo.gd`
 ## The .tres is the source of truth: tune it in the GoShade panel (or Export
-## from the panel directly, same result). `--rebuild` discards panel edits
-## and rewrites the .tres from the stack defined in _build_stack below.
+## from the panel, same result). `--rebuild` discards panel edits and
+## rewrites the .tres from _build_stack below.
 
 const STACK_OUT: String = "res://sandbox/logo/logo_stack.tres"
 const SHADER_OUT: String = "res://sandbox/logo/logo.gdshader"
@@ -71,7 +71,7 @@ func _build_stack() -> GSTStack:
 	var palette: GSTLayer = GSTStackOps.add_layer(s, "color/palette", GSTLayer.Kind.COLOR)
 	palette.slots["t"] = ramp.id
 	palette.params = {
-		# Green at the top, cyan mid, blue at the bottom (fitted 2026-09-11).
+		# Green at the top, cyan mid, blue at the bottom.
 		"a": Vector3(0.15, 0.71, 0.65),
 		"b": Vector3(0.52, 0.49, 0.16),
 		"c": Vector3(0.92, 0.37, 0.83),

@@ -1,7 +1,7 @@
 extends GSTTestBase
 
 ## GSTIncludeWalk: depth-first over depends, deduped by id, dependencies
-## emitted before dependents. Design: docs/DESIGN.md, Codegen rules.
+## emitted before dependents.
 
 
 func _make_entry(id: String, function_name: String, depends: Array[String]) -> GSTManifestEntry:

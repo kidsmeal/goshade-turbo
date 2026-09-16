@@ -3,10 +3,9 @@ class_name GSTLibrary
 extends RefCounted
 
 ## Scans addons/goshade_turbo/library/**/*.tres, loads each as a
-## GSTManifestEntry, and indexes it by manifest id. Refuses a duplicate
-## `function`: add_entry() returns false and records the collision in
-## duplicate_functions. It never raises, so the test runner sees no error line.
-## Design: docs/DESIGN.md, Manifest entry and Codegen rules.
+## GSTManifestEntry, and indexes it by manifest id. A duplicate `function`
+## is refused: add_entry() returns false and records it in
+## duplicate_functions without raising.
 
 const DEFAULT_ROOT: String = "res://addons/goshade_turbo/library"
 
@@ -52,11 +51,8 @@ func _load_entry(path: String) -> void:
 
 
 ## Indexes one entry. Returns false and records the collision when
-## `function` was already claimed by any earlier entry. Never raises
-## an engine-level error: a duplicate function name is a data problem the
-## caller (and the test suite) must be able to observe via the return value
-## and `duplicate_functions`, not an uncaught SCRIPT ERROR that no GDScript
-## hook can catch.
+## `function` is already claimed. Never raises: a duplicate is a data problem
+## observed through the return value and `duplicate_functions`.
 func add_entry(entry: GSTManifestEntry) -> bool:
 	if _function_to_id.has(entry.function):
 		duplicate_functions.append(entry.function)

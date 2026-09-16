@@ -5,48 +5,36 @@ extends RefCounted
 ## Wraps a standalone UndoRedo for every stack edit: structural edits (add,
 ## remove, reorder, slot change, warp slot change, output color change,
 ## output alpha change), coord-space edits, Randomize, and native property
-## edits (decision superseding 20: property edits no longer come free from an
-## embedded EditorInspector; gst_inspector_column.gd finishes each native
-## gesture and routes the result here).
+## edits (gst_inspector_column.gd finishes each native gesture and routes the
+## result here).
 ##
 ## Pattern: every front-door method applies the mutation directly (via
 ## GSTStackOps where one exists), registers a do/undo pair of bound Callables
 ## plus a do/undo pair of _notify calls, then commits with
-## commit_action(false) since the mutation is already applied. Because
-## commit_action(false) never invokes the do methods, each front-door method
-## also calls _notify() once directly after commit, so
-## GSTMainPanel.stack_changed fires on the initial edit and on every later
-## undo/redo alike. A refused edit performs no mutation and registers no undo
-## action; a reorder that resolves to the layer's current index likewise
-## registers nothing (docs/PLAN.md Phase 4 Verification: "A reorder that
-## would move a layer above one it references shows the refusal reason ...
-## rather than performing it").
+## commit_action(false) since the mutation is already applied.
+## commit_action(false) never invokes the do methods, so each front-door
+## method also calls _notify() once after commit; GSTMainPanel.stack_changed
+## fires on the initial edit and on every later undo/redo alike. A refused
+## edit performs no mutation and registers no action; a reorder that resolves
+## to the layer's current index registers nothing.
 ##
-## Layer ids are never reused on undo of an add (decision 22): undo removes
-## the layer from the array but never touches stack.next_id.
+## Layer ids are never reused on undo of an add: undo removes the layer from
+## the array but never touches stack.next_id.
 ##
-## Phase 2 (docs/SHADER_TABS_reviewed-plan.md): the shared, abstract
-## EditorUndoRedoManager and its path-less history-anchor Resource are gone.
-## _undo_redo is a plain UndoRedo the panel owns directly (one per document
-## from phase 3 on; one panel-owned instance in this interim phase). A
-## standalone UndoRedo has exactly one history bucket, so no custom_context
-## routing or get_object_history_id() lookup is needed at all: every action
-## created here always lands in the one bucket _undo_redo already is.
-## add_do_method/add_undo_method take bound Callables (self._method.bind(...))
-## rather than the manager's (object, method_name, *varargs) overload.
+## _undo_redo is a plain UndoRedo owned by the document (GSTDocument). A
+## standalone UndoRedo has one history bucket, so no custom_context routing or
+## get_object_history_id() lookup applies. add_do_method/add_undo_method take
+## bound Callables (self._method.bind(...)).
 var _undo_redo: UndoRedo
 var _stack: GSTStack
 var _library: GSTLibrary
 ## Called after every do and undo of a structural edit, coord-space edit,
-## Randomize, or "Replace stack" action, so the panel can rebuild its columns
-## (a layer's own identity, slots, or manifest can change under these).
+## Randomize, or "Replace stack" action, so the panel can rebuild its columns.
 var _on_changed: Callable
-## Called after every do and undo of a native property edit specifically
-## (commit_property_change). Deliberately lighter than _on_changed: a
-## property edit never changes which layer is selected or what it
-## references, so this must only resync the material, never rebuild/free the
-## row gst_inspector_column.gd's own commit (or a later undo/redo of it) is
-## running on.
+## Called after every do and undo of a native property edit
+## (commit_property_change). Lighter than _on_changed: a property edit never
+## changes selection or references, so this must only resync the material,
+## never rebuild/free the row gst_inspector_column.gd is running on.
 var _on_property_changed: Callable
 
 
@@ -63,7 +51,7 @@ func _create_action(name: String) -> void:
 
 
 ## Creates a new layer with the next monotonic id and appends it to the top
-## of the stack (decision 22). Returns the new layer.
+## of the stack. Returns the new layer.
 func add_layer(entry_id: String, kind_out: GSTLayer.Kind, is_generator: bool) -> GSTLayer:
 	var layer: GSTLayer = GSTStackOps.add_layer(_stack, entry_id, kind_out, is_generator)
 	layer.manifest = _library.get_entry(entry_id)
@@ -77,10 +65,9 @@ func add_layer(entry_id: String, kind_out: GSTLayer.Kind, is_generator: bool) ->
 	return layer
 
 
-## UI Add Layer operation (redesign decisions 17 and 19). The low-level
-## add_layer method above stays unchanged for fixtures and existing saved
-## stacks; this path initializes declared inputs and assigns output_color in
-## the same history action as creation.
+## UI Add Layer operation. add_layer stays for fixtures and saved stacks;
+## this path initializes declared inputs and assigns output_color in the same
+## history action as creation.
 func add_layer_for_ui(entry_id: String) -> Dictionary:
 	var entry: GSTManifestEntry = _library.get_entry(entry_id)
 	if entry == null:
@@ -124,20 +111,17 @@ func _undo_add(layer_id: StringName) -> void:
 		_stack.layers.remove_at(idx)
 
 
-## Decision 22: undo reinserts the removed layer's own instance at its own
-## index and writes the pre-removal values back onto the surviving layers'
-## own slot/coord-warp dictionaries, rather than restoring a duplicated
-## snapshot array. A duplicated snapshot would detach every surviving layer
-## from the instance its own native property rows already point at (phase 4
-## fix pass 3, item 1): a property edit made before a remove, undone after
-## that remove is itself undone, must still land on the same
-## GSTLayer/GSTCoordBlock the inspector column is editing.
+## Undo reinserts the removed layer's own instance at its own index and
+## writes the pre-removal values back onto the surviving layers' slot/coord-
+## warp dictionaries. A duplicated snapshot array would detach every
+## surviving layer from the instance its native property rows point at; a
+## property edit undone after this removal is undone must still land on the
+## same GSTLayer/GSTCoordBlock the inspector column is editing.
 ##
 ## Also snapshots stack.output_color and stack.output_alpha: a deleted layer
 ## id left in either field would make codegen resolve a dangling reference
-## instead of falling back to decision 12's default (docs/PLAN.md phase 4 fix
-## pass 2, item 2), so removal clears a matching output_color/output_alpha to
-## &"" and undo/redo restore or reproduce that clear alongside the layer.
+## instead of its default, so removal clears a matching output_color/
+## output_alpha to &"" and undo/redo restore or reproduce that clear.
 func remove_layer(layer_id: StringName) -> void:
 	var removed_index: int = GSTStackOps.find_index(_stack, layer_id)
 	if removed_index == -1:
@@ -170,11 +154,10 @@ func _clear_output_refs(layer_id: StringName) -> void:
 		_stack.output_alpha = &""
 
 
-## Every (layer, slot_name) pair in the stack, other than layer_id itself,
-## whose slot currently points at layer_id, captured before removal so undo
-## can write the reference back onto the same GSTLayer instance rather than a
-## duplicate. The captured value is always layer_id (that is what "pointing
-## at it" means), kept explicit rather than assumed at the write-back site.
+## Every (layer, slot_name) pair, other than layer_id itself, whose slot
+## points at layer_id, captured before removal so undo writes the reference
+## back onto the same GSTLayer instance. The captured value is always
+## layer_id, kept explicit at the write-back site.
 func _snapshot_referencing_slots(layer_id: StringName) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for layer: GSTLayer in _stack.layers:
@@ -215,8 +198,7 @@ func _undo_remove(layer: GSTLayer, index: int, slot_snapshot: Array[Dictionary],
 
 
 ## Moves layer_id to new_index. Refused, with a reason, when the move would
-## leave a forward reference (decision 22); nothing is mutated and no undo
-## action is registered on refusal.
+## leave a forward reference; nothing is mutated and no action is registered.
 func reorder_layer(layer_id: StringName, new_index: int) -> Dictionary:
 	var old_index: int = GSTStackOps.find_index(_stack, layer_id)
 	var result: Dictionary = GSTStackOps.reorder_layer(_stack, layer_id, new_index)
@@ -244,8 +226,8 @@ func _raw_reorder(layer_id: StringName, target_index: int) -> void:
 	_stack.layers.insert(clampi(target_index, 0, _stack.layers.size()), moved)
 
 
-## Assigns target_id to slot_name on layer_id (decision 3, decision 21/B6).
-## Refused, with a reason, and no mutation, per GSTStackOps.assign_slot.
+## Assigns target_id to slot_name on layer_id. Refused, with a reason and no
+## mutation, per GSTStackOps.assign_slot.
 func assign_slot(layer_id: StringName, slot_name: String, target_id: StringName) -> Dictionary:
 	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
 	var old_target: StringName = &""
@@ -270,12 +252,10 @@ func _raw_set_slot(layer_id: StringName, slot_name: String, target_id: StringNam
 		layer.slots[slot_name] = target_id
 
 
-## Assigns target_id to a generator's coord.warp_x or coord.warp_y.
-## Warp slots expect fields, and color targets are legal through decision
-## 2's automatic luminance conversion. No
-## GSTStackOps entry point exists for coord warp slots (they are not
-## GSTLayer.slots entries), so no-forward-reference eligibility is checked
-## here directly.
+## Assigns target_id to a generator's coord.warp_x or coord.warp_y. Warp
+## slots expect fields; color targets are legal through automatic luminance
+## conversion. No GSTStackOps entry point exists for coord warp slots (not
+## GSTLayer.slots entries), so the no-forward-reference check runs here.
 func assign_warp(layer_id: StringName, axis: String, target_id: StringName) -> Dictionary:
 	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
 	if layer == null:
@@ -319,9 +299,8 @@ func _raw_set_warp(layer_id: StringName, axis: String, target_id: StringName) ->
 		layer.coord.warp_y = target_id
 
 
-## Sets stack.output_color. Any layer in the stack is a legal target (a
-## field layer is allowed and converts to grayscale, docs/PLAN.md Phase 4
-## Files).
+## Sets stack.output_color. Any layer is a legal target; a field layer
+## converts to grayscale.
 func set_output_color(layer_id: StringName) -> Dictionary:
 	if layer_id != &"" and GSTStackOps.find_layer(_stack, layer_id) == null:
 		return {"ok": false, "reason": "layer %s not found" % String(layer_id)}
@@ -341,9 +320,8 @@ func _raw_set_output_color(layer_id: StringName) -> void:
 	_stack.output_color = layer_id
 
 
-## Sets stack.output_alpha (decision 12): "none", "texture", "color_alpha",
-## a field-kind layer id, or "" to explicitly reset to unset (the output
-## block's default row, docs/PLAN.md phase 4 fix pass 2, item 5).
+## Sets stack.output_alpha: "none", "texture", "color_alpha", a field-kind
+## layer id, or "" to reset to unset (the output block's default).
 func set_output_alpha(value: StringName) -> Dictionary:
 	if value != &"" and value != &"none" and value != &"texture" and value != &"color_alpha":
 		var layer: GSTLayer = GSTStackOps.find_layer(_stack, value)
@@ -367,11 +345,9 @@ func _raw_set_output_alpha(value: StringName) -> void:
 	_stack.output_alpha = value
 
 
-## Sets stack.coord_space (decision 11: uv / screen_uv / local, the stack
-## column header's coord space dropdown). No slot/reference checks apply:
-## coord_space is a stack-level enum, not a layer reference, so this can
-## never be refused. A no-op selection (already this space) registers no
-## action, same as every other GSTUndo method's no-op guard.
+## Sets stack.coord_space (uv / screen_uv / local). coord_space is a
+## stack-level enum, not a layer reference, so this is never refused. A no-op
+## selection registers no action.
 func set_coord_space(space: GSTStack.CoordSpace) -> Dictionary:
 	var old_value: GSTStack.CoordSpace = _stack.coord_space
 	if old_value == space:
@@ -392,9 +368,8 @@ func _raw_set_coord_space(space: GSTStack.CoordSpace) -> void:
 
 
 ## Adds a new entry_id layer directly below anchor_id and wires
-## anchor_id.slot_name to it, as one compound undoable action (the inspector
-## column's per-slot picker button). Ids stay monotonic regardless of the new
-## layer's final position, same as every other add.
+## anchor_id.slot_name to it, as one compound undoable action. Ids stay
+## monotonic regardless of the new layer's final position.
 func add_layer_below_and_wire(anchor_id: StringName, entry_id: String, slot_name: String) -> Dictionary:
 	var anchor_index: int = GSTStackOps.find_index(_stack, anchor_id)
 	if anchor_index == -1:
@@ -492,33 +467,28 @@ func _undo_add_warp(layer_id: StringName, anchor_id: StringName, axis: String, o
 	_undo_add(layer_id)
 
 
-## Commits one finished native property gesture (decision superseding 20):
-## gst_inspector_column.gd applies new_value to target directly as the
-## gesture progresses (so the widget and material stay live during a drag),
-## then calls this once the gesture finishes, mutation-first like every
-## other method here. A no-op (the value round-tripped back to old_value)
-## registers nothing. Registers plain Callables, not add_do_property/
-## add_undo_property: those call Resource.emit_changed() on replay, which
-## this file has no watcher for and does not need.
+## Commits one finished native property gesture: gst_inspector_column.gd
+## applies new_value to target directly as the gesture progresses, then calls
+## this once the gesture finishes, mutation-first like every other method
+## here. A no-op (value round-tripped back to old_value) registers nothing.
+## Registers plain Callables, not add_do_property/add_undo_property: those
+## call Resource.emit_changed() on replay, which nothing here watches.
 ##
 ## old_present is whether target held an explicit params entry for
-## property_name before the gesture began (phase 2 review round 1 fix pass:
-## a target with no method for this, e.g. GSTCoordBlock's real @export
-## fields, is always treated as present). A no-op gesture (final value
-## round-tripped back to old_value) restores that exact absence directly,
-## without registering an action, since gst_inspector_column.gd's own live
-## application during the gesture may already have written an explicit
-## params entry equal to the default. A genuine change whose old value was
-## implicit erases the params entry on undo instead of writing the default
-## back explicitly, so undo reproduces the identical pre-edit serialization.
+## property_name before the gesture began (a target with no such method,
+## e.g. GSTCoordBlock's @export fields, is always present). A no-op gesture
+## restores that absence directly without registering an action, since the
+## column's live application may already have written an explicit entry equal
+## to the default. A genuine change whose old value was implicit erases the
+## params entry on undo instead of writing the default back, so undo
+## reproduces the identical pre-edit serialization.
 ##
-## on_replayed, when valid, is bound by the caller to the specific row it
-## owns (by a stable key, not the row/editor Nodes themselves) and runs
-## alongside _on_property_changed on this commit and every later undo/redo,
-## so that one row's own displayed value refreshes (EditorProperty.
-## update_property()) without gst_inspector_column.gd rebuilding any row --
-## rebuilding here would free the very control a live gesture, an open
-## native color popup, or a test still holds a reference to mid-interaction.
+## on_replayed, when valid, is bound by the caller to a stable row key (never
+## the row/editor Nodes) and runs alongside _on_property_changed on this
+## commit and every later undo/redo, so that row's displayed value refreshes
+## (EditorProperty.update_property()) without rebuilding any row; a rebuild
+## would free the control a live gesture, an open color popup, or a test
+## still holds.
 func commit_property_change(target: Object, property_name: StringName, old_value: Variant, new_value: Variant, on_replayed: Callable = Callable(), old_present: bool = true) -> void:
 	if _values_equal(old_value, new_value):
 		if not old_present:
@@ -541,10 +511,8 @@ func commit_property_change(target: Object, property_name: StringName, old_value
 	_notify_property()
 
 
-## Public so gst_inspector_column.gd can restore an absent params entry
-## directly for a no-op gesture finish, without ever routing that no-op
-## through commit_property_change (which would need a real old/new value
-## pair to register or skip an action).
+## Public so gst_inspector_column.gd can restore an absent params entry for a
+## no-op gesture finish without routing it through commit_property_change.
 static func restore_absent_param(target: Object, property_name: StringName) -> void:
 	_restore_absent_param(target, property_name)
 
@@ -554,13 +522,10 @@ static func _restore_absent_param(target: Object, property_name: StringName) -> 
 		target.call(&"erase_param_value", property_name)
 
 
-## Notifies material synchronization for an intermediate (still-active)
-## native property change, without registering any history action (phase 2
-## review round 1 fix pass): a live drag applies its value directly to the
-## resource for immediate visual feedback, but only commit_property_change's
-## own do/undo pair notifies material sync by default, leaving the preview
-## stale until the gesture finishes. gst_inspector_column.gd calls this once
-## per intermediate value while a gesture is active.
+## Notifies material sync for an intermediate (still-active) native property
+## change without registering a history action. gst_inspector_column.gd calls
+## this once per intermediate value while a gesture is active; only
+## commit_property_change's do/undo pair notifies otherwise.
 func notify_property_changed() -> void:
 	_notify_property()
 
@@ -570,9 +535,8 @@ func _notify_property() -> void:
 		_on_property_changed.call()
 
 
-## Public so gst_inspector_column.gd can apply the same no-op definition
-## when deciding whether a finished gesture needs to reach
-## commit_property_change at all.
+## Public so gst_inspector_column.gd applies the same no-op definition when
+## deciding whether a finished gesture reaches commit_property_change.
 static func values_equal(a: Variant, b: Variant) -> bool:
 	return _values_equal(a, b)
 
@@ -589,20 +553,12 @@ static func _values_equal(a: Variant, b: Variant) -> bool:
 	return a == b
 
 
-## Randomizes every slider on the open recipe (decision 16, docs/PLAN.md
-## Phase 8 Build item 3), routed through GSTUndo like every other mutation
-## (phase 2: previously registered directly on the shared
-## EditorUndoRedoManager by gst_main_panel.gd, paired with an explicit
-## _refresh_inspector do/undo call because GSTRandomize.apply's writes were
-## external to whatever EditorProperty widgets the inspector column had
-## already built). commit_action(false)'s do/undo _notify pair now covers
-## that refresh the same way it covers every other GSTUndo action, since
-## _notify already rebuilds the inspector column's rows for the selected
-## layer. `old_changes` mirrors `changes`' shape with each layer's
-## pre-randomize values; `unset_params` records which of those values were
-## implicit defaults (not yet written into layer.params) so undo can erase
-## them again rather than leaving an explicit default that would change the
-## serialized header (decision: absent parameter keys survive undo).
+## Randomizes every slider on the open recipe, routed through GSTUndo like
+## every other mutation; the do/undo _notify pair rebuilds the inspector
+## column's rows. `old_changes` mirrors `changes` with each layer's
+## pre-randomize values; `unset_params` records which of those were implicit
+## defaults (not in layer.params) so undo erases them again rather than
+## leaving an explicit default that changes the serialized header.
 func apply_randomize(changes: Dictionary, old_changes: Dictionary, unset_params: Dictionary) -> void:
 	GSTRandomize.apply(_stack, changes)
 	_create_action("GST: randomize sliders")
@@ -619,9 +575,8 @@ func _apply_randomize_changes(changes: Dictionary) -> void:
 
 
 ## Restores pre-randomize values and erases any param key that was an
-## implicit default before the randomize action ran (kept as one undo
-## method, paired 1:1 with apply_randomize's own do method, matching every
-## other GSTUndo action's do/undo balance).
+## implicit default before the randomize ran; one undo method paired 1:1
+## with apply_randomize's do method.
 func _undo_randomize_changes(old_changes: Dictionary, unset_params: Dictionary) -> void:
 	GSTRandomize.apply(_stack, old_changes)
 	_restore_unset_params(unset_params)

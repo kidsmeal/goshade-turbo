@@ -1,14 +1,12 @@
 extends GSTTestBase
 
-## GSTLibrary indexing over the real, shipped seed manifests under
-## addons/goshade_turbo/library/. Design: docs/DESIGN.md, Manifest entry.
+## GSTLibrary indexing over the shipped seed manifests under
+## addons/goshade_turbo/library/.
 
 
-## Every manifest id the library is expected to index (58 entries, 2026-09-15
-## unit-failure fix pass). A hardcoded roster count let a block be added
-## without being listed, so this is compared as a sorted array against
-## GSTLibrary.scan()'s actual result and reports missing/extra ids by name.
-## New entries must be added here on purpose.
+## Every manifest id the library indexes, compared as a sorted array against
+## GSTLibrary.scan()'s result; missing/extra ids are reported by name. New
+## entries must be added here on purpose.
 const EXPECTED_LIBRARY_IDS: Array[String] = [
 	"color/add", "color/brightness_contrast", "color/fill", "color/gradient_map",
 	"color/hue_shift", "color/mix", "color/multiply", "color/overlay", "color/palette",
@@ -86,10 +84,8 @@ func test_every_manifest_kind_field_is_a_valid_gst_layer_kind() -> void:
 
 
 ## GSTLayer._property_type_for maps exactly these five type strings; any
-## other value falls back to TYPE_FLOAT with a push_warning naming the entry
-## and param (docs/PLAN.md phase 4 fix pass 2, item 1). Every real manifest
-## param type must be one of the known set so the inspector column never
-## silently falls back for shipped data.
+## other value falls back to TYPE_FLOAT with a push_warning. Every shipped
+## manifest param type must be in the known set.
 func test_every_manifest_param_type_is_known() -> void:
 	var lib: GSTLibrary = GSTLibrary.new()
 	lib.scan()

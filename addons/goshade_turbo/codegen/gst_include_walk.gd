@@ -3,15 +3,11 @@ class_name GSTIncludeWalk
 extends RefCounted
 
 ## Depth-first walk over GSTManifestEntry.depends, deduped by manifest id.
-## Design: docs/DESIGN.md, Codegen rules ("Include walk: depth first over
-## depends, dedupe by id, emit function bodies before fragment()").
 
 
-## Returns every entry reachable from `root_ids` through `depends`, each
-## entry's dependencies ordered before the entry itself (post-order), each
-## id visited once regardless of how many roots or dependents reach it.
-## An id missing from `library` is silently skipped: codegen's own callers
-## are responsible for reporting a missing manifest as a data problem.
+## Every entry reachable from `root_ids` through `depends`, post-order
+## (dependencies before the entry), each id visited once.
+## An id missing from `library` is skipped; the caller reports missing manifests.
 static func walk(root_ids: Array[String], library: GSTLibrary) -> Array[GSTManifestEntry]:
 	var visited: Dictionary = {}
 	var order: Array[GSTManifestEntry] = []

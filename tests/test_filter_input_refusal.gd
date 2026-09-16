@@ -2,7 +2,6 @@ extends GSTTestBase
 
 ## GSTStackOps.assign_slot refusing a non-source layer on a samples_source
 ## slot, and codegen's neighbor-sampling emission for a filter fed a source.
-## Design: docs/DESIGN.md decision 21, docs/PLAN.md Blocker B6.
 
 
 func _scanned_library() -> GSTLibrary:
@@ -80,9 +79,8 @@ func test_filter_default_initializes_only_from_an_immediate_source() -> void:
 
 
 func test_assigning_a_slot_whose_own_entry_is_unresolved_in_the_library_is_refused() -> void:
-	# An entry id absent from the given library must never bypass the
-	# samples_source check: assign_slot refuses instead of silently treating
-	# an unresolved entry as "not a filter".
+	# An entry id absent from the library must not bypass the samples_source
+	# check: assign_slot refuses instead of treating it as "not a filter".
 	var lib: GSTLibrary = GSTLibrary.new()
 	var stack: GSTStack = GSTStack.new()
 	var base: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
@@ -122,11 +120,10 @@ func test_filter_of_filter_is_refused() -> void:
 
 
 func test_filter_fed_a_texture_source_emits_texture_and_uv() -> void:
-	# The literal TEXTURE built-in cannot cross a function-call boundary on
-	# Godot 4.6.2 (verified: ERROR: Condition
-	# "!actions.custom_samplers.has(...)" is true at the call site), so a
-	# filter is not a function at all -- it is an inline block that samples
-	# TEXTURE directly (docs/PLAN.md Blocker B10).
+	# The TEXTURE built-in cannot cross a function-call boundary on Godot
+	# 4.6.2 (ERROR: Condition "!actions.custom_samplers.has(...)" is true at
+	# the call site), so a filter is an inline block that samples TEXTURE
+	# directly instead of a function.
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
 	var tex: GSTLayer = GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
@@ -174,9 +171,8 @@ func test_filter_fed_a_screen_source_emits_screen_texture_and_screen_uv() -> voi
 
 
 func test_two_filter_layers_in_one_stack_compile() -> void:
-	# Proves block scoping (B10): both filters declare a template-local
-	# `cell`/`sum` etc. inside their own `{ }` block, so two filter layers in
-	# one stack must not collide.
+	# Block scoping: both filters declare template-local `cell`/`sum` inside
+	# their own `{ }` block, so two filter layers in one stack must not collide.
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
 	var tex: GSTLayer = GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
@@ -193,8 +189,8 @@ func test_two_filter_layers_in_one_stack_compile() -> void:
 
 
 func test_clearing_a_filters_source_slot_through_assign_slot_is_refused_and_unchanged() -> void:
-	# Cross-cutting concern "Manifest code contracts (B10)", Unwired filter
-	# rule: a samples_source slot cannot be cleared through assign_slot.
+	# Unwired filter rule: a samples_source slot cannot be cleared through
+	# assign_slot.
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
 	var tex: GSTLayer = GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
@@ -209,8 +205,8 @@ func test_clearing_a_filters_source_slot_through_assign_slot_is_refused_and_unch
 
 
 func test_removing_a_filters_source_with_a_non_source_layer_below_leaves_the_slot_empty() -> void:
-	# decision 22's delete reset must not point a filter at a non-source: it
-	# leaves the samples_source slot empty instead (Unwired filter rule).
+	# The delete reset must not point a filter at a non-source: it leaves the
+	# samples_source slot empty instead.
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
 	var base: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)  # index 0, not a source

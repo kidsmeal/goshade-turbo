@@ -2,10 +2,10 @@
 class_name GSTStackList
 extends VBoxContainer
 
-## Ordered stack list (decision 13): rendered top-to-bottom as the stack
-## renders, index layers.size()-1 at the top. Add/remove/reorder route
-## through GSTUndo (decision 20), never mutate GSTStack directly. A refused
-## reorder is reported via structural_edit_refused instead of performed.
+## Ordered stack list, rendered top-to-bottom as the stack renders, index
+## layers.size()-1 at the top. Add/remove/reorder route through GSTUndo,
+## never mutate GSTStack directly. A refused reorder is reported via
+## structural_edit_refused instead of performed.
 
 signal layer_selected(layer_id: StringName)
 signal structural_edit_refused(reason: String)
@@ -203,44 +203,33 @@ func _row_height() -> float:
 	return maxf(1.0, _list.get_item_rect(0).size.y)
 
 
-## Deselects without emitting layer_selected (phase 4, gst_main_panel.gd's
-## document activation): a stale selection carried over from whichever
-## document's rows this list showed before install_stack() rebuilt it for a
-## newly activated one must never linger just because its item id happens to
-## also exist in the new stack.
+## Deselects without emitting layer_selected. A selection from the previous
+## document must not survive install_stack() because its item id also exists
+## in the new stack.
 ## Wired-by: gst_main_panel.gd (document activation).
 func clear_selection() -> void:
 	_list.deselect_all()
 
 
-## Pairs with get_scroll_anchor_id (phase 4): lets a caller capture this
-## list's own current scroll position, by stable layer id and sub-row
-## fraction rather than a raw scrollbar value, before installing a different
-## stack's rows over it.
+## Pairs with get_scroll_anchor_id: the scroll offset in pixels within the
+## anchor row, captured before another stack's rows are installed.
 ## Wired-by: gst_main_panel.gd (document activation).
 func get_scroll_offset() -> float:
 	return _scroll_anchor_offset()
 
 
-## Restores a previously captured scroll anchor/offset (get_scroll_anchor_id/
-## get_scroll_offset) once this list's own rows already reflect the newly
-## installed stack. Deferred like refresh()'s own restoration: item rects
-## need one layout pass to settle before a scrollbar value derived from them
-## is meaningful.
+## Restores a captured scroll anchor/offset (get_scroll_anchor_id/
+## get_scroll_offset) once the rows reflect the newly installed stack.
+## Deferred like refresh()'s own restoration: item rects need one layout pass
+## before a scrollbar value derived from them is meaningful.
 ##
-## An empty anchor_id (this document has never had its own scroll state
-## captured -- its first activation with content) still queues an explicit
-## reset to the top, rather than doing nothing (fix-now S2, phase 4 review
-## round 2): refresh() above, called earlier in the same document-install
-## call chain (gst_main_panel.gd's _install_document_state), already captured
-## and queued its own deferred restore of whichever anchor id the outgoing
-## document's rows were scrolled to before this list's rows were rebuilt for
-## the incoming document. If that outgoing anchor id happens to also exist in
-## the incoming document's own stack -- ordinary, since every GSTStack's own
-## next_id starts at 0 (gst_stack_ops.gd) -- a bare early return here left
-## that stale restore uncontested, bleeding the outgoing document's scroll
-## position into a document that never asked for one. Queuing this reset
-## after refresh()'s own deferred call guarantees it runs last and wins.
+## An empty anchor_id still queues an explicit reset to the top. refresh(),
+## called earlier in the same install chain (gst_main_panel.gd
+## _install_document_state), already queued a deferred restore of the
+## outgoing document's anchor id; that id usually also exists in the incoming
+## stack (every GSTStack's next_id starts at 0), so a bare early return would
+## leave the stale restore in effect. Queuing after refresh()'s deferred call
+## guarantees this runs last.
 ## Wired-by: gst_main_panel.gd (document activation).
 func restore_scroll_state(anchor_id: StringName, offset: float) -> void:
 	if _list.item_count == 0:
@@ -251,9 +240,8 @@ func restore_scroll_state(anchor_id: StringName, offset: float) -> void:
 	_restore_scroll_anchor.call_deferred(anchor_id, offset)
 
 
-## Deferred counterpart to the anchor_id == &"" branch above: overrides any
-## stale deferred restore refresh() already queued against this list's newly
-## installed rows.
+## Deferred target of restore_scroll_state's empty-anchor branch; overrides
+## any stale deferred restore refresh() queued.
 func _reset_scroll_to_top() -> void:
 	_list.get_v_scroll_bar().value = 0.0
 
@@ -282,9 +270,8 @@ func _on_add_pressed() -> void:
 
 
 ## Adds a layer of entry_id through GSTUndo, the same call the Add button's
-## picker callback makes. Public so tests/gst_editor_smoke.gd can drive the
-## panel through the same code path the button uses (docs/PLAN.md Phase 4
-## Files, gst_editor_smoke.gd).
+## picker callback makes. Public so tests/gst_editor_smoke.gd drives the same
+## code path.
 func add_layer_by_entry_id(entry_id: String) -> GSTLayer:
 	if _mutations_blocked:
 		return null

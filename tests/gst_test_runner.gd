@@ -2,17 +2,13 @@ extends SceneTree
 
 ## Inner headless test runner. Discovers tests/test_*.gd, runs every test_*
 ## method on each, and quits 1 if gst_test_base.gd recorded any assertion
-## failure. Always run through the tests/run_codegen_tests.gd wrapper, never
-## invoked directly as the named verification command: GDScript exposes no
-## hook that catches an engine-level SCRIPT ERROR (an assert() failure or a
-## runtime error the engine itself prints), so an aborted test method still
-## reports this script's own exit 0 here. The wrapper inspects this script's
-## captured stdout/stderr for SCRIPT ERROR / ERROR: / Parse error and fails
-## the run even when this inner runner does not observe the abort.
+## failure. Run through tests/run_codegen_tests.gd: GDScript has no hook
+## that catches an engine-level SCRIPT ERROR, so an aborted test method
+## still exits 0 here; the wrapper scans the captured output instead.
 ##
-## Prerequisite, once after clone and after adding any new class_name
-## script: `godot --headless --path . --import`. Without it, class_name
-## globals fail with a Parse error in this -s run.
+## Prerequisite, once after clone and after adding any class_name script:
+## `godot --headless --path . --import`. Without it class_name globals fail
+## with a Parse error.
 
 const TEST_DIR: String = "res://tests"
 

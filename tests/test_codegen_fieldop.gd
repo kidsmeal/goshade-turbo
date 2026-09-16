@@ -2,7 +2,6 @@ extends GSTTestBase
 
 ## GSTCodegen over field-op (operator) layers: slot wiring, the unwired-slot
 ## fallback constant, and every roster entry compiling alone.
-## Design: docs/DESIGN.md, Codegen rules.
 
 
 func _scanned_library() -> GSTLibrary:
@@ -71,12 +70,10 @@ func test_every_fieldop_manifest_compiles_alone_fed_constants() -> void:
 		assert_true(GSTShaderCompile.compiles(code, true), "%s compiles alone with every input slot fed the fallback constant" % id)
 
 
-## Phase 8: the 4 sdf operators (union, subtract, intersect, smooth_union)
-## are library/sdf/*.tres entries with coord == false and two field inputs
-## (a, b), the same shape as the field-op roster above. The 7 sdf generators
-## share the "sdf/" id prefix but coord == true; they are covered by
-## tests/test_codegen_generator.gd's own sdf loop, alongside the rest of the
-## generative roster.
+## The 4 sdf operators (union, subtract, intersect, smooth_union) are
+## library/sdf/*.tres entries with coord == false and two field inputs
+## (a, b). The 7 sdf generators share the "sdf/" id prefix but coord == true;
+## tests/test_codegen_generator.gd covers them.
 func test_every_sdf_operator_manifest_compiles_alone_fed_constants() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var sdf_operator_ids: Array[String] = []

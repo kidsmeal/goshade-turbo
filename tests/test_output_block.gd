@@ -1,7 +1,7 @@
 extends GSTTestBase
 
 ## GSTCodegen output block: color.rgb from output_color plus the four alpha
-## modes. Design: docs/DESIGN.md decision 12, docs/PLAN.md Blocker B7.
+## modes.
 
 
 func _scanned_library() -> GSTLibrary:
@@ -43,8 +43,8 @@ func test_alpha_texture_emits_texture_alpha() -> void:
 
 
 func test_alpha_texture_is_the_same_expression_with_two_texture_layers() -> void:
-	# B7: with two or more texture layers, output alpha still reads
-	# texture(TEXTURE, UV).a; no tiebreak between the two texture layers.
+	# With two or more texture layers, output alpha still reads
+	# texture(TEXTURE, UV).a; no tiebreak between the texture layers.
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
 	GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
@@ -100,8 +100,8 @@ func test_alpha_color_layer_id_converts_through_luma() -> void:
 
 
 func test_alpha_unset_with_texture_source_emits_texture_alpha() -> void:
-	# decision 12: an unset output_alpha (&"") resolves to "texture" when the
-	# stack has a "source/texture" layer.
+	# An unset output_alpha (&"") resolves to "texture" when the stack has a
+	# "source/texture" layer.
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
 	GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
@@ -116,8 +116,8 @@ func test_alpha_unset_with_texture_source_emits_texture_alpha() -> void:
 
 
 func test_alpha_unset_without_texture_source_emits_one() -> void:
-	# decision 12: an unset output_alpha (&"") resolves to "none" when the
-	# stack has no "source/texture" layer.
+	# An unset output_alpha (&"") resolves to "none" when the stack has no
+	# "source/texture" layer.
 	var ctx: Dictionary = _stack_with_color_output()
 	var stack: GSTStack = ctx["stack"]
 	var color_layer: GSTLayer = ctx["color_layer"]
@@ -163,9 +163,8 @@ func test_alpha_color_alpha_with_unset_output_color_reads_the_default_colors_alp
 
 
 func test_output_color_defaults_to_top_color_layer_when_unset() -> void:
-	# decision 12 / docs/PLAN.md Phase 4 amendment item 2: an unset
-	# stack.output_color defaults to the top (highest stack index) color
-	# layer, not the first one added.
+	# An unset stack.output_color defaults to the top (highest stack index)
+	# color layer, not the first one added.
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
 	var first_color: GSTLayer = GSTStackOps.add_layer(stack, "color/fill", GSTLayer.Kind.COLOR, false)
@@ -181,7 +180,7 @@ func test_output_color_defaults_to_top_color_layer_when_unset() -> void:
 
 func test_output_color_defaults_to_black_when_no_color_layer_exists() -> void:
 	# No color layer at all: codegen must not emit an undefined identifier
-	# for an empty layer id (docs/PLAN.md Phase 4 amendment item 2).
+	# for an empty layer id.
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
 	GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)

@@ -3,21 +3,15 @@ class_name GSTOverwriteCheck
 extends RefCounted
 
 ## Compares an exported .gdshader's on-disk body to a fresh codegen of its
-## own embedded header (design decisions 8 and 9: "Export checks the target
-## file against a fresh codegen of its header and asks before overwriting a
-## differing body"). Used by gst_export.gd's write() (the overwrite gate) and
-## reopen() (the decision-8 stale-body warning), and directly by
-## gst_main_panel.gd's export confirmation flow.
+## own embedded header. Used by GSTExport.write() (overwrite gate),
+## GSTExport.reopen() (stale-body warning), and gst_main_panel.gd's export
+## confirmation.
 
 
-## `{exists, has_header, differs, reason}`. A target that does not exist is
-## never a conflict (exists=false, differs=false). A target with no
-## recognizable "// stack: " header line is a hand-written file and always
-## `differs = true` (a header-less body can never be regenerated to compare
-## against). A target whose header exists but fails to parse (B8), or whose
-## parsed stack fails to re-codegen, is also `differs = true`, naming the
-## failure: neither case can produce a body to compare, so both count as "do
-## not silently overwrite this."
+## `{exists, has_header, differs, reason}`. A missing target is
+## `differs = false`. A target with no "// stack: " header line, a header that
+## fails to parse, or a stack that fails to re-codegen is `differs = true`
+## with `reason` naming the failure: no body can be produced to compare.
 static func check(path: String, library: GSTLibrary) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {"exists": false, "has_header": false, "differs": false, "reason": ""}
@@ -62,12 +56,9 @@ static func check(path: String, library: GSTLibrary) -> Dictionary:
 
 
 ## Finds the first line beginning with GSTHeader.HEADER_PREFIX in `text`.
-## `{found, line, body}`: `body` is every line strictly after the header
-## line, rejoined with "\n" (Codegen rules: "Header: license notice, then
-## `// stack: <json>` on one line"; the body being compared is everything
-## after that one line, not the constant license comment above it). Shared
-## by gst_export.gd's reopen() so both files agree on exactly what counts as
-## "the header line" and "the body".
+## `{found, line, body}`: `body` is every line after the header line,
+## rejoined with "\n"; the license comment above the header is excluded.
+## GSTExport.reopen() shares this so both agree on what the body is.
 static func find_header_line(text: String) -> Dictionary:
 	var lines: PackedStringArray = text.split("\n")
 	for i: int in range(lines.size()):

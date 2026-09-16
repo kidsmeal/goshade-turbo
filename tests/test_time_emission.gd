@@ -1,7 +1,6 @@
 extends GSTTestBase
 
 ## TIME and the scroll uniform are emitted together, or both absent.
-## Design: docs/DESIGN.md, Codegen rules and Review revisions.
 
 
 func _scanned_library() -> GSTLibrary:

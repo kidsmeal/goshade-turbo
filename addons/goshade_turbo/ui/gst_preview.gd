@@ -2,25 +2,22 @@
 class_name GSTPreview
 extends Control
 
-## Live preview column (decision 13, decision 10). Built entirely in script
-## rather than via .tscn nodes (matching gst_inspector_column.gd's own
-## programmatic-EditorInspector pattern), so every enum-valued property
-## (SubViewport.render_target_update_mode, TextureRect.stretch_mode /
-## expand_mode, BackBufferCopy.copy_mode) is set through its named GDScript
-## constant instead of a hand-typed .tscn ordinal.
+## Live preview column. Built in script rather than .tscn so every
+## enum-valued property (SubViewport.render_target_update_mode,
+## TextureRect.stretch_mode / expand_mode, BackBufferCopy.copy_mode) is set
+## through its named constant instead of a .tscn ordinal.
 ##
 ## Tree: opaque checkerboard (outside the SubViewport, UI only), then a
 ## transparent SubViewportContainer using premultiplied-alpha blending. Inside
 ## the SubViewport: preview image, BackBufferCopy, a blend-disabled transparent
-## clear, then the active preset target. Screen-source shaders sample the saved
-## preview image while target transparency reveals the checkerboard without
-## putting it in pixel readback.
+## clear, then the active preset target. Screen-source shaders sample the
+## preview image; target transparency reveals the checkerboard without putting
+## it in pixel readback.
 
-## Fires whenever the active target node's own rect size changes: an editor
-## window resize, an HSplitContainer drag, or set_preset swapping the target
-## node to a preset with a different natural size. GSTMainPanel connects this
-## to a cheap gst_rect_size-only uniform write (B5), never a full codegen
-## pass, since this can fire every frame during a drag.
+## Fires when the active target node's rect size changes (window resize,
+## splitter drag, set_preset). Can fire every frame during a drag, so
+## GSTMainPanel connects it to GSTMaterialSync.write_rect_size, never a
+## codegen pass.
 signal target_rect_changed(size: Vector2)
 
 const DEFAULT_SIZE: Vector2i = Vector2i(256, 256)
@@ -111,17 +108,11 @@ func _ready() -> void:
 	set_preset(_preset_name)
 
 
-## Not named set_material: Control (CanvasItem) already declares a
-## set_material(Material) setter for its own `material` property, and a
-## ShaderMaterial-typed parameter here would not match that signature
-## (verified: `godot --headless --path . --import` raised "Parse Error:
-## Could not resolve external class member 'set_material'" before this
-## rename). This assigns the shared instance to whichever node is the
-## current preset's target, not to GSTPreview's own inherited `material`.
-##
-## The ShaderMaterial instance stays fixed across preset switches:
-## set_preset reassigns it to whichever node is the new target, never
-## replaces it.
+## Not named set_material: CanvasItem declares set_material(Material) for its
+## own `material` property, and a ShaderMaterial-typed override fails to
+## parse. Assigns the shared instance to the current preset's target node,
+## not to GSTPreview's own `material`. The instance stays fixed across preset
+## switches; set_preset reassigns it, never replaces it.
 func set_shader_material(material: ShaderMaterial) -> void:
 	_material = material
 	if _target_node != null:
@@ -142,15 +133,14 @@ func set_preset(preset_name: String) -> void:
 	target_rect_changed.emit(get_target_rect_size())
 
 
-## The old target node's `resized` connection is severed automatically when
-## it is freed in set_preset, so only the current target node is ever
-## connected here.
+## Only the current target node is connected: freeing the old one in
+## set_preset severs its `resized` connection.
 func _on_target_resized() -> void:
 	target_rect_changed.emit(get_target_rect_size())
 
 
-## Sets the bundled/picked preview image on the background and, when the
-## active preset is a TextureRect (sprite), on the target node too.
+## Sets the preview image on the background and, when the active preset is a
+## TextureRect (sprite), on the target node.
 func set_image(texture: Texture2D) -> void:
 	_preview_image = texture
 	_background.texture = texture
@@ -158,53 +148,42 @@ func set_image(texture: Texture2D) -> void:
 		(_target_node as TextureRect).texture = texture
 
 
-## Pixel readback for tests (docs/PLAN.md Phase 1 spike: SubViewport.
-## get_texture().get_image() works in the editor; null under --headless).
+## Pixel readback for tests. Returns null under --headless.
 ## Wired-by: none (editor smoke seam)
 func get_viewport_image() -> Image:
 	return _viewport.get_texture().get_image()
 
 
-## The preview node's own rect size, fed to material sync as gst_rect_size
-## (B5) so `local` space matches `uv` at scale 1.0.
+## The preview node's rect size, fed to material sync as gst_rect_size so
+## `local` space matches `uv` at scale 1.0.
 func get_target_rect_size() -> Vector2:
 	return Vector2(_viewport.size)
 
 
-## The active target node's own material property, for a test to confirm the
-## same ShaderMaterial instance survives a preset switch rather than a copy.
+## The active target node's material, for a test to confirm the same
+## ShaderMaterial instance survives a preset switch.
 ## Wired-by: none (editor smoke seam)
 func get_current_target_material() -> ShaderMaterial:
 	return _target_node.material as ShaderMaterial if _target_node != null else null
 
 
-## Reinstalls the shipped default preview image (phase 4,
-## docs/SHADER_TABS_reviewed-plan.md): gst_main_panel.gd's document
-## activation calls this for a document whose own preview_image_path is ""
-## (it never picked a custom image), so switching away from a document that
-## did pick one never leaves that picked texture showing for a document that
-## did not. Routes through the existing set_image so the background and any
-## TextureRect target stay in sync the same way a real Image... pick does.
+## Reinstalls the default preview image. Document activation calls this for a
+## document whose preview_image_path is "", so a previous document's picked
+## image does not persist. Routes through set_image.
 ## Wired-by: gst_main_panel.gd (document activation).
 func reset_image() -> void:
 	set_image(load(DEFAULT_IMAGE_PATH) as Texture2D)
 
 
-## Explicit render-loop control (phase 4 Cross-cutting "Explicitly control
-## GSTPreview update mode so only active, visible GoShade content renders"):
-## gst_main_panel.gd calls this from its own visibility_changed handler, so
-## the shared SubViewport stops rendering every frame while the GoShade
-## main-screen tab is hidden (a game scene or another editor panel is active)
-## and resumes when it is shown again. Document material/state (each
-## GSTDocument's own preview_sync/material) is untouched either way -- only
-## this one shared viewport's own render loop pauses.
+## Stops the shared SubViewport rendering while the GoShade tab is hidden and
+## resumes it when shown. Document material/state is untouched.
 ## Wired-by: gst_main_panel.gd (_on_panel_visibility_changed).
 func set_active(active: bool) -> void:
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS if active else SubViewport.UPDATE_DISABLED
 
 
-## The shared SubViewport's own current update mode, for a test to confirm
-## set_active's effect directly instead of inferring it from a stale render.
+## The shared SubViewport's current update mode, for a test to confirm
+## set_active's effect.
 ## Wired-by: none (editor smoke seam)
 func get_update_mode() -> SubViewport.UpdateMode:
 	return _viewport.render_target_update_mode

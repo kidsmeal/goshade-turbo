@@ -7,8 +7,7 @@
 // they sit to the core so inner particles lead. Local radius is sampled in
 // [core_radius, eye_radius]. Pair with vortex_portal.tscn, where the GoShade
 // Turbo metaball_portal export merges the soft circles into one blob.
-// Hand-written particles shader, not a GoShade Turbo stack (docs/DESIGN.md
-// expansions: particles stack type).
+// Hand-written particles shader, not a GoShade Turbo stack.
 //
 // CUSTOM layout: x = eye index (centre eye = eye_count), y = lifetime phase,
 // z = local orbit angle, w = local orbit radius. COLOR.a = per-ball size.
@@ -90,8 +89,9 @@ void process() {
 
 	// CUSTOM.y is the lifetime phase in [0, 1], same convention as
 	// ParticleProcessMaterial. Grow in and shrink out so respawns do not
-	// pop. Scale, not alpha: a half-alpha disc reads as mid luma across its
-	// whole core, and the portal's edge band would paint the entire ball.
+	// pop. Scale rather than alpha: a half-alpha disc reads as mid luma
+	// across its whole core, and the portal's edge band would paint the
+	// entire ball.
 	CUSTOM.y = min(CUSTOM.y + DELTA / LIFETIME, 1.0);
 	float t = CUSTOM.y;
 	float grow = smoothstep(0.0, fade, t) * smoothstep(1.0, 1.0 - fade, t) * COLOR.a;

@@ -1,15 +1,11 @@
 extends GSTTestBase
 
-## GSTStackIO: save/load a GSTStack .tres (design decision 8, docs/PLAN.md
-## Phase 6 Files). Writes only under user:// (docs/PLAN.md Phase 6
-## Verification: "save into user:// or the scratchpad, not into the repo").
+## GSTStackIO: save/load a GSTStack .tres. Writes only under user://, never
+## into the repo.
 ##
-## _compare_stacks/_compare_layers/_compare_dict/_compare_coord (phase 6 fix
-## pass 2, item 2; moved to gst_test_base.gd in phase 7 so
-## tests/test_recipe_roundtrip.gd can reuse them, docs/PLAN.md Phase 7 Build)
-## return every mismatch as a list of strings instead of stopping at the
-## first assert_eq failure, so one test run reports every field the round
-## trip dropped, reordered, or coerced, not just the first one found.
+## _compare_stacks/_compare_layers/_compare_dict/_compare_coord
+## (gst_test_base.gd) return every mismatch as a list of strings, so one run
+## reports every field the round trip dropped, reordered, or coerced.
 
 
 func _scanned_library() -> GSTLibrary:
@@ -19,12 +15,11 @@ func _scanned_library() -> GSTLibrary:
 
 
 ## A generator with a coord block and warp refs, an operator with slots, an
-## int param (type-equality check: octaves must stay int, not become float
-## through the .tres round trip), a color param, vec3 params, output_color,
-## output_alpha, and a next_id gap (ids 0-4 exist, next_id is 7, simulating
-## two deleted layers -- decision 22: ids are never reused). Real shipped
-## manifests (generative/hash, generative/fbm, fieldops/invert, color/fill,
-## color/palette), not a synthetic fixture (real-input rule).
+## int param (octaves must stay int through the .tres round trip), a color
+## param, vec3 params, output_color, output_alpha, and a next_id gap (ids 0-4
+## exist, next_id is 7, as if two layers were deleted; ids are never reused).
+## Shipped manifests: generative/hash, generative/fbm, fieldops/invert,
+## color/fill, color/palette.
 func _build_stack(lib: GSTLibrary) -> Dictionary:
 	var stack: GSTStack = GSTStack.new()
 

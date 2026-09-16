@@ -3,7 +3,7 @@ class_name GSTCoordBlock
 extends Resource
 
 ## Generator coord transform: scale/offset/rotation/scroll plus two optional
-## field-kind warp inputs. Design: docs/DESIGN.md, decision 4 and Data model.
+## field-kind warp inputs.
 
 const EDITOR_METADATA: Dictionary = {
 	&"scale": {
@@ -55,8 +55,8 @@ const EDITOR_VISIBLE_PROPERTIES: Array[StringName] = [
 ]
 
 
-## The native coordinate inspector shows this whitelist. Distortion references
-## use filtered selector rows; every other field keeps its storage usage.
+## Only EDITOR_VISIBLE_PROPERTIES show in the inspector. warp_x/warp_y are
+## edited through filtered selector rows. Every field keeps storage usage.
 func _validate_property(property: Dictionary) -> void:
 	if StringName(property.get("name", &"")) not in EDITOR_VISIBLE_PROPERTIES:
 		property["usage"] = int(property.get("usage", 0)) & ~PROPERTY_USAGE_EDITOR

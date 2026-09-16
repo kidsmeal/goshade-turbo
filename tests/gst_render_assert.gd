@@ -2,20 +2,15 @@
 class_name GSTRenderAssert
 extends RefCounted
 
-## Per-pixel readback assertions for a rendered check (docs/PLAN.md Phase 7
-## Files, design Release checklist: "no NaN or inf pixels, alpha channel
-## within [0, 1], output not uniformly one value"). Every pixel of `image` is
-## sampled (docs/PLAN.md Phase 7 Build: "sample every pixel of a 128x128
-## readback"), not a sparse grid like tests/gst_editor_smoke.gd's own
-## _image_is_uniform: a rendered check runs once per recipe/stack, not every
-## frame of a live editor session, so the full scan is affordable and catches
-## a single bad pixel a sparse sample would miss.
+## Per-pixel readback assertions for a rendered check: no NaN or inf
+## pixels, alpha within [0, 1], output not uniformly one value. Every pixel
+## of `image` is sampled; a rendered check runs once per stack, so the full
+## scan is affordable.
 
 
 ## Every reason `image` fails the rendered check, or an empty array when it
-## passes. `image == null` (the --headless dummy driver's own readback
-## failure, verified in docs/PLAN.md) is reported as its own reason rather
-## than silently passing.
+## passes. `image == null` (the --headless dummy driver's readback failure)
+## is reported as its own reason.
 static func check(image: Image) -> Array[String]:
 	var reasons: Array[String] = []
 	if image == null:

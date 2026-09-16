@@ -1,14 +1,12 @@
 @tool
 extends RefCounted
 
-## Phase 3 (docs/SHADER_TABS_reviewed-plan.md): runtime document ownership.
-## Drives the real production panel to prove GSTDocument's own guarantees --
-## none of it exposed through visible tab controls yet (phase 4 wires
-## those): independent recipe copies, baseline/dirty rules, canonical path
-## reuse, failed open, stable ids, alternating undo/redo across inactive
-## histories, and inactive-document callback isolation. Drives
+## GST_EDITOR_SMOKE=tabs_documents. Runtime document ownership: independent
+## recipe copies, baseline/dirty rules, canonical path reuse, failed open,
+## stable ids, alternating undo/redo across inactive histories, and
+## inactive-document callback isolation. Drives
 ## panel.open_document/activate_document/get_documents/get_active_document
-## directly, the same seams New/Open/Reopen Shader/Recipes call internally.
+## directly.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -34,8 +32,7 @@ func run(plugin: EditorPlugin) -> void:
 	var initial_doc: GSTDocument = panel.get_active_document()
 	_check("initial_document", initial_doc != null and panel.get_documents().has(initial_doc), "active=%s in_list=%s" % [initial_doc != null, panel.get_documents().has(initial_doc) if initial_doc != null else false])
 
-	# --- Independent recipe copies + stable ids (repeated recipes create
-	# independent layer/coord instances, never a shared one). ---
+	# --- Independent recipe copies + stable ids. ---
 	var docs_before_fire: int = panel.get_documents().size()
 	panel.open_recipe("fire")
 	await plugin.get_tree().process_frame
@@ -50,9 +47,8 @@ func run(plugin: EditorPlugin) -> void:
 		_finish(plugin)
 		return
 
-	# --- Unsaved recipe/import content starts dirty (fix pass 1, round 1,
-	# item 3): GSTDocument.setup's starts_dirty leaves no saved baseline for
-	# content that has nowhere on disk it already matches. ---
+	# --- Unsaved recipe content starts dirty: GSTDocument.setup's starts_dirty
+	# records no baseline. ---
 	_check("recipe_documents_start_dirty", fire_a.is_dirty() and fire_b.is_dirty(), "fire_a.is_dirty()=%s fire_b.is_dirty()=%s" % [fire_a.is_dirty(), fire_b.is_dirty()])
 
 	var fbm_a: GSTLayer = _find_layer_by_entry(fire_a.stack, "generative/fbm")
@@ -84,8 +80,7 @@ func run(plugin: EditorPlugin) -> void:
 	var switch_back_ok: bool = panel.get_active_document() == fire_a and fire_a.session_id == id_a_before and panel.get_watched_history() == history_a and history_a.get_history_count() == count_a_after_add and panel.get_stack() == fire_a.stack
 	_check("navigation_adds_no_action_and_ids_stable", switch_to_b_ok and switch_back_ok, "b_ok=%s a_back_ok=%s b_count=%d a_count=%d->%d" % [switch_to_b_ok, switch_back_ok, history_b.get_history_count(), count_a_after_add, history_a.get_history_count()])
 
-	# --- Alternating undo/redo: each document's history is independent of
-	# navigation in between. ---
+	# --- Alternating undo/redo across navigation. ---
 	history_a.undo()
 	await plugin.get_tree().process_frame
 	var fire_a_undone: bool = GSTStackOps.find_layer(fire_a.stack, fill_a.id) == null
@@ -107,20 +102,17 @@ func run(plugin: EditorPlugin) -> void:
 	var fire_a_redone: bool = GSTStackOps.find_layer(fire_a.stack, fill_a.id) == fill_a
 	_check("alternating_undo_redo_independent", fire_a_undone and fire_b_untouched_by_a_undo and fire_b_gain_restored and fire_a_still_undone_after_switching and fire_a_redone, "a_undone=%s b_untouched_by_a=%s b_restored=%s a_still_undone_after_switch=%s a_redone=%s" % [fire_a_undone, fire_b_untouched_by_a_undo, fire_b_gain_restored, fire_a_still_undone_after_switching, fire_a_redone])
 
-	# --- Inactive-document callback isolation: mutating a document that is
-	# not active must never call the active-panel mutation callbacks
-	# against the wrong stack. ---
+	# --- Inactive-document callback isolation: mutating an inactive document
+	# must not run the active-panel mutation callbacks. ---
 	var stack_list_count_before: int = panel.get_stack_list().get_item_count()
 	var active_before_inactive_mutation: GSTDocument = panel.get_active_document()
 	fire_b.undo.add_layer("color/fill", GSTLayer.Kind.COLOR, false)
 	var active_ui_untouched: bool = panel.get_stack_list().get_item_count() == stack_list_count_before and panel.get_active_document() == active_before_inactive_mutation
 	_check("inactive_document_mutation_does_not_touch_active_ui", active_ui_untouched, "stack_list_count %d->%d active_unchanged=%s" % [stack_list_count_before, panel.get_stack_list().get_item_count(), panel.get_active_document() == active_before_inactive_mutation])
 
-	# --- Fixture-only replace_stack binds its action and its new adapter's
-	# callbacks to the document active when it was called, not to whichever
-	# document is active at replay time (fix pass 1, round 1, item 2):
-	# undo/redo of that action while a different document is active must
-	# rewrite only the owning document, never the active one. ---
+	# --- replace_stack binds its action and adapter callbacks to the document
+	# active at call time; undo/redo while another document is active must
+	# rewrite only the owning document. ---
 	var original_fire_a_stack: GSTStack = fire_a.stack
 	var replaced_stack: GSTStack = GSTStack.new()
 	panel.replace_stack(replaced_stack, "", false)
@@ -139,25 +131,16 @@ func run(plugin: EditorPlugin) -> void:
 	var fire_a_reapplied: bool = fire_a.stack == replaced_stack
 	var active_untouched_by_redo: bool = panel.get_active_document() == fire_b and panel.get_stack_list().get_item_count() == stack_list_count_before_inactive_replay and panel.get_stack() == fire_b.stack
 	_check("inactive_replacement_undo_redo_does_not_touch_active_document", replace_applied and fire_a_reverted and active_untouched_by_undo and fire_a_reapplied and active_untouched_by_redo, "applied=%s reverted=%s undo_active_ok=%s reapplied=%s redo_active_ok=%s" % [replace_applied, fire_a_reverted, active_untouched_by_undo, fire_a_reapplied, active_untouched_by_redo])
-	# Leaves fire_a back on its own original stack (fbm_a's own stack), not
-	# replaced_stack's empty one, so every later check below that reads
-	# fbm_a through fire_a keeps finding it. Also clears fire_a's own
-	# history: undoing here without redoing back to the tip leaves a
-	# discarded "GST: Replace stack" redo entry sitting on top of position 1
-	# of 2; UndoRedo.commit_action truncates that orphaned entry the next
-	# time anything commits a new action on this same history (correct
-	# UndoRedo behavior, matching what a real new edit after a real undo
-	# does), which would otherwise make the next check below's own
-	# count-before/count-after arithmetic land on the wrong number for a
-	# reason unrelated to what it is actually testing.
+	# Restores fire_a's original stack so later checks reading fbm_a through
+	# fire_a still find it. clear_history removes the dangling redo entry the
+	# undo leaves; UndoRedo.commit_action would truncate it on the next
+	# commit and skew the next check's history-count arithmetic.
 	replace_history.undo()
 	await plugin.get_tree().process_frame
 	replace_history.clear_history()
 
-	# --- Pending native edits finish on the originating document before
-	# activate_document() switches ownership (fix pass 1, round 1, item 1):
-	# a numeric drag and a native color popup edit, each still in flight
-	# when the switch happens, must land on fire_a and never touch fire_b. ---
+	# --- Pending native edits (a numeric drag, a native color popup edit)
+	# finish on fire_a before activate_document() switches to fire_b. ---
 	panel.activate_document(fire_a)
 	await plugin.get_tree().process_frame
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
@@ -171,8 +154,8 @@ func run(plugin: EditorPlugin) -> void:
 		for spin_node: Node in gain_property.find_children("*", "EditorSpinSlider", true, false):
 			gain_spin = spin_node as EditorSpinSlider
 			break
-	# Captured now, not re-read after the switch below: activate_document
-	# rebuilds the inspector rows for fire_b, freeing gain_spin/gain_property.
+	# Captured before the switch: activate_document rebuilds the inspector
+	# rows for fire_b, freeing gain_spin/gain_property.
 	var gain_spin_found: bool = gain_spin != null
 	var numeric_pending_ok: bool = false
 	if gain_spin != null:
@@ -185,9 +168,8 @@ func run(plugin: EditorPlugin) -> void:
 		var mid_gesture_value: float = float(fbm_a.get(&"gain"))
 		await panel.activate_document(fire_b)
 		await plugin.get_tree().process_frame
-		# fbm_b's own gain reads gain_before_a here, not the 0.77 it was
-		# edited to above: the alternating-undo/redo section already
-		# undid that edit on fire_b's own history and never redid it.
+		# fbm_b's gain is gain_before_a here: the alternating undo/redo
+		# section undid the 0.77 edit and never redid it.
 		numeric_pending_ok = history_a_numeric.get_history_count() == count_a_before_numeric + 1 and is_equal_approx(float(fbm_a.get(&"gain")), mid_gesture_value) and not is_equal_approx(mid_gesture_value, original_gain) and panel.get_active_document() == fire_b and fbm_b != null and is_equal_approx(float(fbm_b.get(&"gain")), gain_before_a)
 	_check("numeric_pending_edit_finishes_before_document_activation", numeric_pending_ok, "gain_spin_found=%s" % [gain_spin_found])
 
@@ -201,8 +183,7 @@ func run(plugin: EditorPlugin) -> void:
 		inspector.get_settings_scroll().ensure_control_visible(color_property)
 		await plugin.get_tree().process_frame
 	var color_button: ColorPickerButton = _find_color_button(color_property)
-	# Captured now, not re-read after the switch below (same reason as
-	# gain_spin_found above).
+	# Captured before the switch (same reason as gain_spin_found).
 	var color_button_found: bool = color_button != null
 	var color_pending_ok: bool = false
 	var hex_edit_found: bool = false
@@ -216,11 +197,8 @@ func run(plugin: EditorPlugin) -> void:
 		hex_edit_found = hex_edit != null
 		if hex_edit != null:
 			await _type_into_line_edit(plugin, hex_edit, "112233")
-		# Genuinely awaited, not fire-and-forget: closing a native color
-		# popup's own close handler is connected CONNECT_DEFERRED, so
-		# finishing it spans more than one frame and the switch below must
-		# not be read as complete until activate_document's own await
-		# actually returns.
+		# Awaited: the native color popup's close handler is CONNECT_DEFERRED
+		# and spans more than one frame.
 		await panel.activate_document(fire_b)
 		await plugin.get_tree().process_frame
 		var expected_color: Color = Color(0x11 / 255.0, 0x22 / 255.0, 0x33 / 255.0, 1.0)
@@ -238,11 +216,8 @@ func run(plugin: EditorPlugin) -> void:
 	var dirty_after_structural_add: bool = pristine.is_dirty()
 	panel.get_watched_history().undo()
 	await plugin.get_tree().process_frame
-	# Decision 22: undo of an add never reverts stack.next_id (ids are never
-	# reused), and the fingerprint includes next_id (phase 3: "Include
-	# next_id and raw parameter-key presence"), so this document remains
-	# dirty relative to its pristine-empty baseline even after the add is
-	# fully undone -- not a bug, the documented fingerprint consequence.
+	# Undo of an add never reverts stack.next_id, and the fingerprint includes
+	# next_id, so the document stays dirty after the add is undone.
 	var still_dirty_after_undoing_the_add: bool = pristine.is_dirty()
 	_check("baseline_dirty_after_structural_add", pristine_clean and dirty_after_structural_add and still_dirty_after_undoing_the_add, "pristine_clean=%s dirty_after_add=%s still_dirty_after_undo=%s (decision 22: next_id never reverts)" % [pristine_clean, dirty_after_structural_add, still_dirty_after_undoing_the_add])
 
@@ -261,10 +236,9 @@ func run(plugin: EditorPlugin) -> void:
 	var clean_after_property_undo: bool = not pristine.is_dirty()
 	_check("baseline_dirty_rules_property_edit", clean_after_marking_new_baseline and dirty_after_property_edit and clean_after_property_undo, "clean_after_new_baseline=%s dirty_after_edit=%s clean_after_undo=%s" % [clean_after_marking_new_baseline, dirty_after_property_edit, clean_after_property_undo])
 
-	# open_document's own reuse of a still-open, never-edited document (fix
-	# pass 1, round 1, item 4): the "New" call above must have reactivated
-	# initial_doc -- the only open document with no path and no dirty
-	# content at that point -- instead of allocating a second one.
+	# open_document reuses a still-open pristine document: the open_document
+	# call above must have reactivated initial_doc (the only open document
+	# with no path and no dirty content) instead of allocating a second one.
 	var pristine_reused_initial_document: bool = pristine == initial_doc and panel.get_documents().size() == docs_before_pristine_new
 	_check("pristine_initial_document_reused", pristine_reused_initial_document, "pristine_is_initial_doc=%s docs=%d->%d (expect unchanged)" % [pristine == initial_doc, docs_before_pristine_new, panel.get_documents().size()])
 
@@ -286,11 +260,9 @@ func run(plugin: EditorPlugin) -> void:
 	var reused_existing: bool = panel.get_active_document() == pristine and panel.get_documents().size() == docs_before_reopen_path
 	_check("canonical_path_reuse", reused_existing, "active_is_pristine=%s docs=%d->%d" % [panel.get_active_document() == pristine, docs_before_reopen_path, panel.get_documents().size()])
 
-	# --- Canonical identity matches filesystem semantics, not just exact
-	# spelling (fix pass 1, round 1, item 5): the same file opened again
-	# through an upper-cased absolute-path spelling reuses pristine on
-	# Windows' case-insensitive filesystem instead of creating a second
-	# document. ---
+	# --- Canonical identity follows filesystem semantics: the same file
+	# opened through an upper-cased absolute path reuses pristine on a
+	# case-insensitive filesystem. ---
 	panel.activate_document(fire_a)
 	await plugin.get_tree().process_frame
 	var alternate_spelling: String = ProjectSettings.globalize_path(save_path).to_upper()
@@ -302,15 +274,8 @@ func run(plugin: EditorPlugin) -> void:
 	_cleanup([save_path])
 
 	# --- _canonical_path_for's case-fold gate, forced independently of the
-	# real platform (phase 3 review round 2 fix-now note 1): with
-	# case_insensitive=false (a case-sensitive filesystem, e.g. Linux),
-	# distinct-case spellings like Fire.tres/fire.tres must stay distinct
-	# instead of always collapsing into the same document, the defect fix
-	# 5 above introduced by folding unconditionally. With
-	# case_insensitive=true they must still fold together, matching the
-	# instance method's own real behavior on Windows/macOS already proven
-	# above by canonical_path_reuse_alternate_spelling's actual document
-	# reuse. ---
+	# platform: case_insensitive=false keeps Fire.tres/fire.tres distinct;
+	# case_insensitive=true folds them. ---
 	var case_sensitive_fire: String = GSTMainPanel._canonical_path_for("user://Fire.tres", false)
 	var case_sensitive_fire_lower: String = GSTMainPanel._canonical_path_for("user://fire.tres", false)
 	var case_insensitive_fire: String = GSTMainPanel._canonical_path_for("user://Fire.tres", true)
@@ -344,10 +309,8 @@ func run(plugin: EditorPlugin) -> void:
 	var reopen_ok: bool = reopened_doc != null and reopened_doc != fire_a and reopened_doc.current_path.is_empty() and panel.get_documents().size() == docs_before_reopen_shader + 1 and panel.get_message_label().text.contains("differs from a fresh codegen")
 	_check("reopen_shader_unsaved_origin_and_warning", reopen_ok, "current_path='%s' new_document=%s docs=%d->%d message='%s'" % [reopened_doc.current_path if reopened_doc != null else "missing", reopened_doc != fire_a if reopened_doc != null else false, docs_before_reopen_shader, panel.get_documents().size(), panel.get_message_label().text])
 
-	# --- Unsaved import content starts dirty, a successful save marks a new
-	# baseline, and undo after an edit returns to that baseline (fix pass 1,
-	# round 1, item 3, import side; the recipe side is covered by
-	# recipe_documents_start_dirty above). ---
+	# --- Unsaved import content starts dirty, a save marks a new baseline,
+	# and undo after an edit returns to that baseline. ---
 	var reopened_initially_dirty: bool = reopened_doc != null and reopened_doc.is_dirty()
 	_check("reopened_import_starts_dirty", reopened_initially_dirty, "reopened.is_dirty()=%s" % [reopened_doc.is_dirty() if reopened_doc != null else null])
 	var reopen_save_path: String = "user://gst_tabs_documents_reopen_save.tres"
@@ -355,12 +318,9 @@ func run(plugin: EditorPlugin) -> void:
 	panel.save_to_path(reopen_save_path)
 	await plugin.get_tree().process_frame
 	var reopened_clean_after_save: bool = not reopened_doc.is_dirty() and reopened_doc.current_path == reopen_save_path
-	# A property edit, not a structural add: decision 22 never reverts
-	# stack.next_id on undo, so a structural add stays dirty relative to
-	# this baseline even fully undone (documented above at
-	# baseline_dirty_after_structural_add) -- proving undo returns to the
-	# saved baseline itself needs the same property-edit-then-undo shape
-	# baseline_dirty_rules_property_edit already uses.
+	# A property edit, not a structural add: undo never reverts stack.next_id,
+	# so an undone structural add would still read dirty (see
+	# baseline_dirty_after_structural_add).
 	var reopened_fbm: GSTLayer = _find_layer_by_entry(reopened_doc.stack, "generative/fbm")
 	var reopened_dirty_after_edit: bool = false
 	var reopened_clean_after_undo: bool = false
@@ -387,9 +347,7 @@ func _find_layer_by_entry(stack: GSTStack, entry_id: String) -> GSTLayer:
 	return null
 
 
-## Real-popup color-edit helpers (mirrors tests/gst_editor_native_undo_smoke.gd's
-## own helpers of the same name), needed here only for the
-## color_pending_edit_finishes_before_document_activation check above.
+## Real-popup color-edit helpers, same as tests/gst_editor_native_undo_smoke.gd's.
 func _frames(plugin: EditorPlugin, count: int) -> void:
 	for i: int in range(count):
 		await plugin.get_tree().process_frame
@@ -416,9 +374,8 @@ func _find_hex_line_edit(picker: ColorPicker) -> LineEdit:
 	return null
 
 
-## Types text into edit without submitting it (no Enter, no focus change):
-## a real pending, unevaluated entry, matching the production close path's
-## own hex-text-commit-on-focus-exit contract.
+## Types text into edit without Enter or a focus change, leaving a pending
+## uncommitted entry (the close path commits hex text on focus exit).
 func _type_into_line_edit(plugin: EditorPlugin, edit: LineEdit, text: String) -> void:
 	edit.grab_focus()
 	await plugin.get_tree().process_frame
@@ -469,9 +426,8 @@ func _write_file(path: String, text: String) -> void:
 	file.close()
 
 
-## Appends a trailing space to the first non-empty line strictly after the
-## header line -- a real one-byte body mutation that never touches the
-## header's own JSON (mirrors tests/gst_editor_smoke.gd's _mutate_body_line).
+## Appends a trailing space to the first non-empty line after the header
+## line: a body mutation that leaves the header JSON intact.
 func _mutate_body_line(text: String) -> String:
 	var lines: PackedStringArray = text.split("\n")
 	for i: int in range(lines.size()):

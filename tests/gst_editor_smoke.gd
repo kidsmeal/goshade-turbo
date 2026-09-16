@@ -2,24 +2,18 @@
 extends RefCounted
 
 ## Runs inside a real editor session (godot --editor --path .) when
-## GST_EDITOR_SMOKE is set, driven by plugin.gd's _enter_tree. Performs the
-## phase 4, 5, 6, 7, or 8 verification steps programmatically depending on the
-## env var's value ("5" selects phase 5, "6" selects phase 6, "7" selects
-## phase 7, "8" selects phase 8, anything else keeps running phase 4), prints
-## one "SMOKE <item> PASS|FAIL <detail>" line per item, then quits the editor.
-## Never fabricates a pass: every assertion below is a real check against the
-## running panel. Design: docs/PLAN.md Phase 4 Verification (amended), Phase 5
-## Verification, Phase 6 Verification, Phase 7 Verification, Phase 8
-## Verification's editor smoke item.
+## GST_EDITOR_SMOKE is set, driven by plugin.gd's _enter_tree. Dispatches on
+## the env var's value: "5" preview column, "6" persistence and export, "7"
+## recipe proof, "8" randomize, "tabs_*" and "ui_*" load a sibling script,
+## any other value runs the stack and undo checks. Prints one
+## "SMOKE <item> PASS|FAIL <detail>" line per item, then quits the editor.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
 
 
-## Dispatches on the GST_EDITOR_SMOKE value itself (plugin.gd only checks
-## whether it is non-empty before instantiating this script), so a phase 5
-## run (value "5") exercises the preview column below while any other value
-## keeps running the phase 4 checks unchanged.
+## plugin.gd only checks that GST_EDITOR_SMOKE is non-empty; the value is
+## dispatched here.
 func run(plugin: EditorPlugin) -> void:
 	var flag: String = OS.get_environment("GST_EDITOR_SMOKE")
 	if flag == "tabs_proof":
@@ -74,7 +68,7 @@ func run(plugin: EditorPlugin) -> void:
 
 
 func _run_phase4(plugin: EditorPlugin) -> void:
-	# Let the main screen tab registration and panel _ready() settle.
+	# Wait for main screen tab registration and panel _ready().
 	for i: int in range(5):
 		await plugin.get_tree().process_frame
 
@@ -115,11 +109,10 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	await _run_color_alpha_default_excursion(plugin, panel, stack_list, library, history)
 	await _run_add_for_slot_excursion(plugin, panel, stack_list, library, history, invert)
 
-	# fbm(idx0) and invert(idx1) are still adjacent (hash has not moved yet):
-	# a single Up step on fbm swaps it with invert directly, so decision 22's
-	# forward-reference check (invert references fbm) refuses it. This must
-	# run before the hash-down move below, which would otherwise separate
-	# fbm and invert and make a single Up step land short of invert.
+	# fbm(idx0) and invert(idx1) are adjacent, so one Up step on fbm swaps it
+	# with invert and the forward-reference check (invert references fbm)
+	# refuses it. Must run before the hash-down move below, which would
+	# separate fbm and invert.
 	var wire_result: Dictionary = undo.assign_slot(invert.id, "x", fbm.id)
 	_check("6", wire_result["ok"], "wire invert.x -> fbm: %s" % [wire_result["reason"]])
 
@@ -132,17 +125,15 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	var refused_as_expected: bool = refusal_reason.contains("references layer %s, which would be at or above it after this move" % String(fbm.id))
 	_check("7", refused_as_expected and order_after_attempt == order_before_attempt, "up-press fbm above invert message='%s' order_unchanged=%s" % [refusal_reason, order_after_attempt == order_before_attempt])
 
-	# hash references nothing and nothing references hash, so moving it is
-	# always safe regardless of position. Same GSTUndo call the stack list's
-	# Down button uses: idx + (-1).
+	# hash has no references either way, so the move is always legal. Same
+	# GSTUndo call the stack list's Down button uses: idx + (-1).
 	var hash_original_index: int = GSTStackOps.find_index(stack, hash_layer.id)
 	var down_result: Dictionary = undo.reorder_layer(hash_layer.id, hash_original_index - 1)
 	var hash_index_after_move: int = GSTStackOps.find_index(stack, hash_layer.id)
 	_check("8", down_result["ok"] and hash_index_after_move == hash_original_index - 1, "hash move down: ok=%s index %d -> %d" % [down_result["ok"], hash_original_index, hash_index_after_move])
 
-	# invert is now the top-most layer (highest array index); asking to move
-	# it one past the top clamps to its own index, a no-op that must not
-	# register an undo action (fix 5).
+	# invert is the top-most layer; a move one past the top clamps to its own
+	# index and must not register an undo action.
 	var top_layer_id: StringName = stack.layers[stack.layers.size() - 1].id
 	var count_before_noop: int = history.get_history_count()
 	var noop_result: Dictionary = undo.reorder_layer(top_layer_id, stack.layers.size())
@@ -156,10 +147,9 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	var alpha_applied: bool = stack.output_alpha == &"none" and panel.get_output_block().get_selected_alpha_text() == "Opaque"
 	_check("11", output_alpha_result["ok"] and alpha_applied, "set output alpha to none: ok=%s applied='%s' selected_text='%s' (expect 'Opaque')" % [output_alpha_result["ok"], String(stack.output_alpha), panel.get_output_block().get_selected_alpha_text()])
 
-	# Selecting the output chooser's Automatic row must be undoable, driven
-	# through the real button and shared picker. Undone immediately after the
-	# check so _run_undo_sequence below
-	# still finds exactly the 7 actions its own comment documents.
+	# Selecting the alpha chooser's Automatic row must register one undo
+	# action. Undone right after the check so _run_undo_sequence still finds
+	# exactly 7 actions.
 	var count_before_default_pick: int = history.get_history_count()
 	panel.get_output_block().get_alpha_button().pressed.emit()
 	await plugin.get_tree().process_frame
@@ -180,11 +170,6 @@ func _run_phase4(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-## Phase 2 (docs/SHADER_TABS_reviewed-plan.md): the panel owns one standalone
-## UndoRedo directly; there is no EditorUndoRedoManager bucket to resolve
-## per-stack anymore, so this is just panel.get_watched_history() under its
-## prior name. Kept as a helper so existing call sites below do not all need
-## renaming to panel.get_watched_history() individually.
 func _get_history(panel: GSTMainPanel) -> UndoRedo:
 	return panel.get_watched_history()
 
@@ -221,9 +206,9 @@ func _property_info(object: Object, property_name: StringName) -> Dictionary:
 	return {}
 
 
-## Output block defaults (decision 12, docs/PLAN.md Phase 4 amendment): with
-## no color layer in the stack, the color button names the empty automatic
-## result; with no source/texture layer, Transparency names automatic opaque.
+## With no color layer in the stack the color button names the empty
+## automatic result; with no source/texture layer, Transparency names
+## automatic opaque.
 func _check_output_defaults(item: String, panel: GSTMainPanel, context: String) -> void:
 	var color_text: String = panel.get_output_block().get_selected_color_text()
 	var alpha_text: String = panel.get_output_block().get_selected_alpha_text()
@@ -231,10 +216,8 @@ func _check_output_defaults(item: String, panel: GSTMainPanel, context: String) 
 	_check(item, ok, "%s: color='%s' transparency='%s'" % [context, color_text, alpha_text])
 
 
-## color/palette: all four formula params retain their vec3 schema. The
-## color-center param `a` opts into a no-alpha Color editor adapter while
-## b/c/d remain native Vector3 editors. Self-canceling like the excursion
-## below: undone here, before any other real action commits.
+## color/palette: params b/c/d stay Vector3 editors; param `a` uses a
+## no-alpha Color editor adapter. Undone here before any other action commits.
 func _run_palette_inspector_check(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, history: UndoRedo) -> void:
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
 	var palette_layer: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -260,12 +243,10 @@ func _run_palette_inspector_check(plugin: EditorPlugin, panel: GSTMainPanel, sta
 	_check("15c", GSTStackOps.find_index(panel.get_stack(), palette_layer.id) == -1, "undo the palette add: layer gone=%s" % [GSTStackOps.find_index(panel.get_stack(), palette_layer.id) == -1])
 
 
-## Adds color/fill then source/texture through the same panel path the Add
-## button uses, checks the output block's defaults pick them up, then undoes
-## both through the real EditorUndoRedoManager history. Both adds are
-## reverted here, so this excursion is self-canceling: the next real action
-## committed after it (the invert.x wire below) truncates them permanently
-## from the redo tail, leaving the persistent action count unaffected (fix 6).
+## Adds color/fill then source/texture through the Add button path, checks
+## the output block defaults, then undoes both. Both adds are reverted, so
+## the next committed action (the invert.x wire) truncates them from the redo
+## tail and the persistent action count is unaffected.
 func _run_color_alpha_default_excursion(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, library: GSTLibrary, history: UndoRedo) -> void:
 	var previous_output: StringName = panel.get_stack().output_color
 	var fill: GSTLayer = stack_list.add_layer_by_entry_id("color/fill")
@@ -296,11 +277,9 @@ func _run_color_alpha_default_excursion(plugin: EditorPlugin, panel: GSTMainPane
 	_check("4e", panel.get_stack().output_color == previous_output, "undoing fill add restores the previous UI output '%s' (expect '%s')" % [String(panel.get_stack().output_color), String(previous_output)])
 
 
-## Drives the inspector column's input button on invert's field slot "x",
-## switches to Add new, checks automatic-conversion candidates, then
-## search-filters within that set and checks the compound add +
-## wire landed directly below invert, then undoes it. This excursion is also
-## self-canceling for the same reason as the one above.
+## Drives the inspector column's input button on invert's slot "x", switches
+## to Add new, checks automatic-conversion candidates, search-filters, checks
+## the compound add + wire landed directly below invert, then undoes it.
 func _run_add_for_slot_excursion(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, library: GSTLibrary, history: UndoRedo, invert: GSTLayer) -> void:
 	var stack: GSTStack = panel.get_stack()
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
@@ -347,17 +326,10 @@ func _run_add_for_slot_excursion(plugin: EditorPlugin, panel: GSTMainPanel, stac
 	picker.hide()
 
 
-## GSTUndo registers each action on EditorUndoRedoManager's history for
-## _stack (decision 20: "shared with every other editor action" family;
-## custom_context = _stack is required, see gst_undo.gd's _create_action
-## comment, so get_object_history_id(stack) stays a stable bucket instead of
-## whatever object the editor last inspected).
-##
-## The refused up-press registered no action, the boundary no-op reorder
-## registered no action, and the two excursions above were undone before the
-## next real action truncated them from the redo tail, so exactly 7 actions
-## exist to undo: add fbm, add invert, add hash, wire the slot, reorder
-## hash, set output color, set output alpha.
+## The refused up-press and the boundary no-op registered no action, and the
+## excursions above were undone before the next real action truncated them,
+## so exactly 7 actions exist to undo: add fbm, add invert, add hash, wire
+## the slot, reorder hash, set output color, set output alpha.
 func _run_undo_sequence(plugin: EditorPlugin, stack: GSTStack, stack_list: GSTStackList, panel: GSTMainPanel, fbm: GSTLayer, invert: GSTLayer, hash_layer: GSTLayer, hash_original_index: int) -> void:
 	var history: UndoRedo = _get_history(panel)
 
@@ -398,12 +370,10 @@ func _run_undo_sequence(plugin: EditorPlugin, stack: GSTStack, stack_list: GSTSt
 	_check("12h", not history.has_undo(), "history.has_undo() after 7 undos: %s (expect false)" % [history.has_undo()])
 
 
-## Output-referenced removal (fix pass 2, item 2): removing a layer that
-## stack.output_color or stack.output_alpha points at must clear that field
-## to &"" rather than leave a dangling reference codegen cannot resolve.
-## Runs on the panel's stack right after _run_undo_sequence has brought it
-## back to empty, so it starts clean and unwinds itself back to empty at the
-## end, self-canceling like the two excursions earlier in run().
+## Removing a layer that stack.output_color or stack.output_alpha points at
+## must clear that field to &"" rather than leave a dangling reference
+## codegen cannot resolve. Starts on the empty stack _run_undo_sequence left
+## and unwinds back to empty.
 func _run_output_referenced_removal_excursion(plugin: EditorPlugin, panel: GSTMainPanel, undo: GSTUndo, library: GSTLibrary) -> void:
 	var stack: GSTStack = panel.get_stack()
 	var history: UndoRedo = _get_history(panel)
@@ -447,24 +417,21 @@ func _run_output_referenced_removal_excursion(plugin: EditorPlugin, panel: GSTMa
 	var color_layer_gone_again: bool = GSTStackOps.find_index(stack, color_layer.id) == -1
 	_check("14g", stack.output_color == &"" and color_layer_gone_again, "redo remove color layer: output_color='%s' (expect empty), layer present=%s (expect false)" % [String(stack.output_color), not color_layer_gone_again])
 
-	# Unwind: remove(color) redo, remove(alpha) redo, set_output_alpha,
-	# set_output_color, add alpha_layer, add color_layer -- 6 actions total.
+	# Unwind 6 actions: remove(color) redo, remove(alpha) redo,
+	# set_output_alpha, set_output_color, add alpha_layer, add color_layer.
 	for i: int in range(6):
 		history.undo()
 		await plugin.get_tree().process_frame
 	_check("14h", not history.has_undo() and stack.layers.is_empty() and stack.output_color == &"" and stack.output_alpha == &"", "excursion fully unwound: has_undo=%s layers=%d output_color='%s' output_alpha='%s'" % [history.has_undo(), stack.layers.size(), String(stack.output_color), String(stack.output_alpha)])
 
 
-## Regression for phase 4 fix pass 3, item 1: a native property edit
-## registers a property-undo action pointed at the layer's own GSTLayer
-## instance (decision superseding 20: GSTUndo.commit_property_change, the
-## same front door gst_inspector_column.gd's own native rows call once a
-## gesture finishes, replaces the removed embedded-EditorInspector carve-out).
-## A structural remove committed after it, then undone, must reinsert that
-## same instance rather than a duplicate, so the earlier property-edit undo
-## still lands on it, and the inspector column must still edit that instance
-## after the remove-undo. Self-canceling: unwinds back to an empty stack like
-## the excursions above.
+## A native property edit registers a property-undo action pointed at the
+## layer's own GSTLayer instance (GSTUndo.commit_property_change, the call
+## gst_inspector_column.gd's native rows make once a gesture finishes). A
+## structural remove committed after it, then undone, must reinsert that same
+## instance so the earlier property-edit undo still lands on it, and the
+## inspector column must edit that instance after the remove-undo. Unwinds
+## back to an empty stack.
 func _run_slider_remove_undo_identity_excursion(plugin: EditorPlugin, panel: GSTMainPanel, undo: GSTUndo) -> void:
 	var stack: GSTStack = panel.get_stack()
 	var history: UndoRedo = _get_history(panel)
@@ -521,9 +488,8 @@ func _run_codegen_check() -> void:
 	_check("13", result.ok() and not result.code.is_empty(), "codegen of two-layer stack: error='%s' code_len=%d" % [result.error, result.code.length()])
 
 
-## Phase 5: preview column (docs/PLAN.md Phase 5 Verification). Items 1-8
-## match the plan's numbered list; setup checks that are not one of the 8
-## use a "setup" prefix so they never collide with an item number.
+## Preview column checks. Items 1-8 are numbered; setup checks use a "setup"
+## prefix so they never collide with an item number.
 func _run_phase5(plugin: EditorPlugin) -> void:
 	for i: int in range(5):
 		await plugin.get_tree().process_frame
@@ -557,22 +523,13 @@ func _run_phase5(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-## Item 1: a generative/checker layer (the hard 0.0/1.0 checkerboard is
-## inherently maximal-contrast at its default cells = 8, docs/PLAN.md Phase 8:
-## a "cells" int param was added so the default render is not one uniform
-## cell) renders non-uniform pixels.
-## Item 2 (fix pass 2, item 1; migrated to the production native-row route
-## in the phase 2 review round 1 fix pass): editing checker's coord.scale
-## through the real production gst_inspector_column.gd row's own
-## EditorProperty.emit_changed(), the way a real slider drag would,
-## exercising the panel's own coord-row/GSTUndo wiring end to end -- not a
-## throwaway EditorInspector pointed directly at the coord object (removed;
-## docs/SHADER_TABS_reviewed-plan.md phase 2: "Remove throwaway
-## shared-history inspector fixtures used to simulate GoShade edits").
-## Selecting checker makes gst_inspector_column.gd build its own coord rows
-## for it, the same rows a real user's slider drag would land on. Asserts
-## the material's uniform and the rendered image both change within one
-## frame of the real widget's own edit.
+## Item 1: a generative/checker layer renders non-uniform pixels (cells
+## defaults to 8, so the default render is not one uniform cell).
+## Item 2: editing checker's coord.scale through the production
+## gst_inspector_column.gd row's own EditorProperty.emit_changed(), as a
+## slider drag would. Selecting checker makes the column build its coord
+## rows. Asserts the material's uniform and the rendered image both change
+## after the edit.
 func _run_phase5_checker_render(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview) -> GSTLayer:
 	var checker: GSTLayer = stack_list.add_layer_by_entry_id("generative/checker")
 	undo.set_output_color(checker.id)
@@ -607,14 +564,11 @@ func _run_phase5_checker_render(plugin: EditorPlugin, panel: GSTMainPanel, stack
 
 
 ## Item 3: switching to the text preset keeps the same ShaderMaterial
-## instance on the new target node and, since coord_space is still uv,
-## shows the screen_uv suggestion, and actually renders a different,
-## non-uniform silhouette from the sprite preset it replaced (fix pass 2,
-## item 2: a Label's per-glyph quad reads the checker field differently from
-## a TextureRect's single full-rect quad, so the two presets' pixels must
-## differ, not merely their message label); full_rect and back to sprite
-## both keep rendering non-uniform pixels and the same material instance
-## throughout.
+## instance on the new target node, shows the screen_uv suggestion
+## (coord_space is still uv), and renders a different non-uniform image than
+## the sprite preset (a Label's per-glyph quads read the checker field
+## differently from a TextureRect's single quad). full_rect and back to
+## sprite keep rendering non-uniform pixels with the same material instance.
 func _run_phase5_preset_switch(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var preview: GSTPreview = panel.get_preview()
 	var material_before: ShaderMaterial = preview.get_current_target_material()
@@ -673,11 +627,9 @@ func _run_phase5_layer_preview(plugin: EditorPlugin, panel: GSTMainPanel, stack_
 	_check("4b", panel.get_preview_layer_id() == &"" and not panel.get_return_to_effect_button().visible and code_after == code_before_preview, "returned_to_effect=%s code_restored=%s" % [panel.get_preview_layer_id() == &"", code_after == code_before_preview])
 
 
-## Item 5: a lone source/texture layer renders the preview image itself;
-## sampled at the viewport's own center against the source PNG's own center
-## (both read directly, independent of any import artifact), within a
-## tolerance that allows for the render pipeline's own filtering/color
-## management, not exact byte equality.
+## Item 5: a lone source/texture layer renders the preview image. The
+## viewport center pixel is compared to the source PNG's center pixel within
+## a tolerance for render-pipeline filtering and color management.
 func _run_phase5_texture_source(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview, checker: GSTLayer) -> GSTLayer:
 	undo.remove_layer(checker.id)
 	await plugin.get_tree().process_frame
@@ -702,7 +654,7 @@ func _run_phase5_texture_source(plugin: EditorPlugin, panel: GSTMainPanel, stack
 
 
 ## Item 6: a lone source/screen layer reads the background through
-## hint_screen_texture and renders the same image (decision 10).
+## hint_screen_texture and renders the same image.
 func _run_phase5_screen_source(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview, tex_layer: GSTLayer) -> void:
 	undo.remove_layer(tex_layer.id)
 	await plugin.get_tree().process_frame
@@ -725,13 +677,12 @@ func _run_phase5_screen_source(plugin: EditorPlugin, panel: GSTMainPanel, stack_
 	_check("6", close and absf(got.a - want.a) <= 0.02, "screen source center pixel got=%s want=%s alpha_delta=%.4f" % [got, want, absf(got.a - want.a)])
 
 
-## Item 7: switching the stack column's coord space to local through the
-## panel (GSTUndo.set_coord_space) declares gst_rect_size equal to the
-## preview node's own rect and the vertex()-set varying; undoing restores
-## uv. Item 7c/7d (docs/PLAN.md Phase 5 fix round): a resize with no
+## Item 7: switching coord space to local through GSTUndo.set_coord_space
+## declares gst_rect_size equal to the preview node's rect and the
+## vertex()-set varying; undo restores uv. Items 7c/7d: a resize with no
 ## structural stack edit in between must still push the new target rect into
-## gst_rect_size (the target_rect_changed cheap path, B5), and a scale-1
-## checker must render identically under local and uv at that resized rect.
+## gst_rect_size (the target_rect_changed path), and a scale-1 checker must
+## render identically under local and uv at that resized rect.
 func _run_phase5_coord_space(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, history: UndoRedo) -> void:
 	var stack: GSTStack = panel.get_stack()
 	var preview: GSTPreview = panel.get_preview()
@@ -752,14 +703,12 @@ func _run_phase5_coord_space(plugin: EditorPlugin, panel: GSTMainPanel, stack_li
 	await _run_phase5_local_resize(plugin, panel, stack_list, undo, preview)
 
 
-## Item 7c: a scale-1 (default GSTCoordBlock.scale) checker is added under
-## local space first, so the resize below is the only thing that changes
-## afterward -- no GSTUndo structural edit runs between the resize and the
-## readback, so gst_rect_size can only be correct here if
-## GSTPreview.target_rect_changed -> GSTMainPanel._on_target_rect_changed
-## actually caught the resize (every structural edit forces a full resync
-## that would otherwise mask a stale-uniform bug by re-reading the live size
-## anyway).
+## Item 7c: a scale-1 checker is added under local space before the resize,
+## so no GSTUndo structural edit runs between the resize and the readback.
+## Every structural edit forces a full resync that re-reads the live size and
+## would mask a stale uniform; here only
+## GSTPreview.target_rect_changed -> GSTMainPanel._on_target_rect_changed can
+## set gst_rect_size correctly.
 func _run_phase5_local_resize(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview) -> void:
 	panel._on_coord_space_selected(2) # "local"
 	await plugin.get_tree().process_frame
@@ -785,34 +734,18 @@ func _run_phase5_local_resize(plugin: EditorPlugin, panel: GSTMainPanel, stack_l
 	preview.custom_minimum_size = Vector2.ZERO
 
 
-## Item 7d: proves B5's literal claim ("a coord-block scale of 1.0 matches
-## uv", docs/PLAN.md:44) with real per-pixel evidence, at the resized rect
-## 7c just produced.
+## Item 7d: per-pixel evidence that a coord-block scale of 1.0 under local
+## matches uv, at the rect 7c resized.
 ##
-## Before docs/PLAN.md Phase 8 added generative/checker.tres's "cells" int
-## param (default 8), cell density was entirely the per-layer coord.scale
-## (gst_codegen.gd::_generator_body_lines feeds gst_transform(p, scale,
-## rotation, offset) into checker(p, cells) = mod(floor(p.x*cells)+
-## floor(p.y*cells), 2.0)), and a scale-1 checker with no offset was exactly
-## one cell across the whole [0,1) rect (floor(p) == (0,0) everywhere), so it
-## rendered uniformly and could never distinguish local from uv -- the bug
-## this rewrite originally fixed. cells = 8 now makes even a bare scale-1,
-## offset-0 checker non-uniform on its own, but the (0.5, 0.5) offset below is
-## kept anyway: it still honors the literal "keep the coord block scale at
-## 1.0" B5 test and keeps the four corner parities deterministic rather than
-## dependent on exactly where the finer 8-cell grid's boundaries fall.
-##
-## Samples are the rect's four corners, not the x == y diagonal the fix
-## request suggested: mod(floor(x)+floor(y), 2) is provably constant along
-## that line (floor(x) == floor(y) there, so the sum is always even,
-## regardless of scale or offset), so a diagonal sample set would be
-## vacuous. The (0.5, 0.5) offset below instead makes the four corners land
-## one in each quadrant, giving parities [0, 1, 1, 0] -- genuine, checkable
-## evidence.
+## Samples are the rect's four corners. mod(floor(x)+floor(y), 2) is constant
+## along the x == y diagonal regardless of scale or offset, so a diagonal
+## sample set would be vacuous. The (0.5, 0.5) offset makes the four corners
+## land one in each quadrant, parities [0, 1, 1, 0], independent of where the
+## 8-cell grid's boundaries fall.
 ##
 ## Preset is switched to full_rect first so every sampled fraction lands
-## inside the target node (previously a quarter-rect sample under the
-## sprite preset read alpha 0, outside the node, per the fix request).
+## inside the target node (under the sprite preset a corner sample reads
+## alpha 0, outside the node).
 func _run_phase5_checker_grid_evidence(plugin: EditorPlugin, panel: GSTMainPanel, stack_list: GSTStackList, undo: GSTUndo, preview: GSTPreview) -> void:
 	panel._on_preset_selected(2) # "full_rect"
 	for i: int in range(3):
@@ -860,12 +793,10 @@ func _run_phase5_checker_grid_evidence(plugin: EditorPlugin, panel: GSTMainPanel
 
 
 ## Item 8: mutating the stack directly through GSTStackOps (bypassing
-## GSTUndo entirely, the way a future non-undo-routed caller might) and
-## manually re-emitting stack_changed is the documented way to force a
-## resync outside GSTUndo (docs/PLAN.md Phase 5 Verification). An unwired
-## filter/pixelate "source" slot (its default, B10's Unwired filter rule)
-## fails codegen; the message label shows the error and the material's code
-## stays the last good one; removing the filter recovers.
+## GSTUndo) and re-emitting stack_changed forces a resync. An unwired
+## filter/pixelate "source" slot fails codegen; the message label shows the
+## error and the material's code stays the last good one; removing the
+## filter recovers.
 func _run_phase5_codegen_error(plugin: EditorPlugin, panel: GSTMainPanel, library: GSTLibrary) -> void:
 	var stack: GSTStack = panel.get_stack()
 	var last_good_code: String = panel.get_shader_material().shader.code
@@ -884,18 +815,15 @@ func _run_phase5_codegen_error(plugin: EditorPlugin, panel: GSTMainPanel, librar
 	_check("8b", recovered, "recovery after removing the filter: message='%s'" % [panel.get_message_label().text])
 
 
-## Phase 6: persistence and export (docs/PLAN.md Phase 6 Verification).
-## Builds a three-layer stack through the panel, then round-trips it through
-## save/New/open (.tres, GSTStackIO) and export/mutate/confirm/reopen
-## (.gdshader, GSTExport), driving every step through the panel's own
-## EditorFileDialog/ConfirmationDialog file-selected and confirmed handlers
+## Persistence and export. Builds a three-layer stack through the panel, then
+## round-trips it through save/New/open (.tres, GSTStackIO) and
+## export/mutate/confirm/reopen (.gdshader, GSTExport). Every step goes
+## through the panel's EditorFileDialog/ConfirmationDialog handlers
 ## (_on_save_as_file_selected, _on_open_file_selected,
 ## _on_export_file_selected, _on_overwrite_confirmed,
-## _on_reopen_shader_file_selected) rather than the plain path-taking
-## open_path/save_to_path/export_to_path/reopen_shader_path seams those
-## handlers themselves call, so this exercises the exact call chain a real
-## dialog interaction produces, including the overwrite ConfirmationDialog
-## actually showing (phase 6 fix pass 2, item 3). Files land under
+## _on_reopen_shader_file_selected), not the path-taking
+## open_path/save_to_path/export_to_path/reopen_shader_path seams they call,
+## so the overwrite ConfirmationDialog is exercised. Files land under
 ## sandbox/stacks/ and sandbox/exports/ and are deleted at the end of the run
 ## regardless of pass/fail.
 func _run_phase6(plugin: EditorPlugin) -> void:
@@ -930,11 +858,9 @@ func _run_phase6(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-## Item 1: a checker generator (output_color, renders a real checkerboard --
-## the same proven-non-uniform layer phase 5's own render check uses), an
-## fbm generator with a non-default int param, and an invert field op wired
-## to fbm. Item 2: the Save As dialog's own file-selected handler,
-## _on_save_as_file_selected, writes under sandbox/stacks/.
+## Item 1: a checker generator (output_color), an fbm generator with a
+## non-default int param, and an invert field op wired to fbm. Item 2:
+## _on_save_as_file_selected writes under sandbox/stacks/.
 func _run_phase6_build_and_save(plugin: EditorPlugin, panel: GSTMainPanel, stack_path: String) -> Dictionary:
 	var stack_list: GSTStackList = panel.get_stack_list()
 	var undo: GSTUndo = panel.get_undo()
@@ -955,22 +881,16 @@ func _run_phase6_build_and_save(plugin: EditorPlugin, panel: GSTMainPanel, stack
 	return {"checker": checker.id, "fbm": fbm.id, "invert": invert.id}
 
 
-## Item 3 (phase 3, docs/SHADER_TABS_reviewed-plan.md; supersedes phase 6 fix
-## pass 2, item 1): New now creates and activates a whole new GSTDocument
-## (gst_main_panel.gd's open_document) instead of registering an undoable
-## "Replace stack" action against a shared history bucket, so it registers
-## no action anywhere, and the old document's own history and content are
-## untouched, independent of navigation.
+## Item 3: New creates and activates a new GSTDocument (gst_main_panel.gd's
+## open_document) and registers no undo action; the old document's history
+## and content are untouched by navigation.
 ##
-## Sequence: New creates a distinct GSTDocument with its own fresh, empty,
-## actionless UndoRedo, and leaves the old document's history exactly as it
-## was; activate_document(old) reinstalls the exact previous GSTStack
-## instance (is_same), its three layers, and current_path with no history
-## change; the old document's own history still undoes/redoes its own last
-## action (set_output_color in _run_phase6_build_and_save) exactly as if New
-## had never been pressed; activate_document(new) returns to the New
-## document's own empty, actionless state so _run_phase6_open below
-## continues from there unchanged.
+## Sequence: New creates a GSTDocument with its own empty UndoRedo and leaves
+## the old history unchanged; activate_document(old) reinstalls the same
+## GSTStack instance (is_same), its three layers, and current_path with no
+## history change; the old history still undoes/redoes its last action
+## (set_output_color in _run_phase6_build_and_save); activate_document(new)
+## returns to the empty, actionless state _run_phase6_open continues from.
 func _run_phase6_new(plugin: EditorPlugin, panel: GSTMainPanel, ids: Dictionary) -> void:
 	var old_doc: GSTDocument = panel.get_active_document()
 	var old_stack: GSTStack = panel.get_stack()
@@ -1012,37 +932,27 @@ func _run_phase6_new(plugin: EditorPlugin, panel: GSTMainPanel, ids: Dictionary)
 	_check("3e", final_ok, "re-activating the New document restores its own empty, actionless state: is_same=%s layers=%d current_path='%s' has_undo=%s" % [is_same(final_stack, new_stack), final_stack.layers.size(), panel.get_current_path(), new_history.has_undo()])
 
 
-## (phase 6 fix pass 2, item 3): pressing the Export button with no
-## current_path (the panel is on the empty New'd stack here) always opens the
-## export EditorFileDialog -- Export never silently writes without the user
-## picking a target, unlike Save which falls back to the current path when
-## one exists.
+## Pressing Export with no current_path (the panel is on the empty New'd
+## stack) opens the export EditorFileDialog. Export never writes without a
+## picked target; Save falls back to the current path when one exists.
 func _run_phase6_export_dialog_opens(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var path_before: String = panel.get_current_path()
 	panel._on_export_pressed()
 	await plugin.get_tree().process_frame
 	var dialog_visible: bool = panel.is_export_dialog_visible()
 	_check("3f", path_before.is_empty() and dialog_visible, "Export press with no current_path opens the export dialog: current_path='%s' (expect '') dialog_visible=%s" % [path_before, dialog_visible])
-	# Phase 6: hide_export_dialog()'s default (abandon=true) now clears
-	# _pending_export itself -- this call opened the dialog above with no
-	# resolution coming, a genuine abandonment, so no caller-side clear is
-	# needed anymore (deferred note, phase 5 review round 1, resolved here).
-	# Before this fix, hide_export_dialog() only called EditorFileDialog.
-	# hide() directly, which does not emit the dialog's own "canceled" signal
-	# (only the Cancel button/Esc path does, dialogs.cpp AcceptDialog::
-	# _cancel_pressed), so the caller had to clear it manually or leave a
-	# stale capture in place for _run_phase6_export_and_overwrite_gate's own
-	# direct panel._on_export_file_selected(export_path) call further down
-	# this same run to resolve against -- redirecting that later, unrelated
-	# export onto this check's own empty document instead of whichever
-	# document is active by the time it runs.
+	# hide_export_dialog() defaults to abandon=true, which clears
+	# _pending_export. EditorFileDialog.hide() does not emit "canceled" (only
+	# the Cancel button/Esc path does, dialogs.cpp AcceptDialog::
+	# _cancel_pressed), so a stale capture left here would redirect
+	# _run_phase6_export_and_overwrite_gate's later _on_export_file_selected
+	# call onto this empty document.
 	panel.hide_export_dialog()
 
 
-## Item 4: the Open dialog's own file-selected handler, _on_open_file_selected,
-## reloads the same three layer ids in the same order, fbm's non-default
-## octaves param survives, and the preview (driven from the checker
-## output_color) renders non-uniform pixels again.
+## Item 4: _on_open_file_selected reloads the same three layer ids in the
+## same order, fbm's non-default octaves param survives, and the preview
+## (driven from the checker output_color) renders non-uniform pixels.
 func _run_phase6_open(plugin: EditorPlugin, panel: GSTMainPanel, stack_path: String, ids: Dictionary) -> void:
 	panel._on_open_file_selected(stack_path)
 	for i: int in range(3):
@@ -1057,12 +967,10 @@ func _run_phase6_open(plugin: EditorPlugin, panel: GSTMainPanel, stack_path: Str
 	_check("4", ids_match and params_match and nonuniform, "_on_open_file_selected: ids_match=%s params_match=%s (octaves=%s) preview_nonuniform=%s current_path='%s' (expect '%s')" % [ids_match, params_match, opened_fbm.params.get("octaves") if opened_fbm != null else null, nonuniform, panel.get_current_path(), stack_path])
 
 
-## Item 5: the Export dialog's own file-selected handler, _on_export_file_selected,
-## writes a real file with a header line. Items 6-7: mutating one body byte on
-## disk makes a re-selected export path trigger the overwrite check and show
-## the ConfirmationDialog, leaving the file untouched; the dialog's own
-## confirmed handler, _on_overwrite_confirmed, then overwrites it and hides
-## the dialog.
+## Item 5: _on_export_file_selected writes a file with a header line. Items
+## 6-7: mutating one body byte on disk makes a re-selected export path show
+## the overwrite ConfirmationDialog and leave the file untouched;
+## _on_overwrite_confirmed then overwrites it and hides the dialog.
 func _run_phase6_export_and_overwrite_gate(plugin: EditorPlugin, panel: GSTMainPanel, export_path: String) -> void:
 	panel._on_export_file_selected(export_path)
 	await plugin.get_tree().process_frame
@@ -1086,9 +994,8 @@ func _run_phase6_export_and_overwrite_gate(plugin: EditorPlugin, panel: GSTMainP
 	_check("7", overwritten and dialog_hidden, "_on_overwrite_confirmed overwrites: overwritten=%s (expect true) dialog_hidden=%s (expect true)" % [overwritten, dialog_hidden])
 
 
-## Item 8: the Reopen Shader dialog's own file-selected handler,
-## _on_reopen_shader_file_selected, rebuilds a stack with the same three layer
-## ids the original build produced (decision 22: ids are stable across save,
+## Item 8: _on_reopen_shader_file_selected rebuilds a stack with the same
+## three layer ids the original build produced (ids are stable across save,
 ## export, and reopen).
 func _run_phase6_reopen(plugin: EditorPlugin, panel: GSTMainPanel, export_path: String, ids: Dictionary) -> void:
 	panel._on_reopen_shader_file_selected(export_path)
@@ -1099,9 +1006,8 @@ func _run_phase6_reopen(plugin: EditorPlugin, panel: GSTMainPanel, export_path: 
 	_check("8", ids_match, "_on_reopen_shader_file_selected rebuilds the same ids: %s (current_path='%s', expect empty)" % [ids_match, panel.get_current_path()])
 
 
-## Item 9: a hand-written .gdshader with no "// stack:" header is refused
-## (B8), the reason lands in the message label, and no new empty stack
-## replaces the one reopen() just rebuilt in item 8.
+## Item 9: a .gdshader with no "// stack:" header is refused, the reason
+## lands in the message label, and the stack item 8 rebuilt stays in place.
 func _run_phase6_headerless_reopen_refusal(plugin: EditorPlugin, panel: GSTMainPanel, headerless_path: String) -> void:
 	_write_file(headerless_path, "shader_type canvas_item;\nvoid fragment() { COLOR = vec4(1.0); }\n")
 	var stack_before: GSTStack = panel.get_stack()
@@ -1113,19 +1019,14 @@ func _run_phase6_headerless_reopen_refusal(plugin: EditorPlugin, panel: GSTMainP
 	_check("9", refused and stack_unchanged, "reopen of a headerless file is refused (B8): message='%s' stack_unchanged=%s" % [panel.get_message_label().text, stack_unchanged])
 
 
-## Phase 7: three-recipe proof and the rendered-check harness (docs/PLAN.md
-## Phase 7 Verification, design build order step 4). For each of the three
-## recipes: builds the same stack through GSTUndo's own public actions (add,
-## wire, output -- the same calls the picker/stack list/output block use) and
-## the same undoable-property pattern items 2 and 16a above already proved
-## for slider edits, captures the resulting shader text, undoes back to an
-## empty stack, redoes back to the captured text byte for byte with a
-## non-uniform preview, then loads the shipped recipe through the Recipes
-## menu's own open_recipe() and checks the panel lands on the same codegen
-## text a fresh, independent load of that same recipe file produces (ids may
-## differ between the panel-built stack and the shipped recipe's own ids, so
-## this compares against a fresh codegen of the recipe file, never against
-## the earlier capture).
+## Three-recipe proof. For each recipe: builds the stack through GSTUndo's
+## public actions (add, wire, output) and commit_property_change for params,
+## captures the shader text, undoes to an empty stack, redoes back to the
+## captured text byte for byte with a non-uniform preview, then loads the
+## shipped recipe through open_recipe() and checks the panel's codegen text
+## equals a fresh GSTStackIO.load plus codegen of the same recipe file. Ids
+## may differ between the panel-built stack and the shipped recipe, so the
+## open check never compares against the earlier capture.
 func _run_phase7(plugin: EditorPlugin) -> void:
 	for i: int in range(5):
 		await plugin.get_tree().process_frame
@@ -1142,11 +1043,8 @@ func _run_phase7(plugin: EditorPlugin) -> void:
 	await _dismiss_initial_start(plugin, panel)
 
 	var library: GSTLibrary = panel.get_library()
-	# Phase 3 (docs/SHADER_TABS_reviewed-plan.md): each _on_new_pressed() call
-	# below now activates a brand new GSTDocument with its own fresh
-	# UndoRedo, so a history captured once up front would go stale the
-	# moment the first of these three New calls runs. Each helper below
-	# captures its own history immediately after its own New instead.
+	# Each _on_new_pressed() activates a new GSTDocument with its own UndoRedo,
+	# so each helper captures its own history after its own New.
 
 	await _run_phase7_dissolve(plugin, panel, library)
 	await _run_phase7_sprite_holographic(plugin, panel, library)
@@ -1156,42 +1054,30 @@ func _run_phase7(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-## Phase 8: randomize (docs/PLAN.md Phase 8 Verification, design decision 16).
-## Opens the shipped "fire" recipe (open_recipe puts a path-bearing GSTStack
-## on the panel with no New in between, same shape as the phase 7 history
-## anchor case, so undo/redo below drive panel.get_watched_history() rather
-## than a freshly recomputed history bucket), presses the Randomize button's
-## own handler, and checks: at least one param actually changed, every
-## param -- not only the ones that happened to change -- stays inside its
-## manifest range, the preview renders non-uniform, one undo restores the
-## shader body to byte-for-byte the same as right after open_recipe (decision
-## 22's next_id never reverts on undo, so the comparison is scoped below the
-## "// stack:" header line via _codegen_body, same as the phase 7 history
-## anchor checks), one redo re-applies the randomized body, and the
-## Randomize button is disabled again after New (docs/PLAN.md Phase 8 Build
-## item 3: "New/Open/Reopen clear it"). Then checks the recipe-open flag
-## itself lives on the GSTDocument, independent of navigation (phase 3,
-## docs/SHADER_TABS_reviewed-plan.md; supersedes fix pass 3, item 3):
-## activating the fire document back (not undoing New, which is no longer an
-## undoable action at all) re-enables Randomize and shows its content
-## unchanged, activating the New document again disables it, and the fire
-## document's own history still undoes its one randomize action, independent
-## of the navigation in between, back to its post-open values.
+## Randomize. open_recipe("fire") puts a path-bearing GSTStack on the panel
+## with no New in between, so undo/redo drive panel.get_watched_history().
+## Presses the Randomize handler and checks: at least one param changed,
+## every param stays inside its manifest range, the preview renders
+## non-uniform, one undo restores the shader body byte for byte to the
+## post-open body (next_id never reverts on undo, so the comparison is scoped
+## below the "// stack:" header via _codegen_body), one redo re-applies the
+## randomized body, and Randomize is disabled after New. The recipe-open flag
+## lives on the GSTDocument: activating the fire document re-enables
+## Randomize with its content unchanged, activating the New document disables
+## it, and the fire document's history still undoes its randomize action back
+## to the post-open values.
 ##
-## Items "1b"/"3b"/"4b"/"5b" (fix pass 2, item 1): the fbm layer's "gain"
-## param, checked not off the GSTLayer model but off the real EditorProperty
-## widget's own displayed value (its Range-typed editing control -- a
-## SpinBox/EditorSpinSlider on 4.6.2), before randomize, after randomize,
-## after undo, and after redo, proving GSTMainPanel._refresh_inspector
-## actually forces the already-built inspector column to re-read a param
-## GSTRandomize.apply wrote from outside any real slider drag.
+## Items "1b"/"3b"/"4b"/"5b": the fbm layer's "gain" param read off the real
+## EditorProperty widget's Range control (SpinBox/EditorSpinSlider on 4.6.2),
+## not the GSTLayer model, before randomize, after randomize, after undo, and
+## after redo. Proves GSTMainPanel._refresh_inspector makes the built
+## inspector column re-read a param GSTRandomize.apply wrote.
 ##
-## Item "1c" and "3b"'s expected(seed=...) value (fix pass 4, item 2):
-## GSTMainPanel.set_randomize_rng seeds _on_randomize_pressed's RNG, and an
-## independently-loaded copy of the same recipe run through
-## GSTRandomize.randomize with an identically seeded RNG produces the exact
-## gain value "3b" asserts against, so a correct build cannot fail "3b" by
-## chance the way a "differs from pre-randomize value" threshold check could.
+## Item "1c" and "3b"'s expected(seed=...) value:
+## GSTMainPanel.set_randomize_rng seeds _on_randomize_pressed's RNG; an
+## independently loaded copy of the recipe run through GSTRandomize.randomize
+## with the same seed produces the exact gain value "3b" asserts, so "3b"
+## cannot pass or fail by chance.
 func _run_phase8(plugin: EditorPlugin) -> void:
 	for i: int in range(5):
 		await plugin.get_tree().process_frame
@@ -1218,14 +1104,11 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 	var history: UndoRedo = panel.get_watched_history()
 	var randomize_enabled_after_open: bool = not panel.get_randomize_button().disabled
 
-	# Fix pass 2, item 1: select fire's generative/fbm layer (id "0", param
-	# "gain", float, manifest range [0.2, 0.8]; fire.tres leaves it at the
-	# manifest default 0.5, inside range -- gain avoids the PROPERTY_HINT_RANGE
-	# clamp confound a layer sitting outside its own manifest range would
-	# cause) so the inspector column's real EditorProperty widget
-	# for it is built, then check the widget's own displayed value -- not
-	# just the GSTLayer model -- refreshes after apply, undo, and redo of
-	# the randomize action.
+	# Select fire's generative/fbm layer (id "0", param "gain", float,
+	# manifest range [0.2, 0.8], fire.tres leaves it at the default 0.5) so
+	# the inspector column's EditorProperty widget for it is built. gain is
+	# inside its range, which avoids the PROPERTY_HINT_RANGE clamp a param
+	# outside its manifest range would cause.
 	var stack_list: GSTStackList = panel.get_stack_list()
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
 	var gain_layer: GSTLayer = GSTStackOps.find_layer(panel.get_stack(), &"0")
@@ -1244,17 +1127,11 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 	var pre_visible: bool = pre_ep != null and pre_ep.is_visible_in_tree() and pre_ep.get_global_rect().intersects(settings_scroll.get_global_rect())
 	_check("1b", pre_visible and absf(pre_displayed - pre_layer_value) < 0.01, "pre-randomize gain EditorProperty found=%s visible=%s displayed=%s layer=%s" % [pre_ep != null, pre_visible, pre_displayed, pre_layer_value])
 
-	# Fix pass 4, item 2: seed the handler's RNG so "3b" below asserts gain
-	# equals an exact expected value instead of only "differs from pre",
-	# which a correct build could still fail by chance if the draw landed
-	# within the 0.002 threshold of pre_displayed. Expectation computed by
-	# running GSTRandomize.randomize with an identically seeded
-	# RandomNumberGenerator on a fresh, independent load of the same recipe
-	# (same pattern as tests/test_randomize_range.gd's
-	# test_same_seed_reproduces_same_values), then the live handler is fed a
-	# RandomNumberGenerator seeded the same way via panel.set_randomize_rng,
-	# so its draw sequence for "0"'s params -- including gain -- matches the
-	# expectation exactly.
+	# Seed the handler's RNG so "3b" asserts an exact expected gain. The
+	# expectation is GSTRandomize.randomize with an identically seeded
+	# RandomNumberGenerator on a fresh load of the same recipe (same pattern
+	# as tests/test_randomize_range.gd's test_same_seed_reproduces_same_values);
+	# panel.set_randomize_rng feeds the live handler the same seed.
 	var randomize_seed: int = 424242
 	var expect_load: Dictionary = GSTStackIO.load("res://addons/goshade_turbo/recipes/fire.tres", library)
 	_check("1c", expect_load["ok"], "expectation stack for the randomize seed loads: ok=%s" % [expect_load["ok"]])
@@ -1321,15 +1198,10 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 	var new_doc: GSTDocument = panel.get_active_document()
 	_check("6", panel.get_randomize_button().disabled, "Randomize disabled after New: disabled=%s" % [panel.get_randomize_button().disabled])
 
-	# Phase 3 (docs/SHADER_TABS_reviewed-plan.md; supersedes fix pass 3, item
-	# 3): recipe-open state lives on the GSTDocument itself now, not on a
-	# "Replace stack" action's own do/undo pair -- New creates and activates
-	# an independent document rather than replacing the fire recipe's own,
-	# so re-activating the fire document (not undoing New) is what re-enables
-	# Randomize and shows its content again; navigating back to the New
-	# document re-disables it. The fire document's own history is untouched
-	# by any of this navigation, so one undo (not two: there is no "Replace
-	# stack" action to also undo through) still reaches post_open_body.
+	# Recipe-open state lives on the GSTDocument. New activates an independent
+	# document, so re-activating the fire document re-enables Randomize and
+	# navigating back to the New document disables it. The fire document's
+	# history is untouched by navigation, so one undo reaches post_open_body.
 	panel.activate_document(doc_before_new)
 	for i: int in range(2):
 		await plugin.get_tree().process_frame
@@ -1353,13 +1225,10 @@ func _run_phase8(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-## The value displayed by property_widget's own editing control (a SpinBox
-## or EditorSpinSlider -- both Range subclasses on 4.6.2, verified against
-## the class doc dump -- for a float param under PROPERTY_HINT_RANGE), read
-## straight off that control rather than off the GSTLayer model, so a check
-## against it proves the widget itself refreshed and not only the
-## underlying data (docs/PLAN.md Phase 8 fix pass 2, item 1). 0.0 when
-## property_widget is null or holds no Range descendant.
+## The value displayed by property_widget's editing control (SpinBox or
+## EditorSpinSlider, both Range subclasses on 4.6.2, for a float param under
+## PROPERTY_HINT_RANGE), read off that control rather than the GSTLayer
+## model. 0.0 when property_widget is null or holds no Range descendant.
 func _range_control_value(property_widget: EditorProperty) -> float:
 	if property_widget == null:
 		return 0.0
@@ -1379,10 +1248,10 @@ func _find_range_control(node: Node) -> Range:
 	return null
 
 
-## Every param, on every layer of `stack`, resolved against `library`:
+## Every param on every layer of `stack`, resolved against `library`:
 ## {layer_id: {param_name: current_value}}. A layer whose entry does not
-## resolve or declares no params contributes nothing (same shape
-## GSTRandomize.randomize's own change set uses).
+## resolve or declares no params contributes nothing (same shape as
+## GSTRandomize.randomize's change set).
 func _snapshot_params(stack: GSTStack, library: GSTLibrary) -> Dictionary:
 	var snapshot: Dictionary = {}
 	for layer: GSTLayer in stack.layers:
@@ -1449,12 +1318,11 @@ func _value_in_range(param: Dictionary, value: Variant) -> bool:
 			return false
 
 
-## Alpha path proof (docs/PLAN.md Phase 7 Build): source/texture; fbm; a
-## primary smoothstep threshold on the fbm; alpha(texture) times that
-## threshold as output alpha; an edge band (a lower-edge smoothstep times the
-## inverted primary threshold) masking a color/mix between texture and an
-## orange fill for the output color. Mirrors addons/goshade_turbo/recipes/
-## dissolve.tres's own construction exactly.
+## source/texture; fbm; a primary smoothstep threshold on the fbm;
+## alpha(texture) times that threshold as output alpha; an edge band (a
+## lower-edge smoothstep times the inverted primary threshold) masking a
+## color/mix between texture and an orange fill as output color. Mirrors
+## addons/goshade_turbo/recipes/dissolve.tres.
 func _run_phase7_dissolve(plugin: EditorPlugin, panel: GSTMainPanel, library: GSTLibrary) -> void:
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
@@ -1508,12 +1376,10 @@ func _run_phase7_dissolve(plugin: EditorPlugin, panel: GSTMainPanel, library: GS
 	await _run_phase7_recipe_checks(plugin, panel, history, library, "dissolve")
 
 
-## Color chain with scroll proof (docs/PLAN.md Phase 7 Build): a rotated,
-## scrolling stripes field drives the cosine rainbow palette (its default
-## a/b/c/d matches Capsule Castle's own SpriteHolographic.gdshader palette()
+## A rotated, scrolling stripes field drives the cosine palette (its default
+## a/b/c/d matches Capsule Castle's SpriteHolographic.gdshader palette()
 ## constants), screen-blended over the texture source. Mirrors
-## addons/goshade_turbo/recipes/sprite_holographic.tres's own construction
-## exactly.
+## addons/goshade_turbo/recipes/sprite_holographic.tres.
 func _run_phase7_sprite_holographic(plugin: EditorPlugin, panel: GSTMainPanel, library: GSTLibrary) -> void:
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
@@ -1545,12 +1411,11 @@ func _run_phase7_sprite_holographic(plugin: EditorPlugin, panel: GSTMainPanel, l
 	await _run_phase7_recipe_checks(plugin, panel, history, library, "sprite_holographic")
 
 
-## Source filter path proof (docs/PLAN.md Phase 7 Build): filter/outline on
-## the texture source, a fill color for the outline, color/mix masked by the
-## outline layer (auto luma-converted, decision 2), output alpha the mix's
-## own color_alpha rather than "texture" so the outline ring drawn outside
+## filter/outline on the texture source, a fill color for the outline,
+## color/mix masked by the outline layer (auto luma-converted), output alpha
+## the mix's color_alpha rather than "texture" so the outline ring outside
 ## the sprite silhouette stays visible. Mirrors
-## addons/goshade_turbo/recipes/outline.tres's own construction exactly.
+## addons/goshade_turbo/recipes/outline.tres.
 func _run_phase7_outline(plugin: EditorPlugin, panel: GSTMainPanel, library: GSTLibrary) -> void:
 	panel._on_new_pressed()
 	await plugin.get_tree().process_frame
@@ -1580,10 +1445,10 @@ func _run_phase7_outline(plugin: EditorPlugin, panel: GSTMainPanel, library: GST
 	await _run_phase7_recipe_checks(plugin, panel, history, library, "outline")
 
 
-## Shared tail for all three recipe builders above: capture, undo to empty,
-## redo back to the capture (text byte-equal, preview non-uniform), then
+## Shared tail for the three recipe builders: capture, undo to empty, redo
+## back to the capture (text byte-equal, preview non-uniform), then
 ## open_recipe(recipe_name) and check the panel lands on the same codegen
-## text a fresh, independent GSTStackIO.load of
+## text a fresh GSTStackIO.load of
 ## addons/goshade_turbo/recipes/<recipe_name>.tres produces.
 func _run_phase7_recipe_checks(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo, library: GSTLibrary, recipe_name: String) -> void:
 	var capture: String = panel.get_shader_material().shader.code
@@ -1628,38 +1493,22 @@ func _run_phase7_recipe_checks(plugin: EditorPlugin, panel: GSTMainPanel, histor
 	_check("%s_open_render" % recipe_name, open_nonuniform, "%s: preview renders non-uniform pixels after open_recipe (img_null=%s)" % [recipe_name, img_after_open == null])
 
 
-## History anchor regression (docs/PLAN.md Cross-cutting "EditorUndoRedoManager
-## integration", "History anchor (phase 7)"): a GSTUndo action committed
-## while the open stack carries a real res:// path (open_recipe /
-## reopen_shader_path both load through GSTStackIO, which sets
-## resource_path on the returned Resource) must still land in that
-## document's own panel.get_watched_history(). Historically (phase 1/2) this
-## guarded against a path-bearing stack getting misrouted into a shared
-## EditorUndoRedoManager bucket keyed by resource path; phase 2 removed that
-## shared-manager history entirely, and phase 3 gives open_recipe/
-## reopen_shader_path's own document a brand new, always-private UndoRedo
-## regardless of path, so there is no bucket left to misroute into at all.
-## Kept as a regression guard that the document created for a path-bearing
-## load still lands real edits in its own history rather than some other
-## document's. The layer-gone-and-text-matches-post-open check after undo is
-## the real differentiator: add_layer's own commit_action(false) always
-## applies the mutation and calls _notify() synchronously, so has_undo()/
-## resync alone would pass even if the action had landed somewhere else --
-## only calling undo() on the panel's actual watched history and checking it
-## removes the add proves the anchor is this document's own.
+## A GSTUndo action committed while the open stack carries a res:// path
+## (open_recipe and reopen_shader_path load through GSTStackIO, which sets
+## resource_path on the returned Resource) must land in that document's own
+## panel.get_watched_history(). The layer-gone-and-body-matches check after
+## undo is the differentiator: add_layer's commit_action(false) applies the
+## mutation and calls _notify() synchronously, so has_undo() and resync alone
+## would pass even if the action had landed in another history.
 func _run_phase7_history_anchor(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	await _run_phase7_history_anchor_open_recipe(plugin, panel)
 	await _run_phase7_history_anchor_reopen_shader(plugin, panel)
 
 
-## The comparable part of a synced material's shader text: everything below
-## the "// stack: <json>" header line, excluding the header itself. The
-## header's next_id never reverts on undo of an add (decision 22: "undo
-## removes the layer from the array but never touches stack.next_id"), so a
-## full-text comparison across an add-then-undo would legitimately differ by
-## the header's next_id field alone, even with the layer content identical
-## (same pattern as tests/test_codegen_generator.gd's own header-scoped
-## comparison, docs/PLAN.md Phase 6 Files).
+## Everything below the "// stack: <json>" header line, excluding the header.
+## The header's next_id never reverts on undo of an add, so a full-text
+## comparison across add-then-undo would differ by next_id alone (same
+## header-scoped comparison as tests/test_codegen_generator.gd).
 func _codegen_body(code: String) -> String:
 	var found: Dictionary = GSTOverwriteCheck.find_header_line(code)
 	return found["body"] if found["found"] else code
@@ -1755,10 +1604,9 @@ func _write_file(path: String, text: String) -> void:
 	file.close()
 
 
-## Appends a trailing space to the first non-empty line strictly after the
-## header line -- a real one-byte body mutation that never touches the
-## header's own JSON (mirrors tests/test_overwrite_check.gd's
-## _mutate_body_char).
+## Appends a trailing space to the first non-empty line after the header
+## line: a one-byte body mutation that never touches the header JSON (mirrors
+## tests/test_overwrite_check.gd's _mutate_body_char).
 func _mutate_body_line(text: String) -> String:
 	var lines: PackedStringArray = text.split("\n")
 	for i: int in range(lines.size()):
@@ -1770,9 +1618,8 @@ func _mutate_body_line(text: String) -> String:
 	return text
 
 
-## True when a sparse grid sample of img shows no variation at all (used as
-## "the render is blank/uniform" rather than a true per-pixel scan, cheap
-## enough to run every frame this script waits on).
+## True when a sparse grid sample of img shows no variation. Cheap enough to
+## run every frame this script waits on.
 func _image_is_uniform(img: Image) -> bool:
 	var w: int = img.get_width()
 	var h: int = img.get_height()
@@ -1780,9 +1627,8 @@ func _image_is_uniform(img: Image) -> bool:
 		return true
 	var first: Color = img.get_pixel(0, 0)
 	# Step off the smaller dimension: the preview viewport tracks the panel's
-	# own (frequently non-square, sometimes narrow) column rect, and a step
-	# derived only from width would skip past every pattern boundary on a
-	# short-and-wide rect.
+	# column rect, which is often non-square or narrow, and a width-derived
+	# step would skip every pattern boundary on a short-and-wide rect.
 	var step: int = maxi(1, mini(w, h) / 16)
 	for y: int in range(0, h, step):
 		for x: int in range(0, w, step):
@@ -1820,9 +1666,8 @@ func _colors_close(a: Color, b: Color, tolerance: float) -> bool:
 	return absf(a.r - b.r) <= tolerance and absf(a.g - b.g) <= tolerance and absf(a.b - b.b) <= tolerance and absf(a.a - b.a) <= tolerance
 
 
-## Reads img at each fraction in fracs (0..1 of width/height); Color.BLACK
-## per point when img is null, so a null viewport read still returns a
-## same-length array instead of failing the caller outright.
+## Reads img at each fraction in fracs (0..1 of width/height). Color.BLACK
+## per point when img is null, so the caller gets a same-length array.
 func _sample_points(img: Image, fracs: Array[Vector2]) -> Array[Color]:
 	var out: Array[Color] = []
 	if img == null:
@@ -1855,24 +1700,19 @@ func _colors_all_close(a: Array[Color], b: Array[Color], tolerance: float) -> bo
 	return true
 
 
-## Sets a GSTCoordBlock property through GSTUndo.commit_property_change
-## (decision superseding 20): a real property-undo action registered on the
-## panel's own standalone UndoRedo, the same call gst_inspector_column.gd's
-## own native rows make once a gesture finishes, rather than a raw write
-## straight into the coord block.
+## Sets a GSTCoordBlock property through GSTUndo.commit_property_change, the
+## call gst_inspector_column.gd's native rows make once a gesture finishes,
+## so the edit registers a property-undo action.
 func _set_coord_property(panel: GSTMainPanel, coord: GSTCoordBlock, property: StringName, value: Variant) -> void:
 	var old_value: Variant = coord.get(property)
 	coord.set(property, value)
 	panel.get_undo().commit_property_change(coord, property, old_value, value)
 
 
-## Sets layer.<property_name> -- a manifest param, dynamic via
-## GSTLayer._get/_set -- through GSTUndo.commit_property_change, the same
-## call a real native property row commit uses (item 2 and item 16a above),
-## rather than a raw Dictionary write straight into layer.params
-## (docs/PLAN.md Phase 7 Build: "set params via the layer resources with
-## undoable property actions"), so the phase 7 recipe builds register real,
-## undoable history for every param the same way a live edit would.
+## Sets layer.<property_name> (a manifest param, dynamic via
+## GSTLayer._get/_set) through GSTUndo.commit_property_change rather than a
+## raw write into layer.params, so recipe builds register undoable history
+## for every param.
 func _set_layer_param(panel: GSTMainPanel, layer: GSTLayer, property_name: StringName, value: Variant) -> void:
 	var old_value: Variant = layer.get(property_name)
 	layer.set(property_name, value)

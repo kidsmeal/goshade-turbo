@@ -1,9 +1,8 @@
 extends GSTTestBase
 
-## GSTRandomize (docs/PLAN.md Phase 8 Build item 3, design decision 16):
-## every randomized value stays inside its manifest range and carries the
-## correct GDScript type, the same seed reproduces the same values, and a
-## stack with no randomizable params yields an empty change set.
+## GSTRandomize: every randomized value stays inside its manifest range and
+## carries the correct GDScript type, the same seed reproduces the same
+## values, and a stack with no randomizable params yields an empty change set.
 
 const RUNS_PER_RECIPE: int = 200
 const RECIPES_DIR: String = "res://addons/goshade_turbo/recipes"
@@ -32,9 +31,9 @@ func _recipe_paths() -> Array[String]:
 
 
 ## Every shipped recipe, randomized RUNS_PER_RECIPE times: every produced
-## value stays inside the manifest's own min/max (or, for a vec3 param with
-## no declared min/max, inside [0, 1] per component -- color/palette's
-## a/b/c/d), and carries the GDScript type its manifest "type" implies.
+## value stays inside the manifest's min/max (a vec3 param with no declared
+## min/max, color/palette's a/b/c/d, stays inside [0, 1] per component) and
+## carries the GDScript type its manifest "type" implies.
 func test_every_recipe_randomize_stays_inside_manifest_range() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var recipe_paths: Array[String] = _recipe_paths()
@@ -127,7 +126,7 @@ func test_same_seed_reproduces_same_values() -> void:
 
 
 ## A stack whose only layer's entry declares no params (source/texture)
-## yields an empty change set: nothing to randomize, nothing returned.
+## yields an empty change set.
 func test_stack_with_no_params_yields_empty_change_set() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
@@ -138,13 +137,11 @@ func test_stack_with_no_params_yields_empty_change_set() -> void:
 	assert_true(changes.is_empty(), "a stack with only a param-less layer yields an empty change set (got %s)" % changes)
 
 
-## GSTRandomize.apply writes every changed value through the matching
-## layer's own Object.set() (so GSTLayer._set runs, docs/PLAN.md Phase 8 fix
-## pass 2, item 1), the same requirement every real caller already meets:
-## gst_main_panel.gd only ever calls apply() on a live panel stack, whose
-## layers always carry a resolved manifest (set at add time by
-## gst_undo.gd's add_layer, or at load time by gst_stack_io.gd's load), so
-## the manifest is resolved here too before calling apply().
+## GSTRandomize.apply writes every changed value through the layer's own
+## Object.set() (so GSTLayer._set runs), which requires a resolved manifest.
+## Every real caller meets this (gst_undo.gd's add_layer and
+## gst_stack_io.gd's load both set it), so the manifest is resolved here
+## before calling apply().
 func test_apply_writes_every_changed_value_onto_the_layer() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()

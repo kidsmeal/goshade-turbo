@@ -43,10 +43,8 @@ func _save_external_data() -> void:
 		return
 	_save_count = get_save_count() + 1
 	var stage: String = get_stage()
-	# The pending-shutdown edit is finished here, from inside the same
-	# synchronous-quit callback production code will use, not by the proof
-	# script beforehand. This is what actually exercises the forced-finish-
-	# before-shutdown-save ordering rather than merely recording a flag.
+	# The pending edit is finished inside this quit callback, before the
+	# shutdown save, so the finish-before-save ordering is exercised.
 	if _pending_shutdown_finish.is_valid():
 		var pending_result: Dictionary = _pending_shutdown_finish.call() as Dictionary
 		_pending_shutdown_actions = int(pending_result.get("actions", 0))

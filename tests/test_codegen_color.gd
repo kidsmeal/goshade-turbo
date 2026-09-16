@@ -2,7 +2,6 @@ extends GSTTestBase
 
 ## GSTCodegen over color, source, and filter layers: every entry compiles
 ## alone, solo output for a color layer, and the color uniform types.
-## Design: docs/DESIGN.md, Codegen rules, decision 13.
 
 
 func _scanned_library() -> GSTLibrary:
@@ -25,11 +24,9 @@ func test_every_color_manifest_compiles_alone_fed_constants() -> void:
 		stack.output_color = layer.id
 		var code: String = GSTCodegen.generate(stack, lib)
 		# color/mix's unwired "mask" input (field kind) is fed
-		# FALLBACK_FIELD_CONSTANT; the five blends (add, multiply, overlay,
-		# screen, soft_light) each carry a "t" param now (decision 14), so
-		# they emit a uniform on their own. The sentinel still covers any
-		# entry with genuinely zero uniforms (matches
-		# test_codegen_fieldop.gd's identical pattern).
+		# FALLBACK_FIELD_CONSTANT; the five blends each carry a "t" param, so
+		# they emit a uniform on their own. The sentinel covers any entry with
+		# zero uniforms.
 		assert_true(GSTShaderCompile.compiles(code, true), "%s compiles alone with every input slot fed the fallback constant" % id)
 
 
@@ -46,10 +43,9 @@ func test_every_source_manifest_compiles_alone() -> void:
 		var layer: GSTLayer = GSTStackOps.add_layer(stack, id, GSTLayer.Kind.COLOR, false)
 		stack.output_color = layer.id
 		var code: String = GSTCodegen.generate(stack, lib)
-		# A lone source has no params of its own; source/screen's
-		# gst_screen_texture (hint_screen_texture) is excluded from
-		# get_shader_uniform_list() (docs/PLAN.md, Verified engine facts
-		# style check, reproduced for phase 3), so both need the sentinel.
+		# A lone source has no params; source/screen's gst_screen_texture
+		# (hint_screen_texture) is excluded from get_shader_uniform_list(), so
+		# both need the sentinel.
 		assert_true(GSTShaderCompile.compiles(code, true), "%s compiles alone" % id)
 
 
@@ -66,10 +62,8 @@ func test_source_entries_have_empty_code_and_emit_no_stray_comments() -> void:
 		stack.output_color = layer.id
 		var code: String = GSTCodegen.generate(stack, lib)
 		var body_lines: PackedStringArray = code.split("\n")
-		# Lines 0-1 are the header block (license notice, stack header),
-		# both legitimately "//" comments (_header_lines). Every other line
-		# must carry no stray "//" comment (B10: source entry.code is empty
-		# and never reaches file scope).
+		# Lines 0-1 are the header block (license notice, stack header), both
+		# "//" comments (_header_lines). No other line may carry a "//" comment.
 		for i: int in range(2, body_lines.size()):
 			var trimmed: String = body_lines[i].strip_edges()
 			assert_false(trimmed.begins_with("//"), "%s: no stray '//' comment outside the header block (line %d: %s)" % [source_id, i, trimmed])
@@ -183,9 +177,8 @@ func test_posterize_quantizes_into_levels_minus_one_intervals() -> void:
 	assert_true(GSTShaderCompile.compiles(code), "posterize shader compiles")
 
 
-## Decision 14: "a mask is mix(a, b, mask)". color/mix's third input is a
-## field-kind slot named "mask", not a "t" param; a field layer wired into it
-## drives color_mix's third argument directly (design docs/PLAN.md fix pass 5).
+## color/mix's third input is a field-kind slot named "mask", not a "t"
+## param; a field layer wired into it drives color_mix's third argument.
 func test_mix_field_layer_drives_mask_input() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
@@ -205,9 +198,9 @@ func test_mix_field_layer_drives_mask_input() -> void:
 	assert_true(GSTShaderCompile.compiles(code), "field-driven color_mix shader compiles")
 
 
-## A field layer wired into color/mix's "a" slot (color kind) still converts
-## through vec4(vec3(lN), 1.0) (decision 2), proving "a"/"b" stayed color-kind
-## slots and only "mask" is field-kind.
+## A field layer wired into color/mix's "a" slot (color kind) converts
+## through vec4(vec3(lN), 1.0): "a"/"b" are color-kind slots, only "mask" is
+## field-kind.
 func test_mix_field_layer_in_color_slot_converts_via_vec3() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
@@ -227,10 +220,9 @@ func test_mix_field_layer_in_color_slot_converts_via_vec3() -> void:
 	assert_true(GSTShaderCompile.compiles(code), "field-in-color-slot color_mix shader compiles")
 
 
-## Decision 14 applied to the whole blend family: each of the five blends
-## carries one "t" param (opacity), emitted as a hint_range(0.0, 1.0)
-## uniform, and the fragment call passes it as the blend function's third
-## argument (design docs/PLAN.md fix pass 5).
+## Each of the five blends carries one "t" param (opacity), emitted as a
+## hint_range(0.0, 1.0) uniform and passed as the blend function's third
+## argument.
 func test_blend_family_emits_t_opacity_uniform_and_uses_it() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var blends: Dictionary = {

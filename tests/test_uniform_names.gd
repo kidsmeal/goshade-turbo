@@ -1,7 +1,6 @@
 extends GSTTestBase
 
 ## GSTUniformNames: the single source of uniform and group_uniforms tokens.
-## Naming resolved at planning, docs/PLAN.md Blockers B3 and B4.
 
 
 func test_local_var_and_coord_var() -> void:

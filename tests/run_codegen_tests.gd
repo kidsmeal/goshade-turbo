@@ -2,28 +2,21 @@ extends SceneTree
 
 ## Named verification command: `godot --headless --path . -s res://tests/run_codegen_tests.gd`
 ##
-## Outer wrapper around tests/gst_test_runner.gd. GDScript exposes no hook
-## that catches an engine-level SCRIPT ERROR (an assert() failure or a
-## runtime error the engine itself prints) in the process that raises it, so
-## this wrapper runs the inner runner as a child process via OS.execute,
-## captures its combined stdout+stderr, prints it verbatim, and fails the
-## whole run (exit 1) if the child process exited nonzero OR the captured
-## output contains "SCRIPT ERROR", "ERROR:", or "Parse error", even when the
-## inner runner itself reported exit 0 because the aborted test method never
-## returned control to record a failure. Exit 0 only when the child exited 0
-## and none of those substrings appear.
+## Wrapper around tests/gst_test_runner.gd. GDScript has no hook that
+## catches an engine-level SCRIPT ERROR in the process that raises it, so
+## the inner runner runs as a child process via OS.execute. Its combined
+## stdout+stderr is printed verbatim; the run exits 1 if the child exited
+## nonzero or the output contains "SCRIPT ERROR", "ERROR:", or "Parse error".
 ##
-## Prerequisite, once after clone and after adding any new class_name
-## script: `godot --headless --path . --import`. Without it, class_name
-## globals fail with a Parse error in the child run.
+## Prerequisite, once after clone and after adding any class_name script:
+## `godot --headless --path . --import`. Without it class_name globals fail
+## with a Parse error in the child run.
 ##
-## That --import prerequisite leaves .recovery_mode_lock in the user data
-## dir on Godot 4.4/4.6 (removed only 1s after the editor's first
-## filesystem scan; an --import run quits before that timer fires, and
-## 4.4/4.6 also skip the Main::cleanup() removal 4.7 added). This wrapper
-## never passes --editor or --import itself, so it never creates that lock;
-## it only cleans up whatever the prerequisite left behind, once before and
-## once after the child run, so the next editor launch never sees it.
+## On Godot 4.4/4.6 that --import run leaves .recovery_mode_lock in the
+## user data dir (the editor removes it 1s after its first filesystem scan;
+## --import quits before that; 4.7 removes it in Main::cleanup()). This
+## wrapper never passes --editor or --import, so it only removes the stale
+## lock, once before and once after the child run.
 
 const INNER_SCRIPT: String = "res://tests/gst_test_runner.gd"
 

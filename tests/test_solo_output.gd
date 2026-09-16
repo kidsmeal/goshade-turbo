@@ -2,7 +2,6 @@ extends GSTTestBase
 
 ## Solo preview output: same codegen, output line replaced by the selected
 ## layer instead of stack.output_color, without mutating the stack.
-## Design: docs/DESIGN.md, decision 13.
 
 
 func _build_stack() -> Dictionary:

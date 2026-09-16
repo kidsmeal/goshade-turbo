@@ -360,10 +360,8 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	var popup: PopupPanel = color_button.get_popup()
 	var hex_edit: LineEdit = _find_hex_line_edit(picker)
 	var popup_ready: bool = popup.visible and picker.visible and not picker.edit_alpha and hex_edit != null and hex_edit.is_visible_in_tree()
-	# popup is a Window (PopupPanel extends Popup extends Window), so its own
-	# get_texture() -- not plugin.get_tree().root's, which would miss a
-	# real, non-embedded popup's own separate render target -- is the
-	# correct capture surface for the popup while it is actually open.
+	# popup is a Window; its own get_texture() is the capture surface for a
+	# non-embedded popup, which plugin.get_tree().root's texture would miss.
 	if popup_ready:
 		var popup_screenshot_path: String = OS.get_environment("GST_UI_SCREENSHOT_PATH")
 		if not popup_screenshot_path.is_empty():
@@ -402,15 +400,10 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	if not edit_applied:
 		return
 
-	# Gates history.undo() below on the actual history-registration write:
-	# that write is GSTUndo.commit_property_change, run by this column's
-	# own _finish_color_popup on a CONNECT_DEFERRED popup_closed handler,
-	# not synchronously inside popup.hide() above (close_state["committed"]
-	# only proves EditorPropertyColor's own close handler ran). Undoing
-	# before that deferred write lands would undo the wrong action, then
-	# have the late write stomp the result -- bounded by wall-clock time,
-	# not a fixed frame count, so a slower process still settles instead of
-	# racing undo() (phase 8 review round 2 fix 1).
+	# Gates history.undo() on the history-registration write:
+	# GSTUndo.commit_property_change runs from _finish_color_popup on a
+	# CONNECT_DEFERRED popup_closed handler, not inside popup.hide().
+	# Bounded by wall-clock time, not a frame count.
 	var settle_deadline: int = Time.get_ticks_msec() + 2000
 	var settle_attempts: int = 0
 	while Time.get_ticks_msec() < settle_deadline and history.get_history_count() == history_count_before_edit:
@@ -421,14 +414,9 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	if not history_settled:
 		return
 
-	# Godot's own EditorPropertyColor/ColorPicker internals can still land an
-	# object write of their own a moment after a real history.undo()/redo()
-	# call, independent of this column's own commit (docs/EDITOR_SMOKE.md
-	# "Shader tabs phase 2 review round 4 fixes"). Each of undo()/redo() is
-	# called exactly once; only the settle wait afterward is bounded and
-	# re-polled -- re-driving the history operation itself would mask a
-	# genuine one-shot regression behind a retry (phase 8 review round 3
-	# fix 2).
+	# EditorPropertyColor/ColorPicker internals can write the object after a
+	# history.undo()/redo() call. Each of undo()/redo() is called once; only
+	# the settle wait afterward is re-polled.
 	var undo_position_before: int = history.get_current_action()
 	history.undo()
 	var undo_position_after: int = history.get_current_action()
@@ -443,11 +431,9 @@ func _check_native_palette_color(plugin: EditorPlugin, panel: GSTMainPanel, insp
 		undo_displayed = undo_button.color if undo_button != null else Color.TRANSPARENT
 		undo_raw = palette.params.get("a")
 		undo_uniform = panel.get_shader_material().get_shader_parameter(uniform_name)
-		# sprite_holographic.tres never sets an explicit "a" param (its
-		# palette layer's params hold only "t"): undo must restore that
-		# exact absence, not an explicit entry equal to the manifest
-		# default (gst_inspector_column.gd captures original param
-		# presence before the popup ever opens).
+		# sprite_holographic.tres sets no explicit "a" param (its palette
+		# layer's params hold only "t"): undo must restore that absence, not
+		# an explicit entry equal to the manifest default.
 		undo_ok = undo_button != null and not palette.params.has("a") and undo_uniform is Vector3 and (undo_button.color as Color).is_equal_approx(Color(0.5, 0.5, 0.5, 1.0)) and (undo_uniform as Vector3).is_equal_approx(Vector3(0.5, 0.5, 0.5))
 		if undo_ok or Time.get_ticks_msec() >= undo_settle_deadline:
 			break
@@ -580,7 +566,6 @@ func _find_layer_by_entry(stack: GSTStack, entry_id: String) -> GSTLayer:
 	return null
 
 
-## Phase 2: every object shares the panel's one standalone UndoRedo now.
 func _history_for() -> UndoRedo:
 	return _panel.get_watched_history()
 

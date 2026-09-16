@@ -2,11 +2,9 @@
 class_name GSTTabsProofTarget
 extends Resource
 
-## Standalone proof-only resource for tests/gst_editor_document_proof.gd.
-## Replaces a script-local inner class so ResourceSaver/ResourceLoader can
-## round-trip a real instance (a script-local class embeds an empty
-## GDScript sub-resource ResourceLoader cannot resolve back to a typed
-## object). Fields mirror the removed inner ProofTarget exactly.
+## Proof-only resource for tests/gst_editor_document_proof.gd.
+## A standalone script, not a script-local class: ResourceLoader cannot
+## resolve a script-local class back to a typed object after save/load.
 
 @export_range(0.0, 1.0, 0.01) var scalar: float = 0.25
 @export var vector: Vector3 = Vector3(0.1, 0.2, 0.3)

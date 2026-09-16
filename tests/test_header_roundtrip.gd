@@ -1,7 +1,6 @@
 extends GSTTestBase
 
-## GSTHeader: serialize/parse the one-line stack JSON header (design decision
-## 8, docs/PLAN.md Phase 6 Files, Blocker B8).
+## GSTHeader: serialize/parse the one-line stack JSON header.
 
 
 func _scanned_library() -> GSTLibrary:
@@ -10,10 +9,9 @@ func _scanned_library() -> GSTLibrary:
 	return lib
 
 
-## Real shipped manifests (generative/hash, generative/fbm, fieldops/invert,
-## color/fill, color/palette), covering every param type currently in the
-## roster (int, float, color, vec3 -- verified: no manifest declares "vec2"),
-## a coord block with a warp ref, and a slot ref (real-input rule).
+## Shipped manifests (generative/hash, generative/fbm, fieldops/invert,
+## color/fill, color/palette), covering every param type in the roster (int,
+## float, color, vec3), a coord block with a warp ref, and a slot ref.
 func _build_stack(lib: GSTLibrary) -> Dictionary:
 	var stack: GSTStack = GSTStack.new()
 
@@ -82,11 +80,9 @@ func test_header_line_is_exactly_one_line() -> void:
 	assert_eq(header_line_count, 1, "exactly one '// stack:' line exists in the exported text")
 
 
-## The exported text always has "//" comments above the header (the license
-## notice); this proves a body that itself contains further "//" comments
-## below the header does not confuse find_header_line/parse into matching the
-## wrong line (docs/PLAN.md Phase 6 Verification: "survives a body that
-## contains // comments").
+## The exported text has "//" comments above the header (the license
+## notice); a body that itself contains "//" comments below the header must
+## not make find_header_line/parse match the wrong line.
 func test_body_containing_slash_slash_comments_still_parses() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = (_build_stack(lib)["stack"] as GSTStack)

@@ -1,17 +1,12 @@
 extends GSTTestBase
 
-## Round-trip proof for the three phase 7 recipes (docs/PLAN.md Phase 7
-## Files/Verification, design build order step 4): each recipe under
-## addons/goshade_turbo/recipes/ saves and reloads with every field intact
-## (GSTStackIO, reusing gst_test_base.gd's _compare_stacks), exports and
+## Round-trip proof for the RECIPE_NAMES recipes under
+## addons/goshade_turbo/recipes/: each saves and reloads with every field
+## intact (GSTStackIO, gst_test_base.gd's _compare_stacks), exports and
 ## reopens from its own header with a byte-equal re-codegen body (GSTExport,
-## same as tests/test_header_roundtrip.gd's in-memory check but through the
-## real file write/reopen path), and its generated shader compiles alone,
-## with TIME emitted only by sprite_holographic (the one recipe with a
-## nonzero coord scroll).
-##
-## This is the plan's own gate: "Do not start phase 8 before this passes; it
-## is the design's gate on writing the rest of the library."
+## through the real file write/reopen path), and its generated shader
+## compiles alone, with TIME emitted only by sprite_holographic (the one
+## recipe with a nonzero coord scroll).
 
 const RECIPE_NAMES: Array[String] = ["dissolve", "sprite_holographic", "outline"]
 const RECIPE_DIR: String = "res://addons/goshade_turbo/recipes"
@@ -55,11 +50,9 @@ func test_recipes_save_and_load_round_trip_every_field() -> void:
 
 
 ## Export, parse the header back into a stack, re-codegen: the body compares
-## byte-equal to the exported body (design decision 8, Codegen rules). Uses
-## the real GSTExport.write/reopen file path, not the in-memory
-## GSTHeader.parse test_header_roundtrip.gd already covers, so a bug specific
-## to the write/reopen file IO would surface here even if the in-memory path
-## stayed correct.
+## byte-equal to the exported body. Uses the real GSTExport.write/reopen file
+## path; tests/test_header_roundtrip.gd covers the in-memory GSTHeader.parse
+## path.
 func test_recipes_export_reopen_and_recodegen_are_byte_equal() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	for name: String in RECIPE_NAMES:
@@ -84,12 +77,9 @@ func test_recipes_export_reopen_and_recodegen_are_byte_equal() -> void:
 		_remove_with_uid(export_path)
 
 
-## Every recipe's generated shader compiles alone (release checklist: "Every
-## roster entry above exists as a manifest file and compiles alone in the
-## preview" applies equally to a recipe stack of roster entries); TIME is
-## emitted only by sprite_holographic, whose stripes layer carries a nonzero
-## coord.scroll (Codegen rules: "TIME and the scroll uniform are both emitted
-## or both absent").
+## Every recipe's generated shader compiles alone; TIME is emitted only by
+## sprite_holographic, whose stripes layer carries a nonzero coord.scroll
+## (TIME and the scroll uniform are both emitted or both absent).
 func test_every_recipe_compiles_and_time_emission_matches_scroll() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var expect_time: Dictionary = {
@@ -136,18 +126,13 @@ func _find_param_schema(entry: GSTManifestEntry, param_name: String) -> Variant:
 	return null
 
 
-## Every param stored in a recipe or reference stack lies inside its manifest
-## [min, max] (fieldops/smoothstep's edge0/edge1 range was widened to
-## [-1.0, 2.0] in phase 8 because inputs such as fbm and sdf are unclamped;
-## addons/goshade_turbo/recipes/fire.tres's stored edge0 = -0.3 lies inside
-## that range). PROPERTY_HINT_RANGE clamps the inspector slider to the
-## manifest range, so a stored value outside it disagrees with the displayed
-## slider and snaps the recipe on first touch. Checks every .tres under
-## addons/goshade_turbo/recipes/ and sandbox/stacks/: every float and int
-## param value lies within its manifest min/max inclusive, and every stored
-## param name exists in the manifest's own param schema. Reports every
-## violation in one assertion message so a single run surfaces the whole
-## defect list at once.
+## Every float and int param stored in a recipe or reference stack (every
+## .tres under addons/goshade_turbo/recipes/ and sandbox/stacks/) lies inside
+## its manifest [min, max] inclusive, and every stored param name exists in
+## the manifest's param schema. PROPERTY_HINT_RANGE clamps the inspector
+## slider to the manifest range, so a stored value outside it snaps the
+## recipe on first touch. Every violation is reported in one assertion
+## message.
 func test_every_stored_param_stays_inside_its_manifest_range() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var paths: Array[String] = _tres_paths(RECIPE_DIR)

@@ -1,10 +1,9 @@
 class_name GSTTestBase
 extends RefCounted
 
-## Minimal assertion base for the headless test suite. Every assertion
-## records rather than halts, so one test file reports every failure in a
-## run instead of stopping at the first. gst_test_runner.gd reads
-## `failures` after calling each `test_*` method.
+## Assertion base for the headless test suite. Every assertion records
+## instead of halting; gst_test_runner.gd reads `failures` after each
+## `test_*` method.
 
 var failures: Array[String] = []
 
@@ -38,11 +37,9 @@ func has_failures() -> bool:
 	return not failures.is_empty()
 
 
-## Sorted-array diff between a discovered id set and an expected roster, so a
-## mismatch names exactly which ids are missing or unexpectedly extra instead
-## of only reporting a count (2026-09-15 unit-failure fix pass: a hardcoded
-## count let a new block go unlisted). Shared by tests/test_combinations.gd
-## and tests/test_library_index.gd (fix-now note 5: one copy, not two).
+## Sorted-array diff between a discovered id set and an expected roster,
+## naming the missing and extra ids. Shared by tests/test_combinations.gd
+## and tests/test_library_index.gd.
 func _roster_diff_message(actual_ids: Array[String], expected_ids: Array[String]) -> String:
 	var actual_sorted: Array[String] = actual_ids.duplicate()
 	actual_sorted.sort()
@@ -60,7 +57,7 @@ func _roster_diff_message(actual_ids: Array[String], expected_ids: Array[String]
 
 
 ## True when `actual_ids` and `expected_ids` hold the same ids, ignoring
-## discovery order (Dictionary.keys() order is scan order, not alphabetical).
+## order (Dictionary.keys() order is scan order).
 func _roster_matches(actual_ids: Array[String], expected_ids: Array[String]) -> bool:
 	var actual_sorted: Array[String] = actual_ids.duplicate()
 	actual_sorted.sort()
@@ -71,11 +68,8 @@ func _roster_matches(actual_ids: Array[String], expected_ids: Array[String]) -> 
 
 ## Every persisted GSTStack field: coord_space, output_color, output_alpha,
 ## next_id, layer count, then layer order and content via _compare_layers.
-## Returns early on a layer-count mismatch: a per-index layer comparison is
-## meaningless once the arrays are different lengths. Shared by
-## tests/test_stack_io.gd and tests/test_recipe_roundtrip.gd (docs/PLAN.md
-## Phase 7 Build: "reuse the comparison helper from tests/test_stack_io.gd by
-## moving it into tests/gst_test_base.gd").
+## Returns early on a layer-count mismatch. Shared by tests/test_stack_io.gd
+## and tests/test_recipe_roundtrip.gd.
 func _compare_stacks(original: GSTStack, loaded: GSTStack) -> Array[String]:
 	var mismatches: Array[String] = []
 	if int(loaded.coord_space) != int(original.coord_space):
@@ -115,10 +109,9 @@ func _compare_layers(original: GSTLayer, loaded: GSTLayer, index: int) -> Array[
 	return mismatches
 
 
-## Every key present in either dictionary: a key missing after load, an extra
-## key introduced by load, a type mismatch (a Color must stay a Color, an int
-## must stay an int rather than silently becoming a float through the .tres
-## round trip), and a value mismatch are each reported as a separate line.
+## Every key present in either dictionary: a missing key, an extra key, a
+## type mismatch (an int must not become a float through the .tres round
+## trip), and a value mismatch are each reported as a separate line.
 func _compare_dict(label: String, original: Dictionary, loaded: Dictionary) -> Array[String]:
 	var mismatches: Array[String] = []
 	for key: Variant in original.keys():
@@ -138,11 +131,9 @@ func _compare_dict(label: String, original: Dictionary, loaded: Dictionary) -> A
 
 
 ## Every GSTCoordBlock field: scale, offset, rotation, scroll, warp_x/warp_y
-## (value and StringName type -- coord is a plain, untyped-value-carrying
-## sub-resource path through the Dictionary-free @export fields, but
-## warp_x/warp_y are declared StringName so GSTStackIO's own
-## _normalize_stringnames defensive re-wrap only applies to GSTLayer.slots;
-## checked here anyway as a direct round-trip guarantee), and warp_strength.
+## (value and StringName type; GSTStackIO._normalize_stringnames only
+## re-wraps GSTLayer.slots, so the coord refs are checked directly here),
+## and warp_strength.
 func _compare_coord(label: String, original: GSTCoordBlock, loaded: GSTCoordBlock) -> Array[String]:
 	var mismatches: Array[String] = []
 	if not loaded.scale.is_equal_approx(original.scale):

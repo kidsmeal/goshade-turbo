@@ -85,16 +85,12 @@ func _check_preview_and_output(measured: Dictionary) -> void:
 	_check("output_below_preview", below_preview and output_rect.size.y > 0.0, "preview=%s output=%s" % [preview_rect, output_rect])
 
 
-## Tab row and toolbar follow-up 2026-09-15: %FileMenu draws as a flat
-## MenuButton by construction (MenuButton::MenuButton, menu_button.cpp:217)
-## independent of its own flat property, so gst_main_panel.gd's
-## _style_file_menu_as_button() copies %SaveButton's own "Button"-theme-type
-## styleboxes onto %FileMenu as per-instance overrides. Proven here against
-## the "normal" stylebox specifically (the one visible with neither hover nor
-## focus, i.e. what this button looks like at rest): same resource, or -- a
-## theme swap that legitimately supplies a distinct-but-equivalent StyleBox
-## instance for each -- identical content margins on all four sides, which is
-## what actually governs whether the two draw as the same button shape.
+## %FileMenu draws flat by construction (MenuButton::MenuButton,
+## menu_button.cpp:217) regardless of its flat property, so
+## gst_main_panel.gd's _style_file_menu_as_button() copies %SaveButton's
+## "Button"-theme-type styleboxes onto %FileMenu as per-instance overrides.
+## Asserts on the "normal" stylebox: same resource, or identical content
+## margins on all four sides.
 func _check_file_menu_button_style(panel: GSTMainPanel, file_menu: MenuButton) -> void:
 	var save_button: Button = panel.get_node("%SaveButton") as Button
 	var file_style: StyleBox = file_menu.get_theme_stylebox("normal")
@@ -112,15 +108,9 @@ func _check_file_menu(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	for i: int in range(popup.item_count):
 		if not popup.is_item_separator(i):
 			labels.append(popup.get_item_text(i))
-	# A pristine active document (phase 3 docs/SHADER_TABS_reviewed-plan.md:
-	# GSTMainPanel.open_document's own pristine-reuse rule, "pristine initial
-	# empty content remains reusable") would make File > New reactivate this
-	# very same document instead of installing a different stack -- correct
-	# design behavior, but it would make this check's own "New installs a
-	# fresh stack" assertion vacuous. Dirty it first so New is guaranteed to
-	# create a genuinely distinct one (Shader tabs phase 4: this selector was
-	# not re-run since before phase 3 landed the reuse rule; adapting the
-	# stale assumption here rather than the production reuse contract).
+	# open_document reuses a pristine active document, which would make
+	# File > New reactivate this same document. Dirty it first so New
+	# creates a distinct one.
 	panel.get_undo().add_layer("color/fill", GSTLayer.Kind.COLOR, false)
 	await plugin.get_tree().process_frame
 	var old_stack: GSTStack = panel.get_stack()
@@ -247,10 +237,10 @@ func _check_responsive_tabs(plugin: EditorPlugin, panel: GSTMainPanel, _measured
 	var narrow: Dictionary = panel.get_layout_measurements()
 	var same_layer_pane: bool = panel.get_node("%LayerPane").get_parent() == panel.get_node("%EditingTabs")
 	var same_settings_pane: bool = panel.get_node("%SettingsPane").get_parent() == panel.get_node("%EditingTabs")
-	# Phase 2: no embedded EditorInspector remains; the two persistent native
-	# row containers (never rebuilt by a layout reflow, only by edit()) stand
-	# in for the old "two EditorInspector nodes" count, and each row's own
-	# edited-object identity replaces the container-level check.
+	# No embedded EditorInspector: the two persistent native row containers
+	# (rebuilt only by edit(), never by a layout reflow) stand in for the
+	# inspector count, and each row's edited-object identity replaces the
+	# container-level check.
 	var two_inspectors: bool = parameter_rows != null and coord_rows != null
 	var inspector_targets_ok: bool = inspector_column.get_edited_object() == selected_layer and inspector_column.find_editor_property(&"gain", selected_layer) == representative_property and inspector_column.find_coord_editor_property(&"scale") != null and inspector_column.find_coord_editor_property(&"scale").get_edited_object() == selected_layer.coord
 	var settings_scroll_bounded: bool = false

@@ -1,35 +1,21 @@
 @tool
 extends RefCounted
 
-## Phase 7 (docs/SHADER_TABS_reviewed-plan.md): confirmed-shutdown save and
-## project-local recovery (decision 10, docs/SHADER_TABS_reviewed.md).
-## GSTMainPanel.get_recovery_dir() always resolves under *this running
-## project's own* settings directory, never a real user's stack/export path
-## (Cross-cutting "Recovery files never use a user's original stack/export as
-## their destination"); running this whole selector against the isolated
-## project under .now/tabs-validation/ (the same convention every earlier
-## Shader tabs phase's own evidence already uses, not a separate override
-## knob in production) is what keeps every write in this file off a real
-## project's own recovery records.
-##
-## Mirrors tests/gst_editor_document_proof.gd's own two-stage pattern for the
-## one check that needs the real, actual confirmed quit to really exit and
-## reopen the editor process: a small JSON stage file directly under the
-## project's own settings directory (a sibling of goshade_turbo/recovery
-## itself, so it is never mistaken for a real record) records which half of
-## that real Save-and-Quit round trip this process is. Every other check
-## (mixed named/untitled/failed documents, metadata-write failure, retained
-## dirty markers, Save/Discard cleanup, nonempty for_scene) runs entirely
-## within a single editor session by calling plugin._get_unsaved_status/
-## _save_external_data directly -- the exact production callbacks Godot's
-## own quit confirmation and scene-close call -- and needs no process
-## boundary at all.
-##
-## The shutdown probe plugin fixture from phase 1
-## (tests/fixtures/shader_tabs_shutdown_plugin.cfg/.gd) is deliberately left
-## disabled for this whole selector: this phase implements the real thing in
-## the production plugin.gd/gst_main_panel.gd, so the probe has nothing left
-## to prove and must not also answer the same confirmed-quit dialog.
+## Smoke selector GST_EDITOR_SMOKE=tabs_recovery (dispatched by
+## tests/gst_editor_smoke.gd): confirmed-shutdown save and project-local
+## document recovery.
+## GSTMainPanel.get_recovery_dir() resolves under the running project's
+## settings directory; run this selector against the isolated project under
+## .now/tabs-validation/ so no real project's recovery records are written.
+## Two-stage: a JSON stage file directly under the project settings
+## directory (a sibling of goshade_turbo/recovery) records which half of the
+## Save-and-Quit round trip this process is. Every other check runs in one
+## editor session by calling plugin._get_unsaved_status/_save_external_data
+## directly, the callbacks Godot's quit confirmation and scene-close invoke.
+## tests/fixtures/shader_tabs_shutdown_plugin.cfg/.gd must stay disabled for
+## this selector; it would also answer the confirmed-quit dialog.
+## Prints one "SMOKE <item> PASS|FAIL <detail>" line per check and
+## "SMOKE SUMMARY pass=N fail=M"; exit code 1 on any failure.
 
 const STAGE_FILE: String = "gst_recovery_smoke_stage.json"
 const HOST_SCENE_PATH: String = "res://tests/fixtures/shader_tabs_host.tscn"
@@ -66,16 +52,12 @@ func run(plugin: EditorPlugin) -> void:
 	await _run_initial(plugin, panel)
 
 
-## First (and, in the common no-recovery-record case, only) process: every
-## check that fits inside one editor session, ending by preparing two real
-## dirty documents and handing off to the real confirmed Ctrl+Shift+Q quit.
+## Stage 1: every single-session check, then two dirty documents handed off
+## to a real confirmed quit.
 func _run_initial(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
-	# Defensive: a prior aborted run's own leftover recovery record would
-	# otherwise have already reopened as its own dirty document during this
-	# fresh process's _ready() (production working exactly as intended),
-	# before this script ever got control to wipe the on-disk directory
-	# below -- discard any such document up front so this run's own record
-	# counts start deterministic regardless of a previous run's leftovers.
+	# A prior aborted run's leftover recovery record reopens as a dirty
+	# document in _ready() before this script runs; discard it so record
+	# counts start at zero.
 	for doc: GSTDocument in panel.get_documents():
 		if doc.is_dirty():
 			await panel.close_document(doc)
@@ -162,21 +144,16 @@ func _run_initial(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	)
 	_check("round1_mixed_named_and_untitled_recovery", round1_ok, "doc_ok_dirty=%s doc_failed_dirty=%s doc_untitled_dirty=%s records=%d failed_entry=%s untitled_entry=%s" % [doc_ok.is_dirty(), doc_failed.is_dirty(), doc_untitled.is_dirty(), round1_records.size(), round1_failed_entry, round1_untitled_entry])
 
-	# A successful recovery write must satisfy Godot's own re-check of every
-	# plugin's _get_unsaved_status("") after _save_external_data() returns
-	# (confirmed against the real editor: the real confirmed-quit dialog
-	# never actually exits the process while that status still reports
-	# anything, even though a recovered document is deliberately still
-	# is_dirty() for its own tab star/close-confirmation) -- so a document
-	# whose recovery record now matches its current content must stop
-	# appearing here, while doc_ok (never recovered, just saved normally)
-	# was never listed to begin with and still is not.
+	# Godot re-checks every plugin's _get_unsaved_status("") after
+	# _save_external_data() and does not exit while it reports anything, so a
+	# document whose recovery record matches its content must drop out of the
+	# status while staying is_dirty() for its tab star.
 	var status_after_round1: String = plugin._get_unsaved_status("")
 	var status_after_round1_ok: bool = not status_after_round1.contains(doc_failed.current_path.get_file().get_basename()) and doc_failed.is_dirty() and doc_untitled.is_dirty()
 	_check("recovered_document_stops_blocking_shutdown_status", status_after_round1_ok, "status='%s' doc_failed_dirty=%s doc_untitled_dirty=%s" % [status_after_round1, doc_failed.is_dirty(), doc_untitled.is_dirty()])
 
 	# --- round 2: repeated shutdown against still-dirty documents updates the
-	# same record in place instead of duplicating it (decision 10). ---
+	# same record in place instead of duplicating it. ---
 	var round1_failed_id: String = doc_failed.recovery_record_id
 	var round1_untitled_id: String = doc_untitled.recovery_record_id
 	if panel.get_active_document() != doc_failed:
@@ -205,14 +182,14 @@ func _run_initial(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 
 	_check_metadata_write_failure_does_not_silently_succeed(panel)
 
-	# --- Save cleanup removes doc_failed's own record. ---
+	# --- Save cleanup removes doc_failed's record. ---
 	var fixed_path: String = "user://gst_recovery_named_failed_fixed.tres"
 	_cleanup_paths([fixed_path])
 	var save_result: Dictionary = await panel._save_stack_to_path(doc_failed, fixed_path)
 	var save_cleanup_ok: bool = bool(save_result.get("ok", false)) and not doc_failed.is_dirty() and doc_failed.recovery_record_id.is_empty()
 	_check("save_removes_recovery_record", save_cleanup_ok, "save_result=%s recovery_record_id='%s'" % [save_result, doc_failed.recovery_record_id])
 
-	# --- Discard cleanup removes doc_untitled's own record. ---
+	# --- Discard cleanup removes doc_untitled's record. ---
 	await panel.close_document(doc_untitled)
 	var dialog_shown: bool = panel.is_close_dialog_visible()
 	if dialog_shown:
@@ -231,10 +208,9 @@ func _run_initial(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 		_finish(plugin)
 		return
 
-	# --- Prepare the real confirmed-quit scenario: two fresh dirty documents,
-	# one untitled and one whose own current_path is unwritable, identified by
-	# a stack.next_id marker a fresh process can look up without depending on
-	# any in-memory identity of this one. ---
+	# --- Confirmed-quit setup: two dirty documents, one untitled and one with
+	# an unwritable current_path, identified by a stack.next_id marker the
+	# next process can look up. ---
 	var quit_untitled: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
 	quit_untitled.stack.next_id = QUIT_UNTITLED_MARKER
@@ -248,13 +224,8 @@ func _run_initial(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var status_before_quit: String = plugin._get_unsaved_status("")
 	_check("unsaved_status_before_quit_lists_both", status_before_quit.contains("quit_named_failed") and quit_untitled.is_dirty() and quit_failed.is_dirty(), "status='%s'" % [status_before_quit])
 
-	# Written as "confirmed_quit_complete" directly, not a separate
-	# "awaiting" stage: this same process both writes this file and drives
-	# the real quit immediately below in the same call chain (no probe
-	# fixture's own _save_external_data() to advance a stage on our behalf,
-	# unlike tests/gst_editor_document_proof.gd's phase 1 pattern) -- the
-	# only process that will ever read this file back is the fresh one
-	# after this one actually exits.
+	# Written as "confirmed_quit_complete" directly: this process drives the
+	# quit below in the same call chain, and only the next process reads it.
 	_write_stage({
 		"stage": "confirmed_quit_complete",
 		"untitled_marker": QUIT_UNTITLED_MARKER,
@@ -265,13 +236,9 @@ func _run_initial(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	await _drive_confirmed_quit(plugin)
 
 
-## Fix-now round 2, note 2: two dirty untitled documents must render as two
-## distinct lines in get_unsaved_status_text(""), matching the tab row's own
-## per-document "Untitled %d" numbering (_tab_title, gst_main_panel.gd:1055)
-## -- previously both fell through _describe_document's identical "This
-## shader" literal, observed verbatim: "unsaved_status_before_quit_lists_
-## both PASS status='This shader\nquit_named_failed'" (both untitled lines
-## collapsed to the same text with no way to tell the two documents apart).
+## Asserts two dirty untitled documents render as two distinct lines in
+## get_unsaved_status_text(""), matching the tab row's per-document
+## "Untitled %d" numbering (_tab_title, gst_main_panel.gd).
 func _check_two_untitled_documents_get_distinct_unsaved_status_lines(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var doc_a: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
@@ -296,14 +263,11 @@ func _check_two_untitled_documents_get_distinct_unsaved_status_lines(plugin: Edi
 
 
 func _check_nonempty_for_scene_reports_empty(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
-	# A prior run's own last-open scene (Godot's own "reopen scenes on
-	# startup") can already have one open before this check ever runs; close
-	# it too so the real confirmed-quit dispatch later in this run is never
-	# left racing Godot's own separate "save this open scene" handling for a
-	# scene GoShade never opened itself. Uses the same MenuBar id_pressed
-	# technique as _drive_confirmed_quit's own "Scene > Quit", for the same
-	# reason: a synthetic Ctrl+Shift+W InputEventKey stopped reaching this
-	# shortcut in this environment exactly like Ctrl+Shift+Q did.
+	# Close any scene Godot reopened on startup so the confirmed quit later
+	# in this run does not race Godot's own save handling for it.
+	# Uses MenuBar id_pressed, as _drive_confirmed_quit does: a synthetic
+	# Ctrl+Shift+W InputEventKey does not reach the shortcut in this
+	# environment.
 	_close_current_scene(plugin)
 	EditorInterface.open_scene_from_path(HOST_SCENE_PATH)
 	await _frames(plugin, 5)
@@ -330,10 +294,9 @@ func _close_current_scene(plugin: EditorPlugin) -> void:
 		await plugin.get_tree().process_frame
 
 
-## Unit-style round trip of GSTDocumentRecovery's own record schema
-## (version, record identity, stack filename resolution, original path, and
-## recipe/import origin fields) isolated from the live document graph above,
-## in its own throwaway directory.
+## Round trip of GSTDocumentRecovery's record schema (version, id,
+## stack_file, original_path, recipe/import origin fields) in a throwaway
+## directory.
 func _check_record_schema_round_trip(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_schema_check")
 	_wipe_dir_contents(dir)
@@ -357,17 +320,11 @@ func _check_record_schema_round_trip(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(dir)
 
 
-## Decision 10's dual-failure case: a named document whose own save just
-## failed AND whose recovery write also fails must never be treated as
-## resolved (its own recovery_record_id/recovery_fingerprint stay unset, so
-## needs_shutdown_attention() keeps reporting it) -- _recover_document's own
-## push_error wording ("could not save %s (%s) or recover it to %s: %s.
-## _save_external_data() is void and cannot veto editor shutdown") was
-## observed verbatim in stderr during interactive development of this
-## selector (both exact paths present); this check exercises the same
-## _recover_document production call directly, in its own throwaway
-## directory, and asserts the behavioral side effect a test script can
-## actually read back.
+## Asserts a named document whose save failed and whose recovery write also
+## fails keeps recovery_record_id/recovery_fingerprint unset, so
+## needs_shutdown_attention() still reports it. Calls _recover_document
+## directly in a throwaway directory; the push_error text is not asserted
+## (no script-side stderr capture).
 func _check_dual_failure_does_not_falsely_mark_recovered(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var doc: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
@@ -386,17 +343,10 @@ func _check_dual_failure_does_not_falsely_mark_recovered(plugin: EditorPlugin, p
 		await plugin.get_tree().process_frame
 
 
-## Fix-now round 2, note 1 (write-time half, exercised through the real
-## production call site rather than write_record directly): when a
-## document's own confirmed-quit recovery write hits a pre-existing
-## unreadable index.json, _recover_document (gst_main_panel.gd:1486-1497)
-## must still report the write as recovered (write_record's own quarantine-
-## then-fresh-write behavior) AND push_error the quarantined path at that
-## same call, so the orphaned index is never silently retained with nothing
-## naming it. The push_error text itself is not asserted here (GDScript has
-## no script-side stderr capture); observed verbatim in this pass's own
-## stderr instead, the same convention the dual-failure check above already
-## documents in its own doc comment.
+## Asserts _recover_document, against a pre-existing unreadable index.json,
+## reports the write as recovered (write_record quarantines the index, then
+## writes fresh). The push_error naming the quarantined path is not asserted
+## (no script-side stderr capture).
 func _check_recover_document_reports_quarantine_at_write_time(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var doc: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
@@ -419,27 +369,14 @@ func _check_recover_document_reports_quarantine_at_write_time(plugin: EditorPlug
 		await plugin.get_tree().process_frame
 
 
-## Fix-now round 6, note 1 (S2): an index.json this engine cannot open at all
-## must never be treated the same as an absent index.json (no record ever
-## written here). Plants that shape as a directory literally named
-## "index.json" -- FileAccess.open on a directory fails identically on
-## Windows and Linux, the same failure round 3's own metadata-write-failure
-## check already reproduces for a blocked .tmp path -- and confirmed directly
-## against this engine that FileAccess.file_exists() alone still reads false
-## against that same directory, so _load_index also checks DirAccess.
-## dir_exists_absolute() before ever calling this a confirmed absence.
-## Exercises all three read paths this same planted directory reaches:
-## load_all (must report failures by the index's own path, never zero
-## records), write_record's own existing-id path (must return ok=false naming
-## the index path, writing neither a stack file nor a fresh index.json --
-## the pre-fix defect this replaces: silently falling back to "no index has
-## ever been written" would have let a fresh write_record call proceed to
-## quarantine nothing, since _quarantine_unreadable_index's own rename never
-## touches a directory it was never asked to rename, and then attempt to
-## write a brand new index.json at a path a directory already occupies), and
-## the real _recover_document production call site (must leave doc's own
-## recovery identity unset and needs_shutdown_attention() true, matching the
-## same shape fix-now round 4's record-id-traversal check already asserts).
+## Asserts an index.json that cannot be opened is never treated as absent.
+## Plants a directory named "index.json": FileAccess.open on a directory
+## fails on Windows and Linux, and FileAccess.file_exists() reads false for
+## it, so _load_index also checks DirAccess.dir_exists_absolute().
+## Exercises three paths: load_all (one failure by the index path, zero
+## records), write_record with an existing id (ok=false naming the index
+## path, no stack file or index.json written), and _recover_document (doc's
+## recovery identity unset, needs_shutdown_attention() true).
 func _check_index_open_failure_distinguished_from_absence(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_index_open_failure")
 	_wipe_dir_contents(dir)
@@ -475,20 +412,12 @@ func _check_index_open_failure_distinguished_from_absence(plugin: EditorPlugin, 
 	_wipe_dir_contents(dir)
 
 
-## Fix-now round 6, note 2 (S2), stack-deletion half: a record whose own
-## stack file cannot actually be deleted (its path replaced by a non-empty
-## directory -- DirAccess.remove_absolute confirmed directly against this
-## engine to fail outright against a non-empty directory, never partially
-## succeed) must never be treated as removed. Before this fix, remove_record
-## discarded that call's own result outright and dropped the index entry
-## regardless -- an orphaned stack a later load_all()/write_record() call had
-## no way to rediscover, since nothing in the index named it any more.
-## Exercises both the real production call site (_forget_recovery_record)
-## and the underlying remove_record directly against the panel's own real
-## recovery dir (get_recovery_dir(), the same directory the real confirmed-
-## quit flow uses -- _forget_recovery_record itself takes no dir argument),
-## asserting the index entry and the blocked path both survive untouched and
-## doc's own recovery identity is never cleared.
+## Asserts a record whose stack file cannot be deleted (path replaced by a
+## non-empty directory; DirAccess.remove_absolute fails outright on it) is
+## never treated as removed: the index entry and the blocked path survive
+## and doc's recovery identity stays set.
+## Exercises remove_record directly and _forget_recovery_record against the
+## panel's real recovery dir (_forget_recovery_record takes no dir argument).
 func _check_recovery_cleanup_stack_deletion_failure_reported(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var dir: String = panel.get_recovery_dir()
 	var doc: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
@@ -530,25 +459,13 @@ func _check_recovery_cleanup_stack_deletion_failure_reported(plugin: EditorPlugi
 		await plugin.get_tree().process_frame
 
 
-## Fix-now round 6, note 2 (S2), index-replacement half: a metadata rewrite
-## that fails after its own stack deletion already succeeded (index.json's
-## own .tmp path blocked by a directory, the same technique round 3's own
-## write_record metadata-failure check already uses) must be reported too,
-## never silently treated as a successful removal. Exercises the real
-## _forget_recovery_record production call site against the panel's own real
-## recovery dir: doc's own recovery identity must stay set and the real
-## index.json's own bytes must stay exactly as they were before this call
-## (_write_index's own write-through-a-temp-file-then-rename never touches
-## the real file on failure) -- the record's own stack file is a known,
-## accepted residual of this exact failure order (deletion already committed
-## before the metadata rewrite is attempted; Cross-cutting/this note's own
-## framing: "successful Save/Discard already resolves the user's content;
-## the defect concerns failed cleanup" -- reporting the failure, not making
-## two independent filesystem operations atomic, is this S2 fix's own scope),
-## so it is documented here rather than asserted unchanged. Once the .tmp
-## block is lifted, closing doc with Discard drives _forget_recovery_record
-## a second time and this time it succeeds, leaving the recovery dir clean
-## for every check that runs after this one.
+## Asserts a metadata rewrite that fails after the stack deletion succeeded
+## (index.json.tmp blocked by a directory) is reported: doc's recovery
+## identity stays set and index.json's bytes are unchanged (_write_index
+## writes through a temp file, then renames).
+## The deleted stack file is an accepted residual of this failure order and
+## is not asserted. After the .tmp block is lifted, closing doc with Discard
+## runs _forget_recovery_record again and succeeds, leaving the dir clean.
 func _check_recovery_cleanup_index_replacement_failure_reported(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var dir: String = panel.get_recovery_dir()
 	var doc: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
@@ -579,9 +496,8 @@ func _check_recovery_cleanup_index_replacement_failure_reported(plugin: EditorPl
 		await plugin.get_tree().process_frame
 
 
-## write_record's own directory-creation failure (a plain file blocking the
-## recovery directory's own ancestor) must report ok=false with a reason
-## instead of silently claiming success.
+## Asserts write_record reports ok=false with a reason when a plain file
+## blocks the recovery directory's ancestor.
 func _check_write_record_directory_failure(panel: GSTMainPanel) -> void:
 	var blocked_base: String = ProjectSettings.globalize_path("user://gst_recovery_dir_blocked")
 	_make_blocked_parent(blocked_base)
@@ -591,14 +507,10 @@ func _check_write_record_directory_failure(panel: GSTMainPanel) -> void:
 	_unblock(blocked_base)
 
 
-## Review round 3 required fix (S1): _write_index now writes through
-## index.json.tmp then renames it over the real index.json, so a write that
-## fails partway must never touch -- and so never truncate -- an index.json a
-## prior successful write_record call already produced. Blocking the exact
-## temp path with a directory reproduces a real write failure deterministically
-## (FileAccess.open on the temp path returns null) while the real index.json
-## stays a normal file throughout, so this reads its bytes back unchanged
-## instead of only inferring preservation from ok=false.
+## Asserts a failed _write_index (writes index.json.tmp, then renames over
+## index.json) leaves the previous index.json bytes unchanged. Blocking the
+## temp path with a directory makes FileAccess.open return null while
+## index.json stays a normal file.
 func _check_write_record_metadata_failure_preserves_previous_index(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_preserve_previous_index")
 	_wipe_dir_contents(dir)
@@ -626,11 +538,8 @@ func _check_write_record_metadata_failure_preserves_previous_index(panel: GSTMai
 	_wipe_dir_contents(dir)
 
 
-## Review round 3 required fix (S1): a metadata-write failure exercised
-## through the real _recover_document production call site (not write_record
-## directly) must leave doc without a recovery record, still reporting
-## needs_shutdown_attention() -- a failed metadata write can never be treated
-## as a successful recovery.
+## Asserts a metadata-write failure through _recover_document leaves doc
+## without a recovery record and needs_shutdown_attention() true.
 func _check_metadata_write_failure_leaves_document_needing_attention(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var doc: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
@@ -651,14 +560,10 @@ func _check_metadata_write_failure_leaves_document_needing_attention(plugin: Edi
 		await plugin.get_tree().process_frame
 
 
-## Review round 3 required fix (S1): an index.json (or one of its own record
-## entries) carrying an unsupported/unknown version must never be treated as
-## readable. load_all reports it as one failure by the index's own path
-## (never silently resolving zero records); write_record quarantines it
-## (rename, never overwrite) instead of replacing its version with
-## SCHEMA_VERSION. The stack file the unknown-version record referenced must
-## survive untouched throughout, since it is never loaded, rewritten, or
-## deleted for an invalid record.
+## Asserts an index.json or record entry with an unknown version is
+## rejected: load_all reports one failure by the index path with zero
+## records; write_record quarantines it by rename. The referenced stack file
+## survives untouched.
 func _check_unknown_index_version_rejected(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_readside_unknown_version")
 	_wipe_dir_contents(dir)
@@ -682,12 +587,9 @@ func _check_unknown_index_version_rejected(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(dir)
 
 
-## Review round 3 required fix (S1): an index entry whose own stack_file
-## attempts path traversal (here escaping the recovery directory entirely,
-## the exact "../x.tres" shape cited by the reviewer) must be rejected by
-## both load_all (reported, never loaded) and remove_record (reported, never
-## deleted) -- the planted file the traversal targets, and the invalid index
-## entry itself, must both survive untouched by either call.
+## Asserts an index entry whose stack_file escapes the recovery directory
+## ("../x.tres") is rejected by load_all and remove_record; the targeted
+## file and the index entry both survive.
 func _check_stack_file_traversal_rejected(panel: GSTMainPanel) -> void:
 	var base_dir: String = ProjectSettings.globalize_path("user://gst_recovery_readside_traversal")
 	_wipe_dir_contents(base_dir)
@@ -714,21 +616,13 @@ func _check_stack_file_traversal_rejected(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(base_dir)
 
 
-## Fix-now round 4, S1: a record whose own `id` ("../victim") does not match
-## its `stack_file` ("safe.tres") passed round 3's `_validate_record` (each
-## field was individually safe) but then let `id` reach `write_record` as
-## `existing_id` on the very next confirmed-shutdown write, which derives a
-## *fresh* `stack_file` from `id` alone ("%s.tres" % id) -- writing
-## "../victim.tres" outside the recovery directory before this fix. Plants
-## exactly that shape, a real file one directory above `dir` at the path that
-## record's own derived stack_file would resolve to, and a real `safe.tres`
-## the entry's own (valid) `stack_file` field names. Runs `load_all` first
-## (must reject, reporting by path, without touching either planted file),
-## then replays the real `_recover_document` production call site with a
-## document carrying that same unsafe id as its own `recovery_record_id` --
-## the exact path a previously-loaded (pre-fix) record's id took to reach
-## `write_record` -- and asserts the outside file stays byte-identical and
-## the planted index.json is untouched.
+## Asserts a record whose `id` ("../victim") disagrees with its `stack_file`
+## ("safe.tres") is rejected before write_record derives a stack_file from
+## `id` alone ("%s.tres" % id), which would write outside the recovery
+## directory. Plants the file that derived path resolves to one directory
+## above `dir`, plus the entry's own `safe.tres`. load_all must reject by
+## path; _recover_document with that id as recovery_record_id must leave the
+## outside file and index.json byte-identical.
 func _check_record_id_traversal_rejected_before_write(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var base_dir: String = ProjectSettings.globalize_path("user://gst_recovery_id_traversal")
 	_wipe_dir_contents(base_dir)
@@ -775,12 +669,9 @@ func _check_record_id_traversal_rejected_before_write(plugin: EditorPlugin, pane
 	_wipe_dir_contents(base_dir)
 
 
-## Fix-now round 4, S1: `_is_supported_version` previously computed
-## `int(value) == SCHEMA_VERSION`, and `int()` truncates -- an index-level
-## `float` version of `1.5` silently passed for `SCHEMA_VERSION == 1` before
-## this fix. Plants that exact shape and asserts `load_all` rejects it by the
-## index's own path (the same unreadable-index route malformed JSON already
-## uses), leaving the planted stack file untouched.
+## Asserts an index-level `version` of `1.5` is rejected by load_all
+## (reported by the index path, planted stack untouched); `int(value)`
+## truncation would accept it.
 func _check_fractional_index_version_rejected(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_fractional_index_version")
 	_wipe_dir_contents(dir)
@@ -801,11 +692,9 @@ func _check_fractional_index_version_rejected(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(dir)
 
 
-## Same defect, record level: a per-entry `version` of `1.5` must be rejected
-## by `_validate_record` (shared by `load_all` and `remove_record`) even
-## though the index's own top-level version is valid, leaving the planted
-## stack file untouched and reporting the failure by the invalid entry's own
-## id.
+## Asserts a record-level `version` of `1.5` is rejected by
+## `_validate_record` (shared by `load_all` and `remove_record`) with a
+## valid index-level version, reported by the entry's id.
 func _check_fractional_record_version_rejected(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_fractional_record_version")
 	_wipe_dir_contents(dir)
@@ -826,12 +715,10 @@ func _check_fractional_record_version_rejected(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(dir)
 
 
-## Guards the exact legitimate case a stricter float comparison could
-## overcorrect against: `1.0` (a JSON number with a decimal point, which
-## Godot's `JSON.parse` always resolves to a `float`, never an `int`) must
-## still resolve to a valid record at both the index level and the record
-## level -- `_is_supported_version`'s own float branch compares against
-## `float(SCHEMA_VERSION)` directly rather than requiring an `int`.
+## Asserts `1.0` is accepted at index and record level: Godot's `JSON.parse`
+## resolves any number with a decimal point to `float`, and
+## `_is_supported_version` compares its float branch against
+## `float(SCHEMA_VERSION)`.
 func _check_float_whole_number_version_accepted(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_float_whole_version")
 	_wipe_dir_contents(dir)
@@ -854,27 +741,16 @@ func _check_float_whole_number_version_accepted(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(dir)
 
 
-## Review round 5 required fix (S1): write_record's own existing_id overwrite
-## path must validate the *currently indexed* record before touching its
-## stack file or its index entry -- the reviewer's own reproduction: an
-## indexed record shaped id="planted", stack_file="planted.tres", a version
-## of 1.5, was silently overwritten by write_record(..., "planted") before
-## this fix, discarding its own (invalid, but still on-disk) content and
-## metadata without reporting anything. Three planted shapes, each in its own
-## throwaway directory: (a) the record's own "version" is 1.5; (b) the
-## index's own top-level "version" is 1.5 (record-level version valid); (c)
-## the record's own "stack_file" ("other.tres") no longer agrees with its
-## "id" ("planted"), the same identity mismatch fix-now round 4 already
-## rejects on load. Each case calls write_record directly with that id and a
-## fresh stack (asserting ok=false, the reason names both the index path and
-## the record id, and both planted files stay byte-identical), then replays
-## the real _recover_document production call site with a document carrying
-## that same id as its own recovery_record_id (asserting the same
-## byte-identical preservation plus needs_shutdown_attention() staying true,
-## since a rejected write never sets recovery_fingerprint). Also re-confirms
-## the settled fresh-record quarantine path (no existing_id, unreadable
-## index) still quarantines and reports -- this fix's own unconditional
-## existing-id index read must never disturb that unrelated branch.
+## Asserts write_record's existing_id path validates the indexed record
+## before touching its stack file or index entry. Three planted shapes, each
+## in its own directory: (a) record-level "version" 1.5; (b) index-level
+## "version" 1.5; (c) "stack_file" ("other.tres") disagreeing with "id"
+## ("planted"). Each case calls write_record directly (ok=false, reason
+## names the index path and record id, both planted files byte-identical),
+## then _recover_document with that id as recovery_record_id (same
+## preservation, needs_shutdown_attention() true).
+## Also asserts the fresh-record quarantine path (no existing_id, unreadable
+## index) still quarantines and reports.
 func _check_existing_record_validated_before_write(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	await _check_existing_record_case(plugin, panel, "gst_recovery_existing_record_version", "existing_record_level_version_1_5_rejected",
 		'{"version": 1, "records": [{"id": "planted", "version": 1.5, "stack_file": "planted.tres", "original_path": "", "recipe_open": false, "recipe_name": "", "reopened_import": false, "save_failed": false, "created_unix": 0}]}',
@@ -888,13 +764,11 @@ func _check_existing_record_validated_before_write(plugin: EditorPlugin, panel: 
 	_check_fresh_record_quarantine_path_still_works_after_existing_record_fix(panel)
 
 
-## Shared body for the three planted shapes above: plants `index_json` and a
-## real `stack_file_name` under a fresh directory, snapshots both files'
-## bytes, calls write_record directly with existing id "planted" and a fresh
-## overwrite stack, then replays the real _recover_document call site with a
-## document carrying "planted" as its own recovery_record_id -- asserting
-## both planted files stayed byte-identical across both calls and neither
-## call ever claimed success.
+## Plants `index_json` and `stack_file_name` under a fresh directory,
+## snapshots both, calls write_record with existing id "planted", then
+## _recover_document with a document carrying "planted" as
+## recovery_record_id; asserts both files byte-identical and neither call
+## claims success.
 func _check_existing_record_case(plugin: EditorPlugin, panel: GSTMainPanel, dir_name: String, check_name: String, index_json: String, stack_file_name: String) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://%s" % dir_name)
 	_wipe_dir_contents(dir)
@@ -955,15 +829,11 @@ func _check_fresh_record_quarantine_path_still_works_after_existing_record_fix(p
 	_wipe_dir_contents(dir)
 
 
-## Review round 1 required fix: three planted on-disk corruption cases
-## load_all() must report by path instead of either silently resolving to
-## zero records (a truncated/malformed index.json, observed silent before
-## this fix) or throwing a script error out of _ready() (a non-array
-## "records" field, observed verbatim: "Invalid cast: could not convert
-## value to 'Array'. at: load_all"). Each runs in its own throwaway
-## directory, never the live flow above, and never calls write_record for
-## the index.json itself -- the point is what a real corrupted file on disk
-## reads back as, not what write_record produces.
+## Planted on-disk corruption cases load_all() must report by path rather
+## than resolve to zero records or throw out of _ready() (a non-array
+## "records" field threw "Invalid cast: could not convert value to
+## 'Array'"). Each runs in its own directory and writes the index.json by
+## hand, never through write_record.
 func _check_read_side_failures(panel: GSTMainPanel) -> void:
 	_check_corrupt_stack_with_valid_index_entry(panel)
 	_check_unparseable_index_json(panel)
@@ -972,10 +842,8 @@ func _check_read_side_failures(panel: GSTMainPanel) -> void:
 	_check_preexisting_quarantine_reported_on_load(panel)
 
 
-## Baseline case: passed before this fix pass and must keep passing. A
-## corrupt .tres with an otherwise-valid index entry is reported by its own
-## stack path; the corrupt file and the valid index.json are both left on
-## disk untouched.
+## Asserts a corrupt .tres with a valid index entry is reported by its stack
+## path; the corrupt file and index.json are left on disk.
 func _check_corrupt_stack_with_valid_index_entry(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_readside_corrupt_stack")
 	_wipe_dir_contents(dir)
@@ -996,10 +864,8 @@ func _check_corrupt_stack_with_valid_index_entry(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(dir)
 
 
-## An index.json this engine cannot parse as JSON at all (e.g. truncated
-## mid-write) must be reported by its own path, not silently read back as an
-## empty/absent index (the defect this fix corrects: previously zero records
-## restored, nothing reported).
+## Asserts an index.json that fails JSON parsing (e.g. truncated mid-write)
+## is reported by its path rather than read as an absent index.
 func _check_unparseable_index_json(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_readside_unparseable_index")
 	_wipe_dir_contents(dir)
@@ -1017,10 +883,8 @@ func _check_unparseable_index_json(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(dir)
 
 
-## A well-formed JSON object whose own "records" field is not an Array (the
-## defect this fix corrects: previously threw "Invalid cast: could not
-## convert value to 'Array'" out of load_all(), which _ready() calls
-## unguarded) must be reported by the index's own path instead of throwing.
+## Asserts a JSON object whose "records" field is not an Array is reported
+## by the index path rather than throwing out of load_all().
 func _check_non_array_records_field(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_readside_non_array_records")
 	_wipe_dir_contents(dir)
@@ -1038,15 +902,10 @@ func _check_non_array_records_field(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(dir)
 
 
-## Fix-now round 2, note 1 (write-time half): an unreadable index.json
-## already present when write_record runs must be quarantined and its own
-## quarantined path returned in the result, not just retained silently --
-## the planted case this replays: a truncated index.json plus an
-## orphan.tres a lost index entry used to reference, both left on disk after
-## a fresh write_record call reports ok=true. reason: "REVIEW
-## caseD_after_reload records=1 failures=[]" observed index.json.unreadable-
-## 1789198480 and orphan.tres both still on disk and never named anywhere in
-## that result.
+## Asserts write_record quarantines a pre-existing unreadable index.json and
+## returns the quarantined path in its result. Plants a truncated index.json
+## plus an orphan.tres that only the lost index referenced; both must remain
+## on disk.
 func _check_quarantine_reported_at_write_time(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_readside_quarantine_write")
 	_wipe_dir_contents(dir)
@@ -1061,11 +920,8 @@ func _check_quarantine_reported_at_write_time(panel: GSTMainPanel) -> void:
 	orphan_file.close()
 	var write_result: Dictionary = GSTDocumentRecovery.write_record(dir, GSTStack.new(), "", false, "", false, false)
 	var quarantined_path: String = String(write_result.get("quarantined_path", ""))
-	# write_record succeeds overall: quarantining the unreadable index clears
-	# the way for a fresh index.json to be written right after, holding just
-	# this call's own new entry -- so index_path itself exists again by the
-	# time this assertion runs, this time as a valid fresh index rather than
-	# the unreadable one quarantined_path now names.
+	# write_record returns ok=true: after quarantining, it writes a fresh
+	# index.json holding this call's entry, so index_path exists again.
 	var quarantine_ok: bool = (
 		bool(write_result.get("ok", false)) and not quarantined_path.is_empty()
 		and quarantined_path.begins_with(index_path) and quarantined_path.contains(".unreadable-")
@@ -1077,11 +933,8 @@ func _check_quarantine_reported_at_write_time(panel: GSTMainPanel) -> void:
 	_wipe_dir_contents(dir)
 
 
-## Fix-now round 2, note 1 (read-time half): a pre-existing
-## index.json.unreadable-* file (quarantined by some earlier write_record
-## call, per the check above) must be reported by load_all -- and, since
-## nothing here ever removes it, on every later call too, not just the
-## first, matching "no migration may silently delete it".
+## Asserts a pre-existing index.json.unreadable-* file is reported by
+## load_all on every call, since nothing removes it.
 func _check_preexisting_quarantine_reported_on_load(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_readside_preexisting_quarantine")
 	_wipe_dir_contents(dir)
@@ -1101,12 +954,9 @@ func _check_preexisting_quarantine_reported_on_load(panel: GSTMainPanel) -> void
 	_wipe_dir_contents(dir)
 
 
-## write_record's own metadata-write failure (index.json replaced by a
-## directory, after a first successful write) must report ok=false and never
-## silently claim success -- checked in its own throwaway directory, never
-## the live one _run_initial's own recovery flow uses, so a directory-swap
-## trick here can never leave that flow's own records in an inconsistent
-## state regardless of filesystem timing.
+## Asserts write_record reports ok=false when index.json has been replaced by
+## a directory after a first successful write. Runs in a throwaway
+## directory, not the live recovery dir _run_initial uses.
 func _check_metadata_write_failure_does_not_silently_succeed(panel: GSTMainPanel) -> void:
 	var dir: String = ProjectSettings.globalize_path("user://gst_recovery_metadata_failure_check")
 	_wipe_dir_contents(dir)
@@ -1150,17 +1000,11 @@ func _has_startup_modal(node: Node) -> bool:
 	return false
 
 
-## Godot 4.4's own editor top bar is a MenuBar (EditorTitleBar), not a plain
-## MenuButton row: "Quit" is item id 15 of its "Scene" menu, the exact same
-## PopupMenu.id_pressed EditorNode's own _menu_option connects to for a real
-## click or the Ctrl+Shift+Q shortcut alike. A synthetic InputEventKey
-## delivered through push_input (tests/gst_editor_document_proof.gd's own
-## phase 1 technique) stopped reaching that shortcut in this environment;
-## firing the menu's own id_pressed signal directly is this codebase's
-## established convention for driving a menu handler without a real
-## OS-level click (gst_main_panel.gd's own file/layer MenuButtons; every
-## existing *_smoke.gd that drives one), and reaches the identical
-## EditorNode handler a real click or shortcut would.
+## Godot 4.4's editor top bar is a MenuBar (EditorTitleBar); "Quit" is an
+## item of its "Scene" menu, and PopupMenu.id_pressed is the signal
+## EditorNode's _menu_option connects to for a click or Ctrl+Shift+Q alike.
+## A synthetic InputEventKey through push_input does not reach that shortcut
+## in this environment, so the menu's id_pressed is emitted directly.
 func _drive_confirmed_quit(plugin: EditorPlugin) -> void:
 	await _settle_editor(plugin)
 	var bar: MenuBar = _find_menu_bar(plugin.get_tree().root)
@@ -1174,10 +1018,9 @@ func _drive_confirmed_quit(plugin: EditorPlugin) -> void:
 		_finish(plugin)
 		return
 	var scene_popup: PopupMenu = quit_result["popup"] as PopupMenu
-	# Emitted once: EditorNode builds/reuses this exact ConfirmationDialog on
-	# every "Quit" activation, so a retry loop that keeps re-emitting while
-	# still waiting for the first one to appear risks re-triggering the same
-	# handler mid-build instead of just waiting longer for it.
+	# Emitted once: EditorNode builds/reuses the ConfirmationDialog on every
+	# "Quit" activation; re-emitting while waiting re-triggers the handler
+	# mid-build.
 	scene_popup.id_pressed.emit(int(quit_result["id"]))
 	var dialog: ConfirmationDialog = null
 	for attempt: int in range(6):
@@ -1200,25 +1043,16 @@ func _drive_confirmed_quit(plugin: EditorPlugin) -> void:
 		_finish(plugin)
 		return
 	_check("save_and_quit_control", true, "button='%s'" % [save_quit.text])
-	# A real simulated click through the dialog's own embedded Window/
-	# Viewport (tests/gst_editor_document_close_smoke.gd's own established
-	# convention: "Buttons inside a popped-up ConfirmationDialog live in
-	# that dialog's own embedded Window/Viewport, not the root one"). Both a
-	# focused Enter keypress and a direct pressed.emit() reliably reached
-	# this exact point (dialog found, button located, and a temporary print
-	# inside plugin.gd's own _save_external_data() confirmed it genuinely
-	# ran) but the dialog never actually closed and the process never
-	# exited across repeated real runs; only a real click through the
-	# dialog's own viewport, with the same NOTIFICATION_MOUSE_ENTER
-	# workaround that convention documents, is proven reliable here.
+	# Click through the dialog's own embedded Window/Viewport: a focused
+	# Enter key and a direct pressed.emit() both ran _save_external_data()
+	# but never closed the dialog or exited the process.
 	await _click_button(plugin, save_quit)
 	print("SMOKE_RECOVERY SAVE_AND_QUIT_ACTIVATION_DISPATCHED")
 
 
-## Second process: the real editor session reopened after the first process
-## actually exited through the confirmed quit above. load_recovery_records()
-## already ran, unconditionally, from this panel's own _ready() before this
-## script ever gets control.
+## Stage 2: the editor session reopened after the confirmed quit.
+## load_recovery_records() already ran from the panel's _ready() before this
+## script gets control.
 func _verify_fresh_open(plugin: EditorPlugin, panel: GSTMainPanel, stage: Dictionary) -> void:
 	var dir: String = panel.get_recovery_dir()
 	var untitled_marker: int = int(stage.get("untitled_marker", -1))
@@ -1257,12 +1091,8 @@ func _verify_fresh_open(plugin: EditorPlugin, panel: GSTMainPanel, stage: Dictio
 
 	_cleanup_paths([fixed_path])
 	_unblock(BLOCKED_PARENT)
-	# Self-resetting stage protocol (review round 3 required fix): a
-	# successful stage 2 run consumes its own marker, so a third invocation
-	# against the same isolated project starts as stage 1 again instead of
-	# reading a stale marker left over from this run. A failed run leaves the
-	# marker in place for diagnosis, matching this file's own "report,
-	# never silently delete" convention for on-disk recovery state.
+	# A passing stage 2 deletes the stage file so the next invocation starts
+	# as stage 1. A failed run leaves it for diagnosis.
 	if _fail_count == 0:
 		_delete_stage()
 	_finish(plugin)
@@ -1337,9 +1167,8 @@ func _list_dir(dir: String) -> PackedStringArray:
 	return result
 
 
-## "" for an absent file, distinguishable here only by the caller already
-## knowing the planted file must exist -- used solely for a byte-identical
-## before/after comparison, never to distinguish absent from empty content.
+## Returns "" for an absent file; used only for byte-identical before/after
+## comparison of files the caller knows exist.
 func _read_file_text(path: String) -> String:
 	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
 	if file == null:
@@ -1408,9 +1237,9 @@ func _find_menu_bar(node: Node) -> MenuBar:
 	return null
 
 
-## `{found: bool, popup: PopupMenu, id: int}` for menu_title's own item whose
-## displayed text is exactly item_text -- looked up by text, not a hardcoded
-## id, since MenuBar reassigns ids per build/version.
+## `{found: bool, popup: PopupMenu, id: int}` for the menu_title item whose
+## text is exactly item_text. Looked up by text; MenuBar reassigns ids per
+## build/version.
 func _find_menu_item_id(bar: MenuBar, menu_title: String, item_text: String) -> Dictionary:
 	for i: int in range(bar.get_menu_count()):
 		if bar.get_menu_title(i) != menu_title:
@@ -1434,10 +1263,9 @@ func _find_quit_dialog(node: Node) -> ConfirmationDialog:
 	return null
 
 
-## find_children (not a plain get_children() recursion): AcceptDialog's own
-## message Label/HBoxContainer/Buttons are added as internal children, which
-## get_children() excludes by default; find_children reaches them, matching
-## tests/gst_editor_document_proof.gd's own established precedent.
+## find_children, not get_children(): AcceptDialog's message Label/
+## HBoxContainer/Buttons are internal children, which get_children()
+## excludes by default.
 func _find_button(node: Node, text: String) -> Button:
 	for child: Node in node.find_children("*", "Button", true, false):
 		var button: Button = child as Button
@@ -1459,22 +1287,12 @@ func _frames(plugin: EditorPlugin, count: int) -> void:
 		await plugin.get_tree().process_frame
 
 
-## Real click on target's own global-rect center, delivered through target's
-## own Viewport, matching tests/gst_editor_document_close_smoke.gd's own
-## established _click_button precedent exactly (including the
-## NOTIFICATION_MOUSE_ENTER workaround BaseButton::on_action_event's own
-## status.hovering gate requires for a synthetic InputEventMouseButton).
-## Guards every await against a plugin already freed mid-continuation (phase
-## 8 review round 1 fix 10): clicking "Save and Quit" here is this stage's
-## own real quit trigger, so the mouse-up push below can make the process
-## start exiting -- freeing plugin -- while this coroutine is still
-## suspended on a later await. Resuming that suspended await then called
-## plugin.get_tree() on an already-freed instance, printing
-## "SCRIPT ERROR: Cannot call method 'get_tree' on a previously freed
-## instance" after an otherwise-successful confirmed quit. Returning before
-## each await once plugin is no longer valid lets this stage exit cleanly
-## instead of continuing a callback chain the process is already tearing
-## down for.
+## Click on button's global-rect center through its own Viewport.
+## NOTIFICATION_MOUSE_ENTER is required: BaseButton::on_action_event gates
+## on status.hovering, which a synthetic InputEventMouseButton never sets.
+## Every await is guarded with is_instance_valid(plugin): clicking "Save and
+## Quit" starts the process exit, which frees plugin while this coroutine is
+## suspended; resuming would call get_tree() on a freed instance.
 func _click_button(plugin: EditorPlugin, button: Button) -> void:
 	if button == null or not is_instance_valid(button) or not is_instance_valid(plugin):
 		return

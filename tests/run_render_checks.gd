@@ -1,30 +1,23 @@
 extends SceneTree
 
-## Named verification command (docs/PLAN.md Phase 7 Files):
+## Named verification command:
 ## `godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd`
 ##
-## Not headless by design (docs/PLAN.md "Verified engine facts": the
-## --headless dummy driver returns a null SubViewport image; only a real GPU
-## session under --rendering-driver opengl3 without --headless reads back
-## real pixels). Loads every .tres under addons/goshade_turbo/recipes/ and
-## sandbox/stacks/, renders each through the production GSTPreview, reads
-## back the transparent target image, and runs
-## GSTRenderAssert.check on it. Prints one "RENDER <path> PASS|FAIL <reasons>"
-## line per stack, plus whether its generated shader contains TIME. Exits 1
-## if any stack fails to load, fails codegen, or fails the render assert.
-## Also checks the shipped simplex field for discontinuities on the active
-## renderer; run Forward+, Mobile, and Compatibility to cover shader backends.
+## Not headless: the --headless dummy driver returns a null SubViewport
+## image. Loads every .tres under addons/goshade_turbo/recipes/ and
+## sandbox/stacks/, renders each through GSTPreview, reads back the
+## transparent target image, and runs GSTRenderAssert.check on it. Prints one
+## "RENDER <path> PASS|FAIL <reasons>" line per stack, plus whether its
+## generated shader contains TIME. Exits 1 if any stack fails to load, fails
+## codegen, or fails the render assert. Also checks the shipped simplex field
+## for discontinuities on the active renderer; run Forward+, Mobile, and
+## Compatibility to cover shader backends.
 ##
-## --write-screenshots (docs/PLAN.md Phase 8 Files): when passed as a user
-## arg (`-- --write-screenshots`, read via OS.get_cmdline_user_args() so it
-## survives Godot's own `--` argument split), every stack's rendered image is
-## additionally saved to sandbox/screenshots/<stack file stem>.png, so the
-## committed screenshots are this harness's own output rather than a
-## hand-exported copy. A failed sandbox/screenshots directory create prints
-## one RENDER FAIL line naming the directory and fails the run (fix pass 3,
-## item 4); a per-stack Image.save_png failure is appended to that stack's
-## own reasons list, so the stack's RENDER line reports FAIL and the run
-## exits 1 the same as a failed render assert.
+## --write-screenshots, passed as a user arg (`-- --write-screenshots`, read
+## via OS.get_cmdline_user_args()), also saves every stack's rendered image
+## to sandbox/screenshots/<stack file stem>.png. A failed directory create
+## prints one RENDER FAIL line and fails the run; a per-stack Image.save_png
+## failure is appended to that stack's reasons and fails it.
 
 const RECIPE_DIR: String = "res://addons/goshade_turbo/recipes"
 const SANDBOX_DIR: String = "res://sandbox/stacks"
@@ -35,13 +28,11 @@ const SETTLE_FRAMES: int = 3
 const WRITE_SCREENSHOTS_ARG: String = "--write-screenshots"
 
 
-## The README's `--import` prerequisite leaves .recovery_mode_lock in the
-## user data dir on Godot 4.4/4.6 (removed only 1s after the editor's first
-## filesystem scan; an --import run quits before that timer fires, and
-## 4.4/4.6 also skip the Main::cleanup() removal 4.7 added). This wrapper
-## never passes --editor or --import itself, so it never creates that lock;
-## it only cleans up whatever the prerequisite left behind, once at start
-## and once before quit, so the next editor launch never sees it.
+## On Godot 4.4/4.6 the README's --import prerequisite leaves
+## .recovery_mode_lock in the user data dir (the editor removes it 1s after
+## its first filesystem scan; --import quits before that; 4.7 removes it in
+## Main::cleanup()). This script never passes --editor or --import, so it
+## only removes the stale lock, at start and before quit.
 func _remove_stale_recovery_lock() -> void:
 	var lock_path: String = OS.get_user_data_dir().path_join(".recovery_mode_lock")
 	if FileAccess.file_exists(lock_path):
@@ -61,8 +52,7 @@ func _run() -> void:
 	var write_screenshots: bool = OS.get_cmdline_user_args().has(WRITE_SCREENSHOTS_ARG)
 	var all_passed: bool = true
 	# A failed screenshot-directory create disables screenshot writing for
-	# every stack below (the directory will not exist for any of them
-	# either), but does not skip the render/codegen checks themselves.
+	# every stack below but does not skip the render/codegen checks.
 	var screenshot_dir_ok: bool = true
 	if write_screenshots:
 		var screenshot_dir_absolute: String = ProjectSettings.globalize_path(SCREENSHOT_DIR)
@@ -87,9 +77,9 @@ func _run() -> void:
 	quit(0 if all_passed else 1)
 
 
-## GSTPreview keeps its checkerboard outside the transparent render target.
-## The target therefore retains real alpha while texture and screen sources
-## still sample the selected preview image exactly.
+## GSTPreview keeps its checkerboard outside the transparent render target,
+## so the target retains real alpha while texture and screen sources still
+## sample the selected preview image exactly.
 func _check_preview_composition() -> bool:
 	var failures: Array[String] = []
 	var sample_texture: ImageTexture = _solid_texture(Color(0.2, 0.4, 0.7, 0.75))
@@ -109,8 +99,8 @@ func _check_preview_composition() -> bool:
 				failures.append("%s checkerboard is not outside the SubViewport" % preset)
 
 	# The editor displays the transparent SubViewport through its container.
-	# Compare that real parent-viewport result to the nested target's
-	# premultiplied readback over the checker-only parent frame.
+	# Compare that parent-viewport result to the nested target's premultiplied
+	# readback over the checker-only parent frame.
 	var parent_composite: Dictionary = await _render_parent_composite(sample_texture)
 	var composite_mismatch: Dictionary = _parent_composite_mismatch(
 		parent_composite["checker"],
@@ -133,8 +123,8 @@ func _check_preview_composition() -> bool:
 			failures.append("texture source alpha %.2f center=%s expected=%s" % [source_alpha, _center_pixel(texture_image), expected_texture_readback])
 
 		# Screen-texture alpha differs by renderer. Measure the engine's native
-		# BackBufferCopy result, then require GSTPreview to blend that exact
-		# sampled RGBA once over its transparent target.
+		# BackBufferCopy result, then require GSTPreview to blend that sampled
+		# RGBA once over its transparent target.
 		var native_screen_image: Image = await _render_native_screen_copy(source_texture)
 		var native_screen: Color = _center_pixel(native_screen_image)
 		var native_has_source_rgb: bool = native_screen_image != null and not native_screen_image.is_empty() and _rgb_close(native_screen, source_color, 0.03)
@@ -280,8 +270,8 @@ func _parent_composite_mismatch(checker: Image, target: Image, actual: Image, to
 	var mismatch_count: int = 0
 	var sample_count: int = 0
 	var maximum_delta: float = 0.0
-	# Sample cell interiors from both checker colors. Borders are excluded so
-	# the assertion measures container blending rather than control clipping.
+	# Sample cell interiors from both checker colors; borders are excluded so
+	# the assertion measures container blending, not control clipping.
 	for y: int in range(8, actual.get_height(), 16):
 		for x: int in range(8, actual.get_width(), 16):
 			var checker_pixel: Color = checker.get_pixel(x, y)
@@ -301,8 +291,8 @@ func _parent_composite_mismatch(checker: Image, target: Image, actual: Image, to
 	return {"count": mismatch_count, "total": sample_count, "max_delta": maximum_delta}
 
 
-## Nonuniform recipe images can still contain discontinuities at lattice
-## boundaries. Exercise the shipped noise on the active GPU renderer.
+## Checks the shipped noise for discontinuities at lattice boundaries on
+## the active GPU renderer.
 func _check_noise_continuity(library: GSTLibrary) -> bool:
 	var viewport: SubViewport = SubViewport.new()
 	viewport.size = Vector2i(512, 512)
@@ -332,9 +322,9 @@ func _check_noise_continuity(library: GSTLibrary) -> bool:
 			maximum_value = maxf(maximum_value, value)
 			maximum_delta = maxf(maximum_delta, absf(value - image.get_pixel(x + 1, y).r))
 			maximum_delta = maxf(maximum_delta, absf(value - image.get_pixel(x, y + 1).r))
-	# At 1/64 coordinate units per pixel the smooth field stays below 0.04
-	# on the reference GPU. The broken Forward+ path jumps above 0.61.
-	# The range check prevents blank output from passing as continuous.
+	# At 1/64 coordinate units per pixel the smooth field stays below 0.04;
+	# the discontinuous Forward+ path measured above 0.61. The range check
+	# stops blank output from passing as continuous.
 	var passed: bool = maximum_delta < 0.1 and maximum_value - minimum_value > 0.5
 	print("NOISE_CONTINUITY %s renderer=%s max_adjacent=%f range=%f" % ["PASS" if passed else "FAIL", RenderingServer.get_current_rendering_method(), maximum_delta, maximum_value - minimum_value])
 	viewport.queue_free()
@@ -364,16 +354,13 @@ func _tres_paths_in(dir_path: String) -> Array[String]:
 	return out
 
 
-## Loads `path`, codegens it (GSTExport.build, so the has_TIME check reads the
-## same text the export flow would write), builds a fresh SubViewport render
-## tree through GSTPreview itself, syncs the material's uniforms through
-## GSTMaterialSync, waits
-## SETTLE_FRAMES frames, reads back, and runs GSTRenderAssert.check. Returns
-## whether `path` passed. Every failure path still prints one RENDER line so a
-## load or codegen failure is as visible as a render failure. When
-## `write_screenshots` is true and a real image was read back, it is saved to
-## SCREENSHOT_DIR before the assert result is decided, so a failing stack's
-## image is still on disk to inspect.
+## Loads `path`, codegens it through GSTExport.build (so the has_TIME check
+## reads the export text), builds a SubViewport render tree through
+## GSTPreview, syncs uniforms through GSTMaterialSync, waits SETTLE_FRAMES
+## frames, reads back, and runs GSTRenderAssert.check. Returns whether `path`
+## passed. Every failure path prints one RENDER line. When `write_screenshots`
+## is true the image is saved to SCREENSHOT_DIR before the assert result is
+## decided, so a failing stack's image is on disk.
 func _check_one(path: String, library: GSTLibrary, write_screenshots: bool) -> bool:
 	var load_result: Dictionary = GSTStackIO.load(path, library)
 	if not load_result["ok"]:
@@ -391,8 +378,7 @@ func _check_one(path: String, library: GSTLibrary, write_screenshots: bool) -> b
 	var material: ShaderMaterial = ShaderMaterial.new()
 
 	# Sync before the material reaches a live CanvasItem: a ShaderMaterial
-	# assigned with empty shader code never picks up later code edits
-	# (docs/EDITOR_SMOKE.md phase 5 run 1).
+	# assigned with empty shader code never picks up later code edits.
 	var sync_result: GSTCodegenResult = GSTMaterialSync.sync(stack, library, material, &"", Vector2(VIEWPORT_SIZE))
 	if not sync_result.ok():
 		print("RENDER %s FAIL [\"material sync: %s\"] has_TIME=%s" % [path, sync_result.error, has_time])

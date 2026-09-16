@@ -1,15 +1,11 @@
 extends GSTTestBase
 
-## Structural mutations: slot assign, reorder, delete. Design decisions 3
-## and 22.
+## Structural mutations: slot assign, reorder, delete.
 
 
-## These tests never touch a samples_source slot, but assign_slot now refuses
-## any assignment whose assigning layer's entry does not resolve in the
-## given library (an unresolved entry must never bypass the source-only
-## rule). This builds a minimal library with one manifest entry per entry id
-## these tests assign layers with, so resolution succeeds without a full
-## library scan.
+## assign_slot refuses any assignment whose assigning layer's entry does not
+## resolve in the given library, so this builds a minimal library with one
+## manifest entry per entry id these tests assign, without a full scan.
 func _test_library() -> GSTLibrary:
 	var lib: GSTLibrary = GSTLibrary.new()
 	for entry_id: String in ["generative/hash", "generative/snoise", "generative/fbm", "fieldops/invert"]:

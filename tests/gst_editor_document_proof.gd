@@ -185,11 +185,9 @@ func _run_native_undo_proof(plugin: EditorPlugin, probe: EditorPlugin) -> void:
 	_check("host_scene_closed", host_closed and first_undo_before_close and second_undo_before_close and first_history.has_undo() and second_history.has_undo(), "closed_scene=%s first_undo=%s second_undo=%s" % [closed_host_scene.scene_file_path if closed_host_scene != null else "null", first_history.has_undo(), second_history.has_undo()])
 	EditorInterface.open_scene_from_path(HOST_SCENE_PATH)
 	await _frames(plugin, 3)
-	# Snapshot both histories' PRE-navigation state (each already holds a
-	# structural action from _register_structural_action and a real native
-	# property action from the native_float drag above) before Save As and
-	# the scene switches, so retention can be proven against what already
-	# existed rather than against actions registered after navigation.
+	# Snapshot both histories before Save As and the scene switches (each
+	# holds a structural action and a native property action) so retention
+	# is proven against pre-navigation actions.
 	var first_pre_nav_value: float = first_target.scalar
 	var first_pre_nav_structural: int = first_target.structural_value
 	var first_pre_nav_has_undo: bool = first_history.has_undo()
@@ -201,24 +199,20 @@ func _run_native_undo_proof(plugin: EditorPlugin, probe: EditorPlugin) -> void:
 	named_stack.next_id = 7
 	var named_result: Dictionary = GSTStackIO.save(named_stack, NAMED_STACK_PATH)
 	var loaded_named: GSTStack = ResourceLoader.load(NAMED_STACK_PATH, "", ResourceLoader.CACHE_MODE_IGNORE) as GSTStack
-	# Save As on an actual history-owning target (second_target, already
-	# path-bearing at SECOND_DOCUMENT_PATH, the one whose history was walked
-	# above), not an unrelated empty GSTStack. second_target is now typed as
-	# GSTTabsProofTarget, a standalone tests/fixtures/shader_tabs_proof_target.gd
-	# script (not a script-local inner class), so ResourceSaver.save writes a
-	# real external script reference and ResourceLoader.load can resolve it
-	# back to a typed instance for a genuine round-trip assertion.
+	# Save As on second_target, the history-owning target already at
+	# SECOND_DOCUMENT_PATH. second_target is a GSTTabsProofTarget
+	# (tests/fixtures/shader_tabs_proof_target.gd, a standalone script), so
+	# ResourceSaver.save writes an external script reference that
+	# ResourceLoader.load resolves to a typed instance.
 	var save_as_error: Error = ResourceSaver.save(second_target, SAVE_AS_STACK_PATH)
 	var save_as_reloaded: GSTTabsProofTarget = ResourceLoader.load(SAVE_AS_STACK_PATH, "", ResourceLoader.CACHE_MODE_IGNORE) as GSTTabsProofTarget
 	EditorInterface.open_scene_from_path("res://addons/goshade_turbo/ui/gst_main_panel.tscn")
 	await _frames(plugin, 3)
 	EditorInterface.open_scene_from_path(HOST_SCENE_PATH)
 	await _frames(plugin, 3)
-	# Verify the PRE-navigation structural and property actions survive Save
-	# As and the scene switches by walking every action to the bottom and
-	# back, before any new action is registered. Fresh actions registered
-	# before this check would make has_undo() pass even if navigation had
-	# silently cleared the earlier history.
+	# Walks every pre-navigation action to the bottom and back before any new
+	# action is registered; a fresh action would make has_undo() pass even
+	# if navigation had cleared the earlier history.
 	var first_actions_walked: int = 0
 	while first_history.has_undo():
 		first_history.undo()
@@ -479,12 +473,11 @@ func _begin_non_drag_text_entry(plugin: EditorPlugin, spin: Range) -> bool:
 		return false
 	var control: Control = spin as Control
 	var start: Vector2 = control.get_global_rect().get_center()
-	# A press/release with no motion in between is a non-drag grab.
+	# A press/release with no motion is a non-drag grab.
 	# EditorSpinSlider::_grab_end (Godot 4.4 editor/gui/editor_spin_slider.cpp)
-	# calls _focus_entered() directly for that case, which shows and focuses
-	# the internal LineEdit via a deferred call. Calling grab_focus()/Enter on
-	# the outer control here would steal that focus back and reopen a second
-	# session; instead wait for the deferred focus to land.
+	# calls _focus_entered(), which shows and focuses the internal LineEdit
+	# via a deferred call. grab_focus()/Enter on the outer control would steal
+	# that focus back; wait for the deferred focus instead.
 	_push_mouse(control, start, MOUSE_BUTTON_LEFT, true)
 	await plugin.get_tree().process_frame
 	_push_mouse(control, start, MOUSE_BUTTON_LEFT, false)
@@ -664,8 +657,8 @@ func _prove_forced_finish_ordering(plugin: EditorPlugin, probe: EditorPlugin) ->
 	if focus_edit != null:
 		focus_edit.grab_focus()
 		await _frames(plugin, 2)
-		# Type a changed value WITHOUT submitting: the field must still hold
-		# pending, uncommitted text when the forced finish runs.
+		# Typed without submitting: the field must hold uncommitted text when
+		# the forced finish runs.
 		await _replace_line_edit(plugin, focus_edit, "0.7", false)
 	var focus_typed_uncommitted: bool = focus_edit != null and is_equal_approx(focus_target.scalar, focus_original) and focus_edit.text == "0.7"
 	var focus_actions_before: int = int(focus_state["actions"])
@@ -721,18 +714,14 @@ func _prove_forced_finish_ordering(plugin: EditorPlugin, probe: EditorPlugin) ->
 	var expected_color: Vector3 = Vector3(0x33 / 255.0, 0x66 / 255.0, 0xcc / 255.0)
 	var color_ok: bool = color_popup_open and not color_button.get_popup().visible and color_signal_count_after == color_signal_count + 1 and color_actions_after == color_actions_before + 1 and StringName(color_final_signal.get("property", &"")) == &"rgb" and (color_final_signal.get("value", Color.BLACK) as Color).is_equal_approx(Color(expected_color.x, expected_color.y, expected_color.z, 1.0)) and color_undo_original and color_redo_final and color_target.rgb_storage.is_equal_approx(expected_color) and color_rebound_target.rgb_storage.is_equal_approx(Vector3(0.2, 0.4, 0.6)) and _operation_precedes(color_state, "color_popup_closed", "color_rebind")
 
-	# The shutdown case is left genuinely pending, not force-finished here: a
-	# stack-owned GSTCoordBlock, a bound Callable that performs the finish,
-	# and the target save path are handed to the probe. The probe invokes the
-	# Callable and saves the stack from inside its own _save_external_data,
-	# the same synchronous-quit callback production code will use, so the
-	# forced-finish-before-shutdown-save ordering is exercised by the real
-	# shutdown path instead of by this proof script beforehand. shutdown_row
-	# is deliberately excluded from the returned `rows` so its history/host
-	# survive until the confirmed quit actually runs _save_external_data;
-	# the handed-off Callable frees the UndoRedo and queues the host free
-	# once it has finished the edit, since UndoRedo is a plain Object and
-	# does not get released by scene-tree teardown on quit.
+	# The shutdown case stays pending: a stack-owned GSTCoordBlock, a Callable
+	# that performs the finish, and the save path are handed to the probe,
+	# which invokes the Callable and saves the stack inside its own
+	# _save_external_data. shutdown_row is excluded from the returned `rows`
+	# so its history/host survive until the confirmed quit runs
+	# _save_external_data; the Callable frees the UndoRedo and queues the
+	# host free after the finish, since UndoRedo is a plain Object not
+	# released by scene-tree teardown on quit.
 	var shutdown_stack: GSTStack = GSTStack.new()
 	var shutdown_layer: GSTLayer = GSTLayer.new()
 	var shutdown_coord: GSTCoordBlock = GSTCoordBlock.new()
@@ -787,10 +776,10 @@ func _start_pending_noop_grab(plugin: EditorPlugin, spin: Range) -> bool:
 func _force_finish_numeric(plugin: EditorPlugin, history: UndoRedo, target: Object, property_name: StringName, state: Dictionary, row: EditorProperty, boundary: String, pending_edit: LineEdit = null) -> void:
 	state["operations"].append("forced_finish")
 	if pending_edit != null and is_instance_valid(pending_edit) and pending_edit.is_inside_tree():
-		# Commit the pending native text (EditorSpinSlider::_value_focus_exited,
-		# Godot 4.4 editor/gui/editor_spin_slider.cpp calls _evaluate_input_text()
-		# before emitting value_focus_exited) before finalizing the history
-		# action, so a typed-but-unsubmitted value reaches the original target.
+		# release_focus commits the pending text before the history action is
+		# finalized: EditorSpinSlider::_value_focus_exited (Godot 4.4
+		# editor/gui/editor_spin_slider.cpp) calls _evaluate_input_text() before
+		# emitting value_focus_exited.
 		pending_edit.release_focus()
 		await _frames(plugin, 3)
 	_finish_native_interaction(history, target, property_name, state, row, boundary)
@@ -820,11 +809,11 @@ func _enter_rgb_popup_value(plugin: EditorPlugin, button: ColorPickerButton, hex
 
 func _force_close_color_popup(plugin: EditorPlugin, button: ColorPickerButton, state: Dictionary) -> void:
 	if button != null and button.get_popup().visible:
-		# Commit pending hex text before hiding. ColorPicker::_html_focus_exit
+		# Commit pending hex text before hiding: ColorPicker::_html_focus_exit
 		# (Godot 4.4 scene/gui/color_picker.cpp) applies the field only while
-		# the picker is visible in tree; after hide() it discards the text.
-		# EditorPropertyColor::_popup_closed then emits the one final
-		# property_changed(changing=false) because pick_color != last_color.
+		# the picker is visible in tree. EditorPropertyColor::_popup_closed then
+		# emits the final property_changed(changing=false) because
+		# pick_color != last_color.
 		var picker: ColorPicker = button.get_picker()
 		var focused: Control = picker.get_viewport().gui_get_focus_owner()
 		if focused is LineEdit and picker.is_ancestor_of(focused):

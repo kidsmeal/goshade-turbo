@@ -1,29 +1,16 @@
 @tool
 extends RefCounted
 
-## Phase 2 (docs/SHADER_TABS_reviewed-plan.md): standalone routing for
-## structural and native property edits. Phase 1's tabs_proof already proved
-## the native gesture mechanism itself (grabbed/ungrabbed/value_focus_entered/
-## value_focus_exited boundaries, the changing-flag fallback, forced-finish
-## ordering, and that a real mouse drag reaches those public EditorSpinSlider
-## signals) in isolation against synthetic proof targets and a standalone
-## UndoRedo built by hand. This selector proves the wiring phase 2 actually
-## adds: gst_inspector_column.gd's own connections from those same public
-## signals into GSTUndo, on real GSTLayer/GSTCoordBlock rows inside the real
-## production panel, landing in the real panel.get_watched_history().
-##
-## Real-mouse-driven checks (float and vector-x drags) push InputEventMouse*
-## through Input.parse_input_event (the full engine input path a real
-## hardware event takes) at the row's own global rect, with large per-step
-## motion so the first event alone clears EditorSpinSlider's own drag-start
-## threshold, and a bounded retry on the drag itself (never the assertion)
-## for this environment's residual mouse-capture flakiness. Text-focus
-## checks (real_text_focus, repeated_gestures, the forced-finish pending-text
-## checks) instead focus the row's own EditorSpinSlider directly and push a
-## real key event, which routes on Viewport key-focus rather than a
-## screen-position hit test, then type real characters: this reaches the
-## same real production wiring without depending on mouse/window state at
-## all (phase 2 review round 2 fix pass).
+## Smoke selector GST_EDITOR_SMOKE=tabs_native (dispatched by
+## tests/gst_editor_smoke.gd): native property-edit undo routing.
+## Drives real GSTLayer/GSTCoordBlock rows in the production
+## GSTInspectorColumn and asserts on panel.get_watched_history().
+## Mouse-driven checks push InputEventMouse* through Input.parse_input_event
+## at the row's global rect. Text-focus checks focus the row's
+## EditorSpinSlider and push key events, which route on Viewport key focus
+## rather than a screen-position hit test.
+## Prints one "SMOKE tabs_native_<item> PASS|FAIL <detail>" line per check
+## and "SMOKE SUMMARY pass=N fail=M"; exit code 1 on any failure.
 
 const HOST_SCENE_PATH: String = "res://tests/fixtures/shader_tabs_host.tscn"
 
@@ -63,12 +50,8 @@ func run(plugin: EditorPlugin) -> void:
 	for i: int in range(4):
 		await plugin.get_tree().process_frame
 
-	# Re-asserted before each of these (rather than relying on the one call
-	# above): the checks that already re-assert it right before their own
-	# interaction (rgb_popup, popup_focused_shortcut, forced_finish_undo/redo)
-	# reliably find a visible row; the ones that did not were observed
-	# resolving is_visible_in_tree() to false on an otherwise-valid,
-	# in-tree, focused EditorSpinSlider (phase 2 review round 2 fix pass).
+	# Without a re-assert directly before a check, is_visible_in_tree() can
+	# resolve false on an in-tree, focused EditorSpinSlider.
 	await _reassert_main_screen(plugin)
 	await _check_real_float_drag(plugin, panel, inspector, history, fbm)
 	await _reassert_main_screen(plugin)
@@ -115,20 +98,14 @@ func _reassert_main_screen(plugin: EditorPlugin) -> void:
 	await _frames(plugin, 2)
 
 
-## Item: an actual multi-motion mouse drag on the real EditorSpinSlider
-## applies more than one distinct intermediate value live (recorded straight
-## off the row's own EditorProperty.property_changed signal, the same
-## authoritative source gst_inspector_column.gd itself listens to -- not
-## inferred from a single before/after resource read, which a drag that
-## silently failed to register at all could satisfy vacuously), then
-## registers exactly one undoable action whose undo/redo exactly restores
-## the original/final values. Retries the drag itself (never the assertion)
-## up to 3 times: real mouse capture on a freshly opened, automated editor
-## window is inconsistent in this environment independent of the row's own
-## wiring. Does not call Input.warp_mouse: EditorSpinSlider's own drag
-## handling warps the real OS cursor to sustain an infinite drag, and an
-## external warp call here fights that internal mechanism and can prevent
-## the drag from registering at all.
+## Asserts a multi-motion mouse drag on the gain EditorSpinSlider applies
+## at least 2 distinct intermediate values (recorded from
+## EditorProperty.property_changed) and registers exactly one action whose
+## undo/redo restore the original/final values.
+## Retries the drag up to 3 times; mouse capture on a freshly opened editor
+## window is inconsistent in this environment.
+## Does not call Input.warp_mouse: EditorSpinSlider warps the OS cursor
+## during a drag, and an external warp can prevent the drag from registering.
 func _check_real_float_drag(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	if property != null:
@@ -169,8 +146,6 @@ func _check_real_float_drag(plugin: EditorPlugin, panel: GSTMainPanel, inspector
 	_check("real_float_drag_undo_redo", undo_ok and redo_ok, "undo_ok=%s redo_ok=%s" % [undo_ok, redo_ok])
 
 
-## Distinct values (is_equal_approx-grouped) among the values recorded from
-## a real drag's own property_changed emissions.
 func _distinct_value_count(values: Array) -> int:
 	var distinct: Array = []
 	for value: Variant in values:
@@ -187,13 +162,8 @@ func _distinct_value_count(values: Array) -> int:
 	return distinct.size()
 
 
-## Item: two later gestures on the same control each restore their own first
-## value separately -- they must not merge into one action. Drives the exact
-## public boundary signals a real non-drag grab followed by typed entry
-## produces (gst_inspector_column.gd's own connections, decision superseding
-## 20), proving the wiring without depending on synthetic mouse-capture
-## timing (already proven reachable from a real drag in _check_real_float_drag
-## and in phase 1's tabs_proof).
+## Asserts two typed-entry gestures on the same control register two
+## separate actions, each undone to its own prior value.
 func _check_repeated_gestures(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var spin: EditorSpinSlider = _find_range(property) as EditorSpinSlider
@@ -225,16 +195,10 @@ func _check_repeated_gestures(plugin: EditorPlugin, panel: GSTMainPanel, inspect
 	_check("repeated_gestures_separate_actions", two_actions and distinct and undo_to_first and undo_to_original and redo_to_second, "two_actions=%s after_first=%s after_second=%s undo_to_first=%s undo_to_original=%s redo_to_second=%s" % [two_actions, after_first, after_second, undo_to_first, undo_to_original, redo_to_second])
 
 
-## Item: a real Vector2 field commit (coord.offset's x component only)
-## applies 2 distinct intermediate values live, registers one action, and
-## preserves the untouched y component (the same _merge_component_value
-## path a real per-axis EditorSpinSlider drag uses).
-## Drives a real mouse drag on the offset row's own x-axis EditorSpinSlider
-## sub-widget (EditorPropertyVectorN's spin_sliders[0]; editor/
-## editor_properties_vector.cpp confirms it emits property_changed with the
-## full merged Vector2 and field "x"), the same real gesture
-## _check_real_float_drag exercises, rather than synthetic emit_changed
-## calls (phase 2 review round 2 fix pass).
+## Asserts a mouse drag on the coord.offset row's x-axis EditorSpinSlider
+## (EditorPropertyVectorN spin_sliders[0], which emits property_changed with
+## the full merged Vector2 and field "x") applies at least 2 distinct
+## intermediate values, registers one action, and preserves the y component.
 func _check_vector_field(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_coord_editor_property(&"offset")
 	_check("vector_row_present", property != null, "coord offset row present=%s" % [property != null])
@@ -279,13 +243,9 @@ func _check_vector_field(plugin: EditorPlugin, panel: GSTMainPanel, inspector: G
 	_check("vector_field_undo_redo", undo_ok and redo_ok, "undo_ok=%s redo_ok=%s" % [undo_ok, redo_ok])
 
 
-## Item: a real non-drag grab (a mouse press/release with no motion in
-## between -- EditorSpinSlider::_grab_end calls _focus_entered() directly for
-## that case, per phase 1's tabs_proof, which shows and focuses the internal
-## LineEdit via a deferred call) followed by real typed keystrokes and a real
-## Enter is one interaction, finished once, exercising actual numeric focus
-## rather than synthetic grabbed/value_focus_entered/value_focus_exited
-## signal emission (phase 2 review round 1 fix pass).
+## Asserts a text entry on the gain row (ui_accept key focuses the internal
+## LineEdit, typed characters, Enter) registers exactly one action with
+## correct undo/redo.
 func _check_real_text_focus(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var spin: EditorSpinSlider = _find_range(property) as EditorSpinSlider
@@ -326,16 +286,13 @@ static func _find_focused_line_edit(node: Node) -> LineEdit:
 	return null
 
 
-## Item: a grab released with no motion and no typed value is a discrete
-## no-op -- it must register no action and leave the stack's own serialized
-## content exactly unchanged (fix pass, round 3 item 3: an action-count check
-## alone cannot catch a live intermediate write during the gesture that
-## rewrote an explicit key with a value GSTUndo.values_equal's approximate
-## comparison still reads as unchanged). "gain" already carries an explicit
-## params key from _check_real_text_focus's own commit just before this, so
-## this exercises the existing-key case specifically. Uses the same path for
-## both snapshots (see _stack_snapshot): the reload -- not the raw file --
-## is what makes this exact.
+## Asserts a grab released with no motion and no typed value registers no
+## action and leaves the stack's serialized content unchanged.
+## An action-count check alone misses a live intermediate write that
+## rewrote an explicit key with a value GSTUndo.values_equal reads as
+## unchanged; _stack_snapshot's exact comparison catches it.
+## "gain" carries an explicit params key from _check_real_text_focus's
+## commit, so this exercises the existing-key case.
 func _check_noop_gesture(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var spin: EditorSpinSlider = _find_range(property) as EditorSpinSlider
@@ -352,11 +309,9 @@ func _check_noop_gesture(plugin: EditorPlugin, panel: GSTMainPanel, inspector: G
 	_check("noop_gesture_no_action", history.get_history_count() == actions_before and had_key_before and serialization_unchanged, "actions=%d->%d had_key_before=%s serialization_unchanged=%s" % [actions_before, history.get_history_count(), had_key_before, serialization_unchanged])
 
 
-## Item (fix pass, round 3 item 3): opening a native color popup and closing
-## it again without ever typing or dragging inside it is the same kind of
-## no-op as the numeric case above, exercised through about_to_popup/
-## popup_closed's own begin/finish bookkeeping instead of grabbed/ungrabbed --
-## must register no action and leave serialized content exactly unchanged.
+## Asserts opening and closing a color popup with no edit (about_to_popup/
+## popup_closed begin/finish path) registers no action and leaves serialized
+## content unchanged.
 func _check_color_popup_unchanged(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -384,20 +339,17 @@ func _check_color_popup_unchanged(plugin: EditorPlugin, panel: GSTMainPanel, ins
 	_check("color_popup_unchanged_serialization", history.get_history_count() == actions_before and serialization_unchanged, "actions=%d->%d serialization_unchanged=%s" % [actions_before, history.get_history_count(), serialization_unchanged])
 
 
-## Item: a real, intentional color edit whose final value lands within one
-## 1/255 hex step of the original must still register as one action and be
-## preserved, not discarded by _gesture_values_equal's own quantization
-## tolerance (that tolerance exists only to catch a popup opened and closed
-## with no real edit at all). Types "7f7f7f" -- the manifest default
-## Color(0.5, 0.5, 0.5, 1.0)'s other nearest 8-bit hex grid neighbor
-## (0x7f/255 = 0.498039..., versus 0x80/255 = 0.501960... on the other side
-## of the same exact float) -- and commits it with a real Enter, the same
-## organic commit path _check_rgb_popup already uses, so this row's own live
-## color_changed is never routed through this column's own forced-finish
-## release_focus()/hide() calls. Picks this grid neighbor rather than the
-## popup's own already-displayed "808080": ColorPicker's own hex-commit
-## skips re-applying a submitted string identical to what it already shows,
-## so that string would never reach property_changed/color_changed at all.
+## Asserts a color edit whose final value is within one 1/255 step of the
+## original still registers one action and is preserved;
+## _gesture_values_equal's quantization tolerance must only discard a popup
+## opened and closed with no edit.
+## Types "7f7f7f": the nearest 8-bit neighbor below the manifest default
+## Color(0.5, 0.5, 0.5, 1.0) (0x7f/255 = 0.498039). "808080" is what the
+## popup already displays, and ColorPicker's hex commit skips a submitted
+## string identical to the displayed one, so it would never reach
+## property_changed.
+## Commits with Enter, so color_changed is not routed through the column's
+## forced-finish release_focus()/hide() path.
 func _check_color_popup_subunit_edit_preserved(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -442,13 +394,12 @@ func _check_color_popup_subunit_edit_preserved(plugin: EditorPlugin, panel: GSTM
 	_check("color_popup_subunit_edit_undo_redo", undo_ok and redo_ok, "undo_ok=%s redo_ok=%s" % [undo_ok, redo_ok])
 
 
-## Item: the popup's own hex/RGB LineEdit keyboard-shortcut handler
-## (gst_inspector_column.gd's _connect_color_popup_field_shortcuts,
-## connected on every about_to_popup) must read exactly one connection
-## immediately after the first open, and exactly one after each later
-## reopen of the same popup -- checking only after the last of several
-## opens cannot distinguish "connected once, first time" from "connected
-## once, only on the last attempt."
+## Asserts gst_inspector_column.gd's _connect_color_popup_field_shortcuts
+## (connected on every about_to_popup) leaves exactly one gui_input
+## connection on the hex LineEdit after the first open and after each reopen.
+## Checked after each open: a single check after the last open cannot
+## distinguish one connection from the first open from one made only on the
+## last.
 func _check_color_popup_field_shortcut_single_connection(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -483,20 +434,12 @@ func _check_color_popup_field_shortcut_single_connection(plugin: EditorPlugin, p
 		await _frames(plugin, 2)
 
 
-## Exact serialization for the no-op checks above (fix pass, round 3 item 3):
-## saves the open stack to `path`, reloads it, and returns a Dictionary of
-## every field the .tres schema actually carries (docs/SHADER_TABS_reviewed-
-## plan.md Cross-cutting "Serialization and recovery format": stack/header
-## schema, stable layer ids, parameter keys, shader text contracts), compared
-## by callers with plain `==` (exact Variant equality, not
-## GSTUndo.values_equal's approximate one): a no-op whose live intermediate
-## write left a value that differs from the original in its low bits but
-## still reads as unchanged must still be caught here. Not a raw byte-text
-## comparison of the saved file: ResourceSaver.save assigns each
-## ext_resource/sub_resource a fresh random id suffix on every save
-## (confirmed against a real recipe .tres's own `id="1_xxxxx"` fields), so two
-## saves of the identical, unchanged stack are never byte-identical even
-## though their actual data is.
+## Saves the open stack to `path`, reloads it, and returns every serialized
+## field (stack header, layer ids, params, slots, coord) as a Dictionary
+## for exact `==` comparison.
+## Not a byte comparison of the saved file: ResourceSaver.save assigns a
+## fresh random id suffix to each ext_resource/sub_resource on every save,
+## so two saves of an unchanged stack are never byte-identical.
 func _stack_snapshot(panel: GSTMainPanel, path: String) -> Dictionary:
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
@@ -541,12 +484,9 @@ func _coord_snapshot(coord: GSTCoordBlock) -> Variant:
 	}
 
 
-## Item: a real numeric value typed but never submitted (no Enter, no focus
-## change -- still genuinely pending when this starts) is delivered by
-## panel._finish_pending_edits() alone, the exact shared boundary every
-## forced-finish call site here awaits and the one phase 7 will reuse for
-## the confirmed-shutdown save callback (phase 2 review round 2 fix pass:
-## "shutdown-boundary coverage is absent").
+## Asserts a typed but unsubmitted numeric value (no Enter, no focus change)
+## is delivered by panel._finish_pending_edits() alone, the shared boundary
+## every forced-finish call site awaits.
 func _check_forced_finish_pending_text(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var spin: EditorSpinSlider = _find_range(property) as EditorSpinSlider
@@ -563,11 +503,8 @@ func _check_forced_finish_pending_text(plugin: EditorPlugin, panel: GSTMainPanel
 		_check("forced_finish_pending_text", false, "no focused numeric LineEdit found after a real ui_accept key press")
 		return
 	await _type_into_line_edit(plugin, line_edit, "0.44")
-	# A delivery miss (the typed text never reaching this LineEdit at all)
-	# would leave fbm.get("gain") at its pre-edit value, which also satisfies
-	# "still pending" -- indistinguishable from a genuine pending edit unless
-	# the field's own text is checked directly, so a dropped-delivery FAIL
-	# cannot silently read as the same result as a correctly-pending one.
+	# line_edit.text is asserted directly: a typing miss leaves fbm.get("gain")
+	# at its pre-edit value, which also satisfies pending_before_finish.
 	var typed_text: String = line_edit.text
 	var text_delivered: bool = typed_text == "0.44"
 	var pending_before_finish: bool = not is_equal_approx(float(fbm.get("gain")), 0.44)
@@ -586,9 +523,8 @@ func _check_forced_finish_pending_text(plugin: EditorPlugin, panel: GSTMainPanel
 	_check("forced_finish_pending_text_undo_redo", undo_ok and is_equal_approx(float(fbm.get("gain")), 0.44), "undo_ok=%s" % undo_ok)
 
 
-## Item: switching the selected layer mid-drag (a rebind) finishes the
-## pending gesture on the original layer first; the new selection starts
-## clean.
+## Asserts switching the selected layer mid-drag finishes the pending
+## gesture on the original layer before the rebind.
 func _check_forced_finish_rebind(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var spin: EditorSpinSlider = _find_range(property) as EditorSpinSlider
@@ -607,12 +543,8 @@ func _check_forced_finish_rebind(plugin: EditorPlugin, panel: GSTMainPanel, insp
 	await _frames(plugin, 3)
 
 
-## Item: a real numeric value typed but never submitted (no Enter, no focus
-## exit -- genuinely pending, unevaluated text, not an already-applied
-## changing=true value) must still reach the resource, and the saved file,
-## before Save returns (phase 2 review round 2 fix pass: a forced-save check
-## that only re-saves a value the model already holds does not establish
-## pending-text delivery).
+## Asserts a typed but unsubmitted numeric value reaches the resource and
+## the saved file before panel.save_to_path returns.
 func _check_forced_finish_save(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var spin: EditorSpinSlider = _find_range(property) as EditorSpinSlider
@@ -627,9 +559,7 @@ func _check_forced_finish_save(plugin: EditorPlugin, panel: GSTMainPanel, inspec
 		_check("forced_finish_before_save", false, "no focused numeric LineEdit found after a real ui_accept key press")
 		return
 	await _type_into_line_edit(plugin, line_edit, "0.28")
-	# See _check_forced_finish_pending_text's own comment: the field's own
-	# text is checked directly so a delivery miss cannot read as the same
-	# failure as a genuinely dropped forced-finish flush.
+	# line_edit.text asserted directly; see _check_forced_finish_pending_text.
 	var typed_text: String = line_edit.text
 	var text_delivered: bool = typed_text == "0.28"
 	var pending_before_save: bool = not is_equal_approx(float(fbm.get("gain")), 0.28)
@@ -648,12 +578,9 @@ func _check_forced_finish_save(plugin: EditorPlugin, panel: GSTMainPanel, inspec
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 
 
-## Item: a real numeric value typed but never submitted, then Save As's own
-## file-selected handler (the same handler the real Save As dialog invokes,
-## per tests/gst_editor_smoke.gd's own precedent of calling it directly),
-## must still finish the gesture and write the delivered value (phase 2
-## review round 2 fix pass: same pending-text requirement as
-## forced_finish_before_save above).
+## Asserts a typed but unsubmitted numeric value reaches the resource and
+## the saved file through panel._on_save_as_file_selected, the handler the
+## Save As dialog invokes.
 func _check_forced_finish_save_as(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var spin: EditorSpinSlider = _find_range(property) as EditorSpinSlider
@@ -668,9 +595,7 @@ func _check_forced_finish_save_as(plugin: EditorPlugin, panel: GSTMainPanel, ins
 		_check("forced_finish_before_save_as", false, "no focused numeric LineEdit found after a real ui_accept key press")
 		return
 	await _type_into_line_edit(plugin, line_edit, "0.71")
-	# See _check_forced_finish_pending_text's own comment: the field's own
-	# text is checked directly so a delivery miss cannot read as the same
-	# failure as a genuinely dropped forced-finish flush.
+	# line_edit.text asserted directly; see _check_forced_finish_pending_text.
 	var typed_text: String = line_edit.text
 	var text_delivered: bool = typed_text == "0.71"
 	var pending_before_save: bool = not is_equal_approx(float(fbm.get("gain")), 0.71)
@@ -689,9 +614,8 @@ func _check_forced_finish_save_as(plugin: EditorPlugin, panel: GSTMainPanel, ins
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 
 
-## Item: starting a drag, then triggering keyboard Undo, finishes the
-## gesture first, so the undo it performs is of the just-finished action, not
-## of whatever preceded it, and the final dragged value is never lost.
+## Asserts keyboard Undo during a drag finishes the gesture first, so the
+## undo applies to the just-finished action.
 func _check_forced_finish_undo(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var spin: EditorSpinSlider = _find_range(property) as EditorSpinSlider
@@ -714,25 +638,13 @@ func _check_forced_finish_undo(plugin: EditorPlugin, panel: GSTMainPanel, inspec
 	await _frames(plugin, 2)
 
 
-## Item: finishing a pending drag while a redo is queued commits it as a new
-## action, which discards that stale redo per UndoRedo's own create_action
-## semantics -- so it can never silently overwrite the value the drag just
-## landed. Drives a real Ctrl+Shift+Z key event (phase 2 review round 2 fix
-## pass: previously called panel._finish_pending_edits() directly, which the
-## reviewer flagged as not exercising the real shortcut's own keyboard path)
-## with the same retry pattern _check_forced_finish_undo's real plain Ctrl+Z
-## already uses successfully; unlike the color-popup case elsewhere in this
-## file, no embedded subwindow is open here, so this key event reaches
-## gst_main_panel._input() through the normal root-viewport path.
-##
-## Asserts on get_current_action(), not get_history_count(): a commit
-## made right after an undo first discards that undo's now-stale redo
-## array entry (UndoRedo::create_action's own discard_redo), then appends
-## the new one, so the total array size can stay unchanged even though a
-## real new action replaced the discarded one (docs/EDITOR_SMOKE.md
-## "Shader tabs phase 2" root cause for an identical `randomize_undo`
-## measurement bug; get_current_action() is the position, which does
-## advance).
+## Asserts finishing a pending drag while a redo is queued commits a new
+## action and discards the stale redo (UndoRedo::create_action semantics).
+## Drives a real Ctrl+Shift+Z; no embedded subwindow is open, so the key
+## reaches gst_main_panel._input() through the root viewport.
+## Asserts on get_current_action(), not get_history_count(): a commit after
+## an undo first discards the stale redo entry, then appends, so the array
+## size can stay unchanged while the position advances.
 func _check_forced_finish_redo(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var spin: EditorSpinSlider = _find_range(property) as EditorSpinSlider
@@ -766,24 +678,19 @@ func _check_forced_finish_redo(plugin: EditorPlugin, panel: GSTMainPanel, inspec
 		await _frames(plugin, 2)
 
 
-## Item: a late signal delivered from a row captured just before a rebind --
-## the exact instant a real EditorSpinSlider mid-air during a real rebind
-## could still emit one -- must never write to fbm nor register a history
-## action, because gst_inspector_column.gd's own rebuild already erased that
-## row's _property_rows entry synchronously (before the freed Nodes
-## themselves are actually destroyed). Delivers the signal in the same call
-## frame as the rebind, before any await lets the queued frees run, so the
-## captured editor/spin are still valid Objects (is_instance_valid) able to
-## actually emit -- proving the rejection comes from the dictionary lookup,
-## not from the signal never reaching anything.
+## Asserts a signal emitted from a row captured before a rebind writes
+## nothing to fbm and registers no action: gst_inspector_column.gd's rebuild
+## erases the row's _property_rows entry synchronously, before the freed
+## Nodes are destroyed.
+## The signal is emitted in the same call frame as the rebind, before any
+## await runs the queued frees, so the captured editor/spin are still valid
+## and the rejection comes from the dictionary lookup.
 func _check_stale_target_rejection(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var stale_property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var stale_spin: EditorSpinSlider = _find_range(stale_property) as EditorSpinSlider
 	var fbm_value_before: float = float(fbm.get("gain"))
-	# add_layer_by_entry_id already selects its new layer (rebinding the
-	# inspector column and rebuilding rows), registering its own legitimate
-	# add-layer action; history_before is captured after that settles, so
-	# only the stale signal delivered below is under measurement.
+	# add_layer_by_entry_id selects the new layer (rebind) and registers its
+	# own add action; history_before is captured after it.
 	var other: GSTLayer = panel.get_stack_list().add_layer_by_entry_id("generative/hash")
 	var history_before: int = history.get_history_count()
 	var late_signal_reachable: bool = stale_property != null and is_instance_valid(stale_property) and stale_spin != null and is_instance_valid(stale_spin)
@@ -802,11 +709,9 @@ func _check_stale_target_rejection(plugin: EditorPlugin, panel: GSTMainPanel, in
 	_check("stale_target_rebinds_on_reselect", restored_property != null and is_equal_approx(float(fbm.get("gain")), fbm_value_before), "restored=%s value=%s" % [restored_property != null, fbm.get("gain")])
 
 
-## Item: a native RGB popup's final property_changed(changing=false) on close
-## finishes once, undoes to the original color, and redoes to the final one
-## (Color center: color/palette's "a" param). Drives the real popup through
-## its actual hex LineEdit; the popup does not depend on the outer dock's
-## mouse-capture path _check_real_float_drag works around.
+## Asserts a color popup's final property_changed(changing=false) on close
+## registers one action with correct undo/redo (color/palette "a").
+## Drives the popup through its hex LineEdit.
 func _check_rgb_popup(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -829,14 +734,8 @@ func _check_rgb_popup(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTI
 	var hex_edit: LineEdit = _find_hex_line_edit(button.get_picker())
 	if hex_edit != null:
 		await _replace_line_edit(plugin, hex_edit, "3366cc")
-	# Release the hex LineEdit's own focus before hiding, matching
-	# gst_inspector_column.gd's own _force_close_color_popups (the
-	# production close path _check_popup_focused_shortcut below drives
-	# through finish_pending_edits), and only hide if Godot has not
-	# already closed the popup on its own. Neither this nor the
-	# focus-release below fully resolved the "rgb_popup_undo_redo" flake
-	# documented as unresolved in docs/EDITOR_SMOKE.md for this fix pass;
-	# both are still correct practice and kept as partial hardening.
+	# Release hex focus before hiding, matching gst_inspector_column.gd's
+	# _force_close_color_popups; hide only if the popup is still open.
 	if hex_edit != null and hex_edit.has_focus():
 		hex_edit.release_focus()
 		await _frames(plugin, 2)
@@ -858,12 +757,9 @@ func _check_rgb_popup(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTI
 	_check("rgb_popup_undo_redo", undo_ok and redo_ok, "undo_ok=%s redo_ok=%s" % [undo_ok, redo_ok])
 
 
-## Opens property's own ColorPickerButton popup and types a pending
-## (unsubmitted -- no Enter) hex value into its hex LineEdit, the same real
-## popup + real keystrokes technique _check_rgb_popup uses above, factored
-## out for the forced-boundary color checks below (fix pass, round 3 item 2:
-## color Save/Save As/rebind boundary coverage was absent).
-## {"ok", "button", "hex_edit"}.
+## Opens the ColorPickerButton popup for property_name on layer and types
+## hex_text into its hex LineEdit without submitting (no Enter).
+## Returns {"ok", "button", "hex_edit"}.
 func _start_pending_color_edit(plugin: EditorPlugin, inspector: GSTInspectorColumn, layer: GSTLayer, property_name: StringName, hex_text: String) -> Dictionary:
 	var property: EditorProperty = inspector.find_editor_property(property_name, layer)
 	if property != null:
@@ -883,10 +779,8 @@ func _start_pending_color_edit(plugin: EditorPlugin, inspector: GSTInspectorColu
 	return {"ok": true, "button": button, "hex_edit": hex_edit}
 
 
-## Item (fix pass, round 3 item 2): a pending, unsubmitted native color popup
-## hex edit must still finish and reach Save's own write to the original
-## edited layer instance, the same color forced-boundary coverage the
-## numeric _check_forced_finish_save above already proves.
+## Asserts a pending, unsubmitted hex edit reaches the original layer
+## instance and the saved file before panel.save_to_path returns.
 func _check_forced_finish_color_save(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -916,10 +810,8 @@ func _check_forced_finish_color_save(plugin: EditorPlugin, panel: GSTMainPanel, 
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 
 
-## Item (fix pass, round 3 item 2): same pending-color-edit requirement as
-## above, through Save As's own file-selected handler (the same handler the
-## real Save As dialog invokes, per this file's own precedent for the
-## numeric case in _check_forced_finish_save_as).
+## Same as _check_forced_finish_color_save, through
+## panel._on_save_as_file_selected.
 func _check_forced_finish_color_save_as(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -949,12 +841,10 @@ func _check_forced_finish_color_save_as(plugin: EditorPlugin, panel: GSTMainPane
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 
 
-## Item (fix pass, round 3 item 2): switching the selected layer while a
-## native color popup holds a pending hex edit finishes it on the original
-## layer instance first -- same forced-finish-before-rebind requirement
-## _check_forced_finish_rebind proves for a numeric drag, isolated to just
-## the finish's own action (actions_before_switch is captured after adding
-## the second layer's own add action, so + 1 measures only the color commit).
+## Asserts switching the selected layer while a color popup holds a pending
+## hex edit finishes it on the original layer first.
+## actions_before_switch is captured after the second layer's add action, so
+## + 1 measures only the color commit.
 func _check_forced_finish_color_rebind(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -977,17 +867,12 @@ func _check_forced_finish_color_rebind(plugin: EditorPlugin, panel: GSTMainPanel
 	await _frames(plugin, 3)
 
 
-## Item (phase 8 review round 2 fix 3): a forced-finish release_focus()/
-## hide() previously marked every resulting color-field commit as
-## suppress_live_edit unconditionally, so a genuine pending hex edit within
-## one 1/255 step of the row's own current value stayed genuine_edit=false
-## and could be discarded by _gesture_values_equal's own quantization
-## tolerance instead of committed (gst_inspector_column.gd
-## _flush_pending_row_text/_force_close_color_popups/_on_color_live_changed).
-## Never submits the typed text (no Enter): the only path that can deliver
-## it is a forced finish, exercised here through Save, a document-switch
-## rebind, and a real keyboard Undo in turn, each against a freshly typed
-## sub-1/255 neighbor of whatever the row currently displays.
+## Asserts a forced finish (Save, document-switch rebind, keyboard Undo)
+## commits a pending hex edit within one 1/255 step of the row's current
+## value instead of discarding it via _gesture_values_equal's quantization
+## tolerance (gst_inspector_column.gd _flush_pending_row_text/
+## _force_close_color_popups/_on_color_live_changed).
+## Never submits the typed text; only the forced finish can deliver it.
 func _check_color_popup_subunit_pending_forced_finish(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -1062,45 +947,23 @@ func _check_color_popup_subunit_pending_forced_finish(plugin: EditorPlugin, pane
 		await _frames(plugin, 2)
 
 
-## Item (fix pass, round 3 item 1): a real Ctrl+Z sent through the root
-## viewport, while a native color popup currently holds embedded-subwindow
-## focus and a hex edit is genuinely pending (typed, not submitted), reaches
-## gst_inspector_column.gd's own popup-local window_input handler and finishes
-## that edit into one action, then undoes it -- proving the real production
-## keyboard path, not a direct panel._finish_pending_edits() call standing in
-## for it (the reviewer's own round 3 finding: the direct call at this site
-## previously proved nothing about the popup's own key-event wiring).
-##
-## Confirmed against the engine source, not assumed: Viewport::push_input
-## (scene/main/viewport.cpp) forwards any event -- key or mouse -- to
+## Asserts Ctrl+Z, delivered while a color popup holds focus with a pending
+## hex edit, reaches gst_inspector_column.gd's popup window_input handler,
+## commits the edit as one action, and undoes it.
+## Viewport::push_input (scene/main/viewport.cpp) forwards any event to
 ## gui.subwindow_focused->_window_input(event) and returns before the root
-## viewport's own per-viewport "_vp_input<id>" group (gst_main_panel among
-## them) is ever notified, whenever an embedded subwindow (this popup)
-## currently holds focus; Window::_window_input (scene/main/window.cpp)
-## emits its own window_input signal before calling push_input() on itself,
-## i.e. before the popup's own GUI dispatch could let the hex LineEdit
-## consume the same Ctrl+Z as its built-in text-undo. Window.popup()
-## registers the window as the embedder's focused embedded subwindow
-## automatically (Viewport::_sub_window_register), so no extra focus call is
-## needed beyond the popup already being open with hex_edit focused.
-##
-## Item (review round 4 fix-now): the redo half below previously called
-## history.redo() directly, proving nothing about the popup's own ui_redo
-## routing (Ctrl+Shift+Z could have been silently misrouted to
-## _apply_keyboard_undo_redo(false) without this test noticing, since
-## history.redo() would still land on final_color regardless). It now
-## reopens the same color popup and holds focus in its hex field via
-## _start_pending_color_edit(..., "") -- no characters typed, so
-## about_to_popup's own state["original"] == state["final"] capture makes
-## this a genuine no-op gesture (gst_inspector_column.gd's own values_equal
-## check skips registering an action), leaving the redo left by the undo
-## above untouched -- then pushes a real Ctrl+Shift+Z through the popup's
-## own window_input while it holds embedded-subwindow focus. Asserting
-## get_history_count() is unchanged from immediately before this reopen
-## proves the position only advanced because _apply_keyboard_undo_redo(true)
-## actually called _undo_redo.redo() (a genuine redo), not because finishing
-## a pending edit pushed a coincidental new action that happened to match
-## final_color.
+## viewport's "_vp_input<id>" group (gst_main_panel among them) is notified
+## while an embedded subwindow holds focus. Window::_window_input
+## (scene/main/window.cpp) emits window_input before push_input() on itself,
+## so the hex LineEdit cannot consume the Ctrl+Z as text-undo first.
+## Window.popup() registers the window as the focused embedded subwindow
+## (Viewport::_sub_window_register); no extra focus call is needed.
+## The redo half reopens the popup with _start_pending_color_edit(..., "")
+## (no typed characters, so about_to_popup captures original == final and
+## values_equal registers no action, leaving the redo intact), then pushes
+## Ctrl+Shift+Z through the popup's window_input. get_history_count()
+## unchanged from before the reopen proves the position advanced by
+## _apply_keyboard_undo_redo(true) calling redo(), not by a new commit.
 func _check_popup_focused_shortcut(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, stack_list: GSTStackList) -> void:
 	EditorInterface.set_main_screen_editor("GoShade Turbo")
 	var palette: GSTLayer = stack_list.add_layer_by_entry_id("color/palette")
@@ -1119,23 +982,15 @@ func _check_popup_focused_shortcut(plugin: EditorPlugin, panel: GSTMainPanel, in
 	var focused: Control = hex_edit.get_viewport().gui_get_focus_owner()
 	var owns_focus_ok: bool = inspector.owns_popup_focus(focused)
 	var final_color: Color = Color(0x11 / 255.0, 0x22 / 255.0, 0x33 / 255.0, 1.0)
-	# Delivered to the popup's own Window, not the root viewport: a real OS
-	# keystroke is routed to whichever window currently holds focus, and
-	# Godot 4.6.2/4.7 (unlike 4.4) drop a root-viewport push entirely while
-	# this native, non-embedded popup subwindow holds it. Window extends
-	# Viewport, so the identical push_input() call is correct
-	# both here and if the popup were instead embedded into the root
-	# viewport (single_window_mode), where popup.get_window_id() and
-	# push_input() resolve to that same embedded configuration.
+	# Delivered to the popup's Window, not the root viewport: Godot 4.6.2/4.7
+	# (unlike 4.4) drop a root-viewport push while a native, non-embedded
+	# popup holds focus. Window extends Viewport, so push_input() is the same
+	# call when the popup is embedded (single_window_mode).
 	var popup: Window = button.get_popup()
 	var attempts: int = 0
-	# Loops on get_history_count(), not get_current_action(): committing the
-	# pending edit then immediately undoing it (this function's own expected
-	# outcome) nets back to position_before, indistinguishable from "nothing
-	# happened yet" if the loop condition read position instead -- a second,
-	# spurious Ctrl+Z would then undo the action before this one. The total
-	# array size only ever grows on a genuine commit, regardless of any undo
-	# that follows it.
+	# Loops on get_history_count(), not get_current_action(): commit then undo
+	# nets the position back to position_before, and a second Ctrl+Z would
+	# undo the preceding action. The array size grows only on a commit.
 	while attempts < 5 and history.get_history_count() == actions_before:
 		attempts += 1
 		if is_instance_valid(hex_edit):
@@ -1157,13 +1012,9 @@ func _check_popup_focused_shortcut(plugin: EditorPlugin, panel: GSTMainPanel, in
 		return
 	var redo_button: ColorPickerButton = pending_redo["button"]
 	var redo_hex_edit: LineEdit = pending_redo["hex_edit"]
-	# Same popup-viewport delivery as the undo half above, not the root
-	# viewport, for the identical reason.
 	var redo_popup: Window = redo_button.get_popup()
 	var redo_attempts: int = 0
-	# Genuine redo advances the position (unlike the undo case above's
-	# commit-then-undo, which nets back to the same position), so this loops
-	# on get_current_action() the same way _check_forced_finish_redo does.
+	# A redo advances the position, so this loops on get_current_action().
 	while redo_attempts < 5 and history.get_current_action() == position_before:
 		redo_attempts += 1
 		if is_instance_valid(redo_hex_edit):
@@ -1177,15 +1028,13 @@ func _check_popup_focused_shortcut(plugin: EditorPlugin, panel: GSTMainPanel, in
 	_check("popup_focused_shortcut_redo", redo_pending_before and redo_landed and redo_value_ok and redo_popup_closed, "attempts=%d redo_pending_before=%s position=%d->%d history_count=%d->%d color=%s popup_visible=%s" % [redo_attempts, redo_pending_before, position_before, history.get_current_action(), redo_history_count_before, history.get_history_count(), palette.get(&"a"), is_instance_valid(redo_button) and redo_button.get_popup().visible])
 
 
-## Item: undoing a property edit that had no prior explicit params key
-## reverts the read value back to the manifest default and, per fix pass 1,
-## reverts the params key back to fully absent (not an explicit entry that
-## merely equals the default) -- the dirty fingerprint includes serialized
-## params keys, so leaving one behind after undo would change it even
-## though the read value is unchanged. Also proves a no-op gesture (a real
-## drag that returns to its own original absent-backed value) restores that
-## same absence, even though the live intermediate mutation wrote an
-## explicit key along the way.
+## Asserts undoing an edit to a property with no prior explicit params key
+## restores the manifest default and removes the params key entirely: the
+## dirty fingerprint includes serialized params keys, so an explicit entry
+## equal to the default would change it.
+## Also asserts a no-op gesture returning to the absent-backed original
+## restores the absence even though the live intermediate write created an
+## explicit key.
 func _check_implicit_default(plugin: EditorPlugin, panel: GSTMainPanel, inspector: GSTInspectorColumn, history: UndoRedo, fbm: GSTLayer) -> void:
 	var octaves_property: EditorProperty = inspector.find_editor_property(&"octaves", fbm)
 	var octaves_spin: EditorSpinSlider = _find_range(octaves_property) as EditorSpinSlider
@@ -1218,15 +1067,12 @@ func _check_implicit_default(plugin: EditorPlugin, panel: GSTMainPanel, inspecto
 	_check("noop_gesture_restores_param_absence", noop_no_action and noop_absence_restored, "actions=%d->%d value=%s key_present_after=%s" % [noop_actions_before, history.get_history_count(), fbm.get("octaves"), fbm.params.has("octaves")])
 
 
-## Item: keyboard Undo/Redo is scoped to GoShade focus. Pressed with focus
-## inside GoShade, it drives panel.get_watched_history() only; pressed with
-## focus outside GoShade (in a real host scene), it must never touch
-## panel.get_watched_history(), and the host scene's own Undo must never
-## touch it either.
+## Asserts keyboard Undo/Redo is scoped to GoShade focus: with focus in a
+## host scene, neither the host scene's Undo nor GoShade's Redo touches the
+## other's history.
 func _check_host_scene_isolation(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo) -> void:
-	# A real user operating the host scene has already clicked into it,
-	# moving GUI focus away from whatever GoShade row it last held (Godot
-	# does not clear focus on its own when an ancestor becomes inactive).
+	# Godot does not clear GUI focus when an ancestor becomes inactive;
+	# release the GoShade row's focus before opening the host scene.
 	var stale_focus: Control = plugin.get_viewport().gui_get_focus_owner()
 	if stale_focus != null:
 		stale_focus.release_focus()
@@ -1241,10 +1087,8 @@ func _check_host_scene_isolation(plugin: EditorPlugin, panel: GSTMainPanel, hist
 	plugin.get_undo_redo().add_undo_method(host_scene, &"set_meta", &"gst_native_undo_smoke_value", 0)
 	plugin.get_undo_redo().commit_action()
 	var host_history_before: int = plugin.get_undo_redo().get_history_undo_redo(plugin.get_undo_redo().get_object_history_id(host_scene)).get_history_count()
-	# get_history_count() is the total recorded-action array size, which an
-	# undo never changes (core/object/undo_redo.cpp); the position that
-	# actually moves is get_current_action() (phase 2 review round 1
-	# fix pass: this comparison previously proved nothing about isolation).
+	# get_history_count() is the recorded-action array size, which an undo
+	# never changes (core/object/undo_redo.cpp); get_current_action() moves.
 	var gst_position_before: int = history.get_current_action()
 	var gst_redo_available_before: bool = history.has_redo()
 	_push_key(EditorInterface.get_base_control(), KEY_Z, true)
@@ -1268,16 +1112,11 @@ func _check_host_scene_isolation(plugin: EditorPlugin, panel: GSTMainPanel, hist
 	_check("host_scene_isolation", host_history_before >= 1 and gst_unaffected_by_host_undo and host_undone and host_unaffected_by_gst_redo, "host_history=%d gst_unaffected=%s host_undone=%s host_unaffected_by_redo=%s" % [host_history_before, gst_unaffected_by_host_undo, host_undone, host_unaffected_by_gst_redo])
 
 
-## Item (fix pass, round 3 item 3): the panel's own teardown (gst_main_panel.gd
-## _exit_tree()) frees its standalone UndoRedo -- a plain Object with no Node
-## owner to free it automatically -- rather than leaking it. Must run last:
-## it destroys the real production panel every other check in this file
-## drives, so nothing after this can use `panel` or `history` again. Nulls
-## plugin.gd's own `_panel` field after freeing, matching what its real
-## `_exit_tree()` does after its own `queue_free()` call: otherwise plugin.gd
-## would call `queue_free()` again on an already-freed instance once the
-## editor process actually exits below, printing a spurious freed-instance
-## error that would not reflect any real defect.
+## Asserts gst_main_panel.gd _exit_tree() frees its standalone UndoRedo (a
+## plain Object with no Node owner).
+## Must run last: it frees the production panel. Nulls plugin.gd's `_panel`
+## after freeing, as its _exit_tree() does after queue_free(); otherwise
+## plugin.gd calls queue_free() on a freed instance at editor exit.
 func _check_teardown_destroys_history(plugin: EditorPlugin, panel: GSTMainPanel, history: UndoRedo) -> void:
 	panel.queue_free()
 	await _frames(plugin, 4)
@@ -1287,18 +1126,13 @@ func _check_teardown_destroys_history(plugin: EditorPlugin, panel: GSTMainPanel,
 	_check("teardown_destroys_history", panel_freed and history_freed, "panel_freed=%s history_freed=%s" % [panel_freed, history_freed])
 
 
-## Focuses spin's own internal numeric LineEdit via a real key press rather
-## than a real mouse press/release: EditorSpinSlider::gui_input calls its
-## private _focus_entered() for any ui_accept-mapped key press while spin
-## itself holds keyboard focus, regardless of grab state (editor/gui/
-## editor_spin_slider.cpp). Key-event dispatch routes on Viewport's own
-## tracked key-focus control, not a hit test against a screen position, so
-## it does not depend on this environment's real OS mouse/window state the
-## way a synthetic mouse press does (phase 2 review round 2 fix pass: the
-## prior real-mouse non-drag-grab technique did not reliably reach a
-## focused LineEdit in the reviewer's own environment). _focus_entered()
-## shows and focuses the internal LineEdit through deferred calls, so this
-## awaits a few frames for those to land before returning.
+## Focuses spin's internal numeric LineEdit via a key press:
+## EditorSpinSlider::gui_input calls _focus_entered() for any ui_accept key
+## while spin holds keyboard focus, regardless of grab state
+## (editor/gui/editor_spin_slider.cpp). Key dispatch routes on the
+## Viewport's key-focus control, not a screen-position hit test.
+## _focus_entered() shows and focuses the LineEdit through deferred calls,
+## so this awaits frames before returning.
 func _focus_spin_text(plugin: EditorPlugin, spin: EditorSpinSlider) -> LineEdit:
 	spin.grab_focus()
 	await plugin.get_tree().process_frame
@@ -1307,12 +1141,9 @@ func _focus_spin_text(plugin: EditorPlugin, spin: EditorSpinSlider) -> LineEdit:
 	return _find_focused_line_edit(spin)
 
 
-## Real keyboard-driven interaction end to end: a real ui_accept key press
-## opens spin's own numeric text entry (_focus_spin_text above), then real
-## typed characters and a real Enter (_replace_line_edit) commit value_text.
-## Returns the committed float, or null if no focused LineEdit ever
-## appeared (a real, reportable failure the caller checks explicitly, not a
-## sentinel silently treated as success).
+## ui_accept key press (_focus_spin_text), typed characters, Enter
+## (_replace_line_edit). Returns the committed float, or null if no focused
+## LineEdit appeared.
 func _drive_real_text_entry(plugin: EditorPlugin, spin: EditorSpinSlider, value_text: String) -> Variant:
 	var line_edit: LineEdit = await _focus_spin_text(plugin, spin)
 	if line_edit == null:
@@ -1355,10 +1186,9 @@ func _find_hex_line_edit(picker: ColorPicker) -> LineEdit:
 	return null
 
 
-## Types text into edit without submitting it (no Enter, no focus change):
-## a real pending, unevaluated numeric entry, since EditorSpinSlider only
-## evaluates typed text on its own value_focus_exited (editor/gui/
-## editor_spin_slider.cpp::_evaluate_input_text).
+## Types text into edit without submitting (no Enter, no focus change).
+## EditorSpinSlider evaluates typed text only on value_focus_exited
+## (editor/gui/editor_spin_slider.cpp::_evaluate_input_text).
 func _type_into_line_edit(plugin: EditorPlugin, edit: LineEdit, text: String) -> void:
 	edit.grab_focus()
 	await plugin.get_tree().process_frame
@@ -1381,11 +1211,10 @@ func _replace_line_edit(plugin: EditorPlugin, edit: LineEdit, text: String) -> v
 	await _frames(plugin, 2)
 
 
-## Step size is large relative to EditorSpinSlider's own drag-start threshold
+## Step size exceeds EditorSpinSlider's drag-start threshold
 ## (editor/gui/editor_spin_slider.cpp: 4 * grabbing_spinner_speed * EDSCALE)
-## so the first motion event alone clears it regardless of this project's
-## drag-speed setting or editor scale, instead of relying on cumulative
-## sub-threshold steps to cross it partway through the sequence.
+## so the first motion event clears it regardless of drag-speed setting or
+## editor scale.
 func _drag_spin(plugin: EditorPlugin, spin: Control, direction: float = 1.0) -> void:
 	if spin == null:
 		return
@@ -1416,15 +1245,10 @@ func _push_key(target: Control, keycode: Key, ctrl: bool = false, shift: bool = 
 	target.get_viewport().push_input(event, true)
 
 
-## Delivers a synthetic key event to a native color popup's own Window
-## instead of the root viewport (_push_key above), matching how a real OS
-## keystroke is routed to whichever window currently holds focus. A Window
-## is itself a Viewport, so push_input() here is the same call
-## gst_inspector_column.gd's own _on_color_popup_window_input already
-## proves correct for that popup; used by _check_popup_focused_shortcut and
-## _check_color_popup_subunit_pending_forced_finish, both of which open a
-## native, non-embedded popup and push a keyboard shortcut while it holds
-## focus.
+## Delivers a key event to a color popup's own Window instead of the root
+## viewport (_push_key), matching OS routing to the focused window. Window
+## extends Viewport, so push_input() reaches
+## gst_inspector_column.gd's _on_color_popup_window_input.
 func _push_popup_key(popup: Window, keycode: Key, ctrl: bool = false, shift: bool = false) -> void:
 	var event: InputEventKey = InputEventKey.new()
 	event.keycode = keycode
@@ -1439,12 +1263,10 @@ func _push_popup_key(popup: Window, keycode: Key, ctrl: bool = false, shift: boo
 	popup.push_input(event, true)
 
 
-## Delivered through Input.parse_input_event (the full engine input path a
-## real hardware event takes) rather than target.get_viewport().push_input
-## directly, per the reviewer's own suggested alternative (phase 2 review
-## round 2 fix pass): push_input on a specific Viewport skips Input's own
-## internal mouse-position/button-mask bookkeeping that some engine-internal
-## paths read independently of the event's own fields.
+## Delivered through Input.parse_input_event rather than
+## target.get_viewport().push_input: push_input on a Viewport skips Input's
+## mouse-position/button-mask bookkeeping that engine paths read
+## independently of the event's fields.
 func _push_mouse(target: Control, position: Vector2, button: MouseButton, pressed: bool) -> void:
 	var event: InputEventMouseButton = InputEventMouseButton.new()
 	event.position = position

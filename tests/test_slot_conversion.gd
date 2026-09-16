@@ -1,7 +1,7 @@
 extends GSTTestBase
 
 ## GSTCodegen slot-kind conversion at boundaries between field and color
-## layers. Design: docs/DESIGN.md decision 2, docs/PLAN.md Phase 3.
+## layers.
 
 
 func _scanned_library() -> GSTLibrary:

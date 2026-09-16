@@ -1,6 +1,6 @@
 extends GSTTestBase
 
-## Layer id allocation: monotonic, never reused. Design decision 22.
+## Layer id allocation: monotonic, never reused.
 
 
 func _test_library() -> GSTLibrary:

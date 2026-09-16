@@ -3,33 +3,28 @@ class_name GSTInspectorColumn
 extends VBoxContainer
 
 ## Selected-layer controls. Manifest params and coordinates use standalone
-## native property rows (phase 2, docs/SHADER_TABS_reviewed-plan.md: no
-## embedded EditorInspector remains in this column); input and distortion
-## references route through GSTUndo via picker buttons, unchanged.
+## native property rows; input and distortion references route through
+## GSTUndo via picker buttons.
 ##
-## Each row is built directly with EditorInspector.instantiate_property_editor
-## (a static factory, independent of any EditorInspector container), the same
-## proven mechanism phase 1's tabs_proof used outside a real inspector. This
-## column owns gesture tracking for each row's public EditorSpinSlider
-## descendants (grabbed/ungrabbed/value_focus_entered/value_focus_exited) and
-## the `changing` fallback for controls with no such descendants (native
-## color popups), and finishes each completed gesture through
-## GSTUndo.commit_property_change -- the only path a native edit reaches the
-## stack now (decision superseding 20: edits no longer come free from an
-## embedded inspector's own undo integration).
+## Each row is built with EditorInspector.instantiate_property_editor (a
+## static factory, independent of any EditorInspector container). This column
+## owns gesture tracking for each row's EditorSpinSlider descendants
+## (grabbed/ungrabbed/value_focus_entered/value_focus_exited) and the
+## `changing` fallback for controls with no such descendants (native color
+## popups), and finishes each completed gesture through
+## GSTUndo.commit_property_change, the only path a native edit reaches the
+## stack.
 
 signal edit_refused(reason: String)
 signal chooser_requested(purpose: String, layer_id: StringName, slot_name: String, initiator: Control)
 signal section_state_changed(states: Dictionary)
-## Forwards a real ui_undo/ui_redo keyboard shortcut received while a native
-## color popup holds focus: a focused popup's own key events do not
-## reliably reach gst_main_panel.gd's root-viewport _input(), so the popup
-## signals it here instead -- through _on_color_popup_window_input (an
-## embedded-subwindow configuration, e.g. single_window_mode enabled) or
-## _on_color_popup_field_gui_input (the popup's own focused LineEdit field,
-## the path every version this project supports actually takes with that
-## setting left at its default) -- and gst_main_panel.gd connects this
-## straight to its own _apply_keyboard_undo_redo.
+## Forwards a ui_undo/ui_redo shortcut received while a native color popup
+## holds focus: a focused popup's key events do not reach gst_main_panel.gd's
+## root-viewport _input(). Emitted by _on_color_popup_window_input
+## (embedded-subwindow configuration, e.g. single_window_mode) or
+## _on_color_popup_field_gui_input (the popup's focused LineEdit, the path
+## taken with single_window_mode at its default). gst_main_panel.gd connects
+## this to _apply_keyboard_undo_redo.
 signal color_popup_undo_redo_requested(redo: bool)
 
 var _scroll: ScrollContainer = null
@@ -52,8 +47,7 @@ var _mutations_blocked: bool = false
 var _refusals: Dictionary = {}
 ## key (see _row_key) -> {"editor": EditorProperty, "target": Object,
 ## "property": StringName, "state": Dictionary}. Rebuilt wholesale on every
-## edit(); a row's state never survives its own rebuild, matching the prior
-## embedded-EditorInspector behavior of rebinding fresh widgets per edit().
+## edit(); a row's state never survives its own rebuild.
 var _property_rows: Dictionary = {}
 
 
@@ -138,10 +132,9 @@ func setup(stack: GSTStack, library: GSTLibrary, undo: GSTUndo) -> void:
 
 
 ## Points the inspector at layer_id's GSTLayer. An empty id clears the
-## column (nothing selected). Finishes any pending native gesture and closes
-## an open native color popup on the previous layer before rebinding (decision
-## superseding 20: a rebind must never leave a pending edit stranded on a row
-## about to be freed).
+## column. Finishes any pending native gesture and closes an open native
+## color popup on the previous layer before rebinding, so no pending edit is
+## stranded on a row about to be freed.
 func edit(layer_id: StringName) -> void:
 	await finish_pending_edits()
 	_layer = GSTStackOps.find_layer(_stack, layer_id)
@@ -156,26 +149,22 @@ func edit(layer_id: StringName) -> void:
 	_schedule_context_update()
 
 
-## Before rebind, Save/Save As, shutdown save, or undo/redo, finishes any
+## Before rebind, Save/Save As, shutdown save, or undo/redo: finishes any
 ## active numeric gesture and closes any open native color popup, so the
-## pending value reaches its original target before the caller continues
-## (decision superseding 20; phase 1 tabs_proof "forced_finish_ordering").
-## Flushes any pending numeric text first (phase 2 review round 1 fix pass):
-## Godot evaluates a typed EditorSpinSlider value only on its internal
-## LineEdit's own focus exit, so a cached "final" value can omit a typed
-## value that was never submitted; releasing that focus here delivers it
-## through the row's own value_focus_exited path (already wired below)
-## before this function's own commit loop reads state["final"].
+## pending value reaches its original target before the caller continues.
+## Flushes pending numeric text first: Godot evaluates a typed
+## EditorSpinSlider value only on its internal LineEdit's focus exit, so
+## state["final"] can omit a typed value never submitted; releasing that
+## focus delivers it through the row's value_focus_exited path before the
+## commit loop reads state["final"].
 func finish_pending_edits() -> void:
 	for entry: Variant in _property_rows.values().duplicate():
 		if bool((entry["state"] as Dictionary)["active"]):
 			_flush_pending_row_text(entry)
-	# An active color-popup row is excluded here and left to
-	# _force_close_color_popups below: its true final value is only known
-	# once the popup's own close handler has actually run (deferred), so
-	# committing it early from whatever state["final"] holds mid-interaction
-	# would race that handler's own unconditional restore-then-conditional-
-	# commit write.
+	# An active color-popup row is left to _force_close_color_popups: its
+	# final value is only known once the popup's own close handler has run
+	# (deferred), so committing from state["final"] mid-interaction would race
+	# that handler's restore-then-conditional-commit write.
 	var active_keys: Array = []
 	for key: String in _property_rows.keys():
 		var state: Dictionary = _property_rows[key]["state"]
@@ -191,16 +180,14 @@ func finish_pending_edits() -> void:
 	await _force_close_color_popups()
 
 
-## Releases focus of a row's own numeric text-entry LineEdit, if one is
-## currently focused, so Godot commits its typed value synchronously (via
-## the row's own value_focus_exited connection) instead of leaving it
-## pending. A no-op when the row holds no such focused control.
-## suppress_live_edit brackets this release_focus() call: on a color-popup
-## row this can make Godot re-parse and re-emit its current color through
-## the hex field's own 8-bit text even when nothing was typed, but the same
-## release_focus() also delivers a genuine pending edit -- _on_color_live_
-## changed tells the two apart by comparing hex buckets, not by this flag
-## alone.
+## Releases focus of a row's numeric text-entry LineEdit, if focused, so
+## Godot commits its typed value synchronously (via value_focus_exited)
+## instead of leaving it pending. No-op when no such control is focused.
+## suppress_live_edit brackets release_focus(): on a color-popup row this can
+## make Godot re-parse and re-emit its current color through the hex field's
+## 8-bit text even when nothing was typed, but the same release_focus() also
+## delivers a genuine pending edit; _on_color_live_changed tells the two apart
+## by comparing hex buckets, not by this flag alone.
 func _flush_pending_row_text(entry: Dictionary) -> void:
 	var editor: EditorProperty = entry["editor"] as EditorProperty
 	if editor == null or not is_instance_valid(editor):
@@ -227,11 +214,10 @@ static func _find_focused_line_edit(node: Node) -> LineEdit:
 ## Force-finishes every row whose native color popup is open or whose close
 ## has been triggered but has not yet delivered its final value: closing the
 ## popup here only starts that delivery, since EditorPropertyColor connects
-## its own close handler CONNECT_DEFERRED (phase 2 review round 2 fix pass).
-## Waits for each such row's own gesture state to clear (set by
-## _finish_color_popup, itself driven by the popup's own popup_closed
-## signal) before returning, so a caller awaiting this is never handed
-## control back with a pending native color edit still in flight.
+## its own close handler CONNECT_DEFERRED. Waits for each row's gesture state
+## to clear (set by _finish_color_popup, driven by popup_closed) before
+## returning, so a caller awaiting this is never handed back a pending native
+## color edit still in flight.
 func _force_close_color_popups() -> void:
 	for key: String in _property_rows.keys().duplicate():
 		var entry: Variant = _property_rows.get(key)
@@ -246,7 +232,7 @@ func _force_close_color_popups() -> void:
 			var picker: ColorPicker = button.get_picker()
 			var focused: Control = picker.get_viewport().gui_get_focus_owner()
 			# Same suppress_live_edit bracketing and same-bucket distinction
-			# as _flush_pending_row_text above, for both forced-close writes.
+			# as _flush_pending_row_text, for both forced-close writes.
 			state["suppress_live_edit"] = true
 			if focused is LineEdit and picker.is_ancestor_of(focused):
 				focused.release_focus()
@@ -257,10 +243,9 @@ func _force_close_color_popups() -> void:
 		await _await_row_inactive(state)
 
 
-## Bounded wait for state["active"] to clear, since the deferred handler that
+## Bounded wait for state["active"] to clear: the deferred handler that
 ## clears it (_finish_color_popup, via commit) runs on a later idle-frame
-## flush rather than synchronously with hide() above; traced at well under
-## 10 frames on every supported version.
+## flush, not synchronously with hide(); measured under 10 frames.
 func _await_row_inactive(state: Dictionary) -> void:
 	var attempts: int = 0
 	while bool(state["active"]) and attempts < 10:
@@ -269,9 +254,8 @@ func _await_row_inactive(state: Dictionary) -> void:
 
 
 ## True if focus is inside a currently open native color popup this column
-## owns. Wired-by: gst_main_panel.gd's keyboard Undo/Redo scoping, so a
-## popup counts as GoShade focus even though a Popup's own Window sits
-## outside this column's Control ancestry.
+## owns. Used by gst_main_panel.gd's keyboard Undo/Redo scoping: a Popup's
+## Window sits outside this column's Control ancestry.
 func owns_popup_focus(focus: Control) -> bool:
 	if focus == null:
 		return false
@@ -293,7 +277,7 @@ static func _find_color_button(node: Node) -> ColorPickerButton:
 
 
 ## Manifest params (get_param_schema-backed dynamic properties). Skips
-## anything the layer's own _validate_property hid from the editor.
+## anything the layer's _validate_property hid from the editor.
 func _rebuild_parameter_rows() -> void:
 	_clear_rows(_parameter_rows_box)
 	if _layer == null:
@@ -310,8 +294,8 @@ func _rebuild_parameter_rows() -> void:
 
 ## Coord block whitelist (scale/offset/rotation/scroll/warp_strength).
 ## warp_x/warp_y stay button-based rows in _warp_box (_rebuild_slots), never
-## native property rows: GSTCoordBlock._validate_property already strips
-## their editor usage.
+## native property rows: GSTCoordBlock._validate_property strips their
+## editor usage.
 func _rebuild_coord_rows() -> void:
 	_clear_rows(_coord_rows_box)
 	if _layer == null or _layer.coord == null:
@@ -368,15 +352,14 @@ func _build_property_row(box: VBoxContainer, kind: String, target: Object, prope
 		spin.ungrabbed.connect(_finish_native_interaction.bind(key, "ungrabbed"))
 		spin.value_focus_entered.connect(_begin_native_interaction.bind(key, "value_focus_entered"))
 		spin.value_focus_exited.connect(_finish_native_interaction.bind(key, "value_focus_exited"))
-	# EditorPropertyColor's own C++ implementation never reports live preview
-	# through property_changed (ColorPicker.color_changed writes the edited
-	# object directly, bypassing emit_changed), and its close handler writes
-	# the pre-popup color back onto the edited object unconditionally before
-	# conditionally emitting the final change -- so old_present read at that
-	# point would already see a key that write just created. This row's own
-	# lifecycle hooks below capture original/original_present at popup-open,
-	# forward every live preview write to material sync, and finish once the
-	# popup's own close signal (button.popup_closed) has actually run.
+	# EditorPropertyColor never reports live preview through property_changed
+	# (ColorPicker.color_changed writes the edited object directly, bypassing
+	# emit_changed), and its close handler writes the pre-popup color back
+	# unconditionally before conditionally emitting the final change, so
+	# old_present read at that point would see a key that write just created.
+	# The hooks below capture original/original_present at popup-open, forward
+	# every live preview write to material sync, and finish once
+	# button.popup_closed has run.
 	var color_button: ColorPickerButton = _find_color_button(editor)
 	if color_button != null:
 		color_button.get_popup().about_to_popup.connect(_begin_native_interaction.bind(key, "color_popup"))
@@ -390,13 +373,12 @@ func _row_key(target: Object, property_name: StringName) -> String:
 	return "%d:%s" % [target.get_instance_id(), String(property_name)]
 
 
-## Native property_changed(property, value, field, changing) (phase 1
-## evidence): an EditorSpinSlider-backed row's grabbed/ungrabbed/
-## value_focus_entered/value_focus_exited pair (below) is the authoritative
-## gesture boundary. A native color-popup row's boundary is its own
-## about_to_popup/popup_closed pair (below), not this changing flag; an
-## inactive changing=true delivery on that row is always a stray echo and
-## is dropped (below).
+## Native property_changed(property, value, field, changing). An
+## EditorSpinSlider-backed row's grabbed/ungrabbed/value_focus_entered/
+## value_focus_exited pair is the authoritative gesture boundary. A native
+## color-popup row's boundary is its about_to_popup/popup_closed pair, not
+## the changing flag; an inactive changing=true delivery on that row is a
+## stray echo and is dropped.
 func _on_bound_property_changed(property: StringName, value: Variant, field: StringName, changing: bool, key: String) -> void:
 	var entry: Variant = _property_rows.get(key)
 	if entry == null:
@@ -411,11 +393,10 @@ func _on_bound_property_changed(property: StringName, value: Variant, field: Str
 		target.set(property_name, new_value)
 		state["final"] = new_value
 		(entry["editor"] as EditorProperty).update_property()
-		# Live preview during an in-progress gesture (phase 2 review round 1
-		# fix pass): syncs the material and contextual read-only hints for
-		# every intermediate value without rebuilding this or any other row
-		# and without registering a history action -- only the eventual
-		# finish (below) does that.
+			# Live preview during an in-progress gesture: syncs the material and
+			# context hints for every intermediate value without rebuilding any
+			# row and without registering a history action; only the finish
+			# does that.
 		if _undo != null:
 			_undo.notify_property_changed()
 		_schedule_context_update()
@@ -423,9 +404,8 @@ func _on_bound_property_changed(property: StringName, value: Variant, field: Str
 			_finish_native_interaction(key, "changing_false")
 		return
 	if changing:
-		# A color-popup row's gesture boundary is about_to_popup/popup_closed,
-		# not this flag; an inactive changing=true delivery on such a row is
-		# always a stray echo and is dropped unconditionally.
+			# A color-popup row's boundary is about_to_popup/popup_closed, not
+			# this flag; an inactive changing=true delivery here is a stray echo.
 		if _find_color_button(entry["editor"] as Node) != null:
 			return
 		_begin_native_interaction(key, "changing")
@@ -435,10 +415,9 @@ func _on_bound_property_changed(property: StringName, value: Variant, field: Str
 			_undo.notify_property_changed()
 		_schedule_context_update()
 		return
-	# A native color popup can re-deliver its own already-committed final
-	# property_changed after a racing undo/redo moved the target away from
-	# it; scoped to color-popup rows, matching the sibling guard above,
-	# since that is the only control observed to emit this stray repeat.
+		# A native color popup can re-deliver its already-committed final
+		# property_changed after a racing undo/redo moved the target away;
+		# scoped to color-popup rows, the only control observed to emit it.
 	var current_value: Variant = target.get(property_name)
 	if _find_color_button(entry["editor"] as Node) != null and state.has("last_committed_final") and GSTUndo.values_equal(new_value, state["last_committed_final"]) and not GSTUndo.values_equal(current_value, new_value):
 		return
@@ -467,7 +446,7 @@ func _merge_component_value(current: Variant, value: Variant, field: StringName)
 
 
 ## First begin captures the exact pre-gesture value; a later begin during the
-## same interaction retains it (decision superseding 20).
+## same interaction retains it.
 func _begin_native_interaction(key: String, boundary: String) -> void:
 	var entry: Variant = _property_rows.get(key)
 	if entry == null:
@@ -496,27 +475,26 @@ func _finish_native_interaction(key: String, _boundary: String) -> void:
 	_commit_row(key, state["original"], state["final"], bool(state["original_present"]))
 
 
-## A native color popup's own live preview (ColorPicker.color_changed,
-## re-emitted by ColorPickerButton) writes the edited object directly,
-## bypassing EditorProperty.property_changed entirely, so it never reaches
-## _on_bound_property_changed. Forwards the resulting live value to material
-## sync/context the same way an active numeric gesture's intermediate value
-## does, without registering any history action.
-## genuine_edit records whether this row saw a live color write that is not
-## explainable as the picker's own hex-round-trip reparse of already-
-## displayed text: suppress_live_edit alone cannot prove that, since a real
-## pending edit is also committed through the same two forced release_focus()/
-## hide() call sites, so a write is only treated as the reparse artifact when
-## it lands in the row's own existing 1/255 hex bucket.
+## A native color popup's live preview (ColorPicker.color_changed, re-emitted
+## by ColorPickerButton) writes the edited object directly, bypassing
+## EditorProperty.property_changed, so it never reaches
+## _on_bound_property_changed. Forwards the live value to material
+## sync/context like an active numeric gesture's intermediate value, without
+## registering a history action. genuine_edit records whether this row saw a
+## live color write not explainable as the picker's hex-round-trip reparse of
+## already-displayed text: suppress_live_edit alone cannot prove that, since
+## a real pending edit is also committed through the same forced
+## release_focus()/hide() call sites, so a write is treated as the reparse
+## artifact only when it lands in the row's existing 1/255 hex bucket.
 func _on_color_live_changed(_color: Color, key: String) -> void:
 	var entry: Variant = _property_rows.get(key)
 	if entry == null:
 		return
 	var state: Dictionary = entry["state"]
 	if not bool(state["active"]):
-		# color_changed already wrote target directly before this ran (see
-		# below); a write landing while no gesture owns this row is a stray
-		# redelivery nothing else observes or corrects on this bypass path.
+		# color_changed already wrote target directly before this ran; a
+		# write landing while no gesture owns this row is a stray redelivery
+		# nothing else observes or corrects on this bypass path.
 		var stray_target: Object = entry["target"]
 		var stray_property: StringName = entry["property"]
 		var stray_value: Variant = stray_target.get(stray_property)
@@ -540,26 +518,25 @@ func _on_color_live_changed(_color: Color, key: String) -> void:
 	_schedule_context_update()
 
 
-## Runs once button.popup_closed fires (connected CONNECT_DEFERRED, after
-## EditorPropertyColor's own deferred close handler has already run its
-## unconditional restore-to-pre-popup write and its conditional final
-## property_changed emission), so state["final"] reflects whichever of those
-## actually happened before this commits.
+## Runs once button.popup_closed fires (CONNECT_DEFERRED, after
+## EditorPropertyColor's own deferred close handler has run its unconditional
+## restore-to-pre-popup write and its conditional final property_changed
+## emission), so state["final"] reflects whichever happened before this
+## commits.
 func _finish_color_popup(key: String) -> void:
 	_finish_native_interaction(key, "popup_closed")
 
 
-## Window.window_input fires on the popup's own Window before that Window's
-## normal GUI input dispatch runs (Window::_window_input emits this signal,
-## then calls push_input() itself, per scene/main/window.cpp) -- earlier than
-## any Control inside it, including the hex ColorPicker's own LineEdit, could
-## consume a Ctrl+Z as its own built-in text-undo. Consumes the event with
-## set_input_as_handled() on the popup itself (a Window is a Viewport) before
-## any await, per the phase 2 review round 3 fix pass, then emits
-## color_popup_undo_redo_requested so gst_main_panel.gd can finish this
-## pending color edit and run GoShade's own standalone-history undo/redo --
-## the root viewport's own _input() never sees this event at all while the
-## popup holds focus (embedded-subwindow forwarding, scene/main/viewport.cpp).
+## Window.window_input fires on the popup's Window before that Window's GUI
+## input dispatch (Window::_window_input emits the signal, then calls
+## push_input(), scene/main/window.cpp), earlier than any Control inside it,
+## including the hex ColorPicker's LineEdit, could consume Ctrl+Z as its
+## built-in text-undo. Consumes the event with set_input_as_handled() on the
+## popup (a Window is a Viewport) before any await, then emits
+## color_popup_undo_redo_requested so gst_main_panel.gd can finish the
+## pending color edit and run the standalone-history undo/redo; the root
+## viewport's _input() never sees this event while the popup holds focus
+## (embedded-subwindow forwarding, scene/main/viewport.cpp).
 func _on_color_popup_window_input(event: InputEvent, popup: Window) -> void:
 	if not event is InputEventKey:
 		return
@@ -575,18 +552,16 @@ func _on_color_popup_window_input(event: InputEvent, popup: Window) -> void:
 
 
 ## _on_color_popup_window_input's embedded-subwindow forwarding never fires
-## for a key event on any supported version (none of this project's editor
-## profiles enable single_window_mode); on 4.6.2/4.7 a key event pushed at
-## the root viewport does not reach the popup at all once it holds real,
-## non-embedded focus. Connecting directly to the popup's own hex/RGB
-## LineEdit gui_input signal reaches it instead: Control's gui_input signal
-## fires before that LineEdit's own built-in text-undo can consume the same
-## Ctrl+Z. Kept alongside _on_color_popup_window_input above, not replacing
-## it, so single_window_mode still takes that path; both converge on
-## color_popup_undo_redo_requested.
+## for a key event without single_window_mode; on 4.6.2/4.7 a key event
+## pushed at the root viewport does not reach the popup once it holds real,
+## non-embedded focus. Connecting to the popup's hex/RGB LineEdit gui_input
+## signal reaches it instead: Control's gui_input fires before that LineEdit's
+## built-in text-undo consumes the same Ctrl+Z. Kept alongside
+## _on_color_popup_window_input so single_window_mode still takes that path;
+## both emit color_popup_undo_redo_requested.
 func _connect_color_popup_field_shortcuts(color_button: ColorPickerButton, key: String) -> void:
-	# The picker's own LineEdit fields do not exist yet when about_to_popup
-	# fires; two process_frames after it is the first point they are found.
+	# The picker's LineEdit fields do not exist yet when about_to_popup fires;
+	# two process_frames after it is the first point they are found.
 	await get_tree().process_frame
 	await get_tree().process_frame
 	if not is_instance_valid(color_button) or not _property_rows.has(key):
@@ -597,11 +572,9 @@ func _connect_color_popup_field_shortcuts(color_button: ColorPickerButton, key: 
 			line_edit.gui_input.connect(handler)
 
 
-## The picker's own hex/RGB LineEdit fields are created lazily on first
-## popup display rather than at this column's own row-creation time, so
-## _connect_color_popup_field_shortcuts above (re)connects freshly on every
-## about_to_popup instead of once up front; the is_connected guard there
-## makes repeat connection to an already-wired field a no-op.
+## The picker's hex/RGB LineEdit fields are created lazily on first popup
+## display, so _connect_color_popup_field_shortcuts (re)connects on every
+## about_to_popup; its is_connected guard makes a repeat connection a no-op.
 func _on_color_popup_field_gui_input(event: InputEvent, line_edit: LineEdit) -> void:
 	if not event is InputEventKey:
 		return
@@ -616,10 +589,9 @@ func _on_color_popup_field_gui_input(event: InputEvent, line_edit: LineEdit) -> 
 	color_popup_undo_redo_requested.emit(redo)
 
 
-## True if target currently holds an explicit stored entry for property_name
-## rather than an implicit manifest default (GSTLayer.has_param_value); a
-## target with no such concept (GSTCoordBlock's real @export fields) is
-## always present.
+## True if target holds an explicit stored entry for property_name rather
+## than an implicit manifest default (GSTLayer.has_param_value); a target
+## with no such concept (GSTCoordBlock's @export fields) is always present.
 static func _param_present(target: Object, property_name: StringName) -> bool:
 	if target.has_method(&"has_param_value"):
 		return bool(target.call(&"has_param_value", property_name))
@@ -628,24 +600,22 @@ static func _param_present(target: Object, property_name: StringName) -> bool:
 
 ## Registers one mutation-first action only when final content differs;
 ## resets gesture state so the next begin captures a fresh original value.
-## Passes _refresh_row bound to this row's own stable key (never the row/
-## editor Nodes themselves) as commit_property_change's on_replayed
-## callback, so this row's own value refreshes on every later undo/redo of
-## the action without any row ever being rebuilt.
+## Passes _refresh_row bound to this row's stable key (never the row/editor
+## Nodes) as commit_property_change's on_replayed callback, so this row's
+## value refreshes on every later undo/redo without any row being rebuilt.
 ##
 ## old_present is the presence of property_name's explicit params entry
-## before this gesture began: a no-op finish restores that exact presence
-## or absence, not just the value, since the dirty fingerprint includes
+## before this gesture began: a no-op finish restores that exact presence or
+## absence, not just the value, since the dirty fingerprint includes
 ## serialized param-key presence.
 ##
-## Colors compare equal here at 1/255-per-channel hex-bucket granularity
-## when genuine_edit is false, not GSTUndo.values_equal's exact epsilon: a
-## native color popup's hex field round-trips its text through that same
-## 8-bit granularity on focus loss even when nothing was typed (Godot
-## 4.6.2/4.7 only, confirmed absent on 4.4), which would otherwise register
-## as a spurious value change while sitting below the undo history's own
-## tip. genuine_edit excludes a real edit landing within one hex step of
-## the original from this tolerance.
+## Colors compare equal at 1/255-per-channel hex-bucket granularity when
+## genuine_edit is false, not GSTUndo.values_equal's exact epsilon: a native
+## color popup's hex field round-trips its text through 8-bit granularity on
+## focus loss even when nothing was typed (Godot 4.6.2/4.7; absent on 4.4),
+## which would otherwise register as a spurious value change. genuine_edit
+## excludes a real edit landing within one hex step of the original from
+## this tolerance.
 static func _gesture_values_equal(old_value: Variant, new_value: Variant, genuine_edit: bool) -> bool:
 	if old_value is Color and new_value is Color and not genuine_edit:
 		var a: Color = old_value as Color
@@ -666,10 +636,10 @@ func _commit_row(key: String, old_value: Variant, new_value: Variant, old_presen
 	state["boundary"] = ""
 	state["genuine_edit"] = false
 	if _gesture_values_equal(old_value, new_value, genuine_edit):
-		# Only restore old_value if the target still holds exactly the
-		# value this gesture wrote: a stale deferred commit can otherwise
-		# fire after a later gesture or a racing undo/redo already moved
-		# the target, and restoring then would discard that other write.
+			# Only restore old_value if the target still holds the value this
+			# gesture wrote: a stale deferred commit can fire after a later
+			# gesture or a racing undo/redo moved the target, and restoring
+			# then would discard that other write.
 		if GSTUndo.values_equal(target.get(property_name), new_value):
 			if old_present:
 				target.set(property_name, old_value)
@@ -692,16 +662,15 @@ func _commit_row(key: String, old_value: Variant, new_value: Variant, old_presen
 
 
 ## Refreshes one row's displayed value and the shared context hints without
-## rebuilding any row (decision superseding 20). Bound by key so a later
-## rebuild (a structural edit, a layer switch) that has already freed this
-## row safely no-ops here instead of touching a stale Node.
+## rebuilding any row. Bound by key so a later rebuild (structural edit,
+## layer switch) that has already freed this row no-ops instead of touching
+## a stale Node.
 ##
 ## state["final"]/state["final_present"] are captured from the target before
-## editor.update_property() runs: that call can itself trigger a reentrant
-## color_changed echo of the pre-replay value, and
-## _on_color_live_changed's stray-write guard only detects and reverts that
-## echo if state["final"] already holds the just-replayed value when it
-## fires.
+## editor.update_property() runs: that call can trigger a reentrant
+## color_changed echo of the pre-replay value, and _on_color_live_changed's
+## stray-write guard only reverts that echo if state["final"] already holds
+## the just-replayed value when it fires.
 func _refresh_row(key: String) -> void:
 	var entry: Variant = _property_rows.get(key)
 	if entry == null:
@@ -718,12 +687,9 @@ func _refresh_row(key: String) -> void:
 	_schedule_context_update()
 
 
-## These explanations depend on exact function inputs, not sampled pixels.
+## Context hints depend on exact function inputs, not sampled pixels.
 ## Read-only state belongs to native widgets and never changes the resource.
-## Triggered directly after building rows and after every finished edit
-## (decision superseding 20's tree_entered relay, no longer needed now that
-## rows are built synchronously by this file, not by an EditorInspectorPlugin
-## parsing an embedded EditorInspector).
+## Triggered after building rows and after every finished edit.
 func _schedule_context_update() -> void:
 	if is_inside_tree() and not get_tree().process_frame.is_connected(_update_control_context):
 		get_tree().process_frame.connect(_update_control_context, CONNECT_ONE_SHOT)
@@ -987,10 +953,8 @@ func _reference_text(reference_id: StringName) -> String:
 	return "l%s %s" % [String(reference.id), function_name]
 
 
-## The layer this column currently edits, so callers can confirm it still
-## points at a specific GSTLayer instance after an undo restores that layer
-## (phase 4 fix pass 3, item 2). Every row is always freshly bound to this
-## same instance (or its .coord) on each edit(), so this is authoritative.
+## The layer this column currently edits. Every row is freshly bound to this
+## instance (or its .coord) on each edit(), so this is authoritative.
 ## Wired-by: none (editor smoke seam)
 func get_edited_object() -> Object:
 	return _layer
@@ -1011,7 +975,7 @@ func get_settings_scroll() -> ScrollContainer:
 	return _scroll
 
 
-## Returns the native parameter widget so editor smoke can drive its own
+## Returns the native parameter widget so editor smoke can drive its
 ## emit_changed() path and inspect the displayed value.
 ## Wired-by: none (editor smoke seam)
 func find_editor_property(property_name: StringName, edited_object: Object) -> EditorProperty:

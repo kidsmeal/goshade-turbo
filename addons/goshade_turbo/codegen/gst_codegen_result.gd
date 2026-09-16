@@ -2,9 +2,8 @@
 class_name GSTCodegenResult
 extends RefCounted
 
-## Invocation-local result of GSTCodegen.generate_result(). One instance per
-## call, never shared across concurrent or nested generation (docs/PLAN.md
-## Cross-cutting concern "Codegen error reporting").
+## Result of one GSTCodegen.generate_result() call. One instance per call,
+## never shared across concurrent or nested generation.
 
 ## The generated .gdshader text, or "" when error is non-empty.
 var code: String = ""

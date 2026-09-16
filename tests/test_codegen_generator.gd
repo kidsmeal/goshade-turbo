@@ -1,14 +1,12 @@
 extends GSTTestBase
 
 ## GSTCodegen over generator layers, and generator+field-op stack order.
-## Design: docs/DESIGN.md, Codegen rules. Uses the real, shipped library
-## (GSTLibrary.scan over addons/goshade_turbo/library/).
+## Uses the shipped library (GSTLibrary.scan over addons/goshade_turbo/library/).
 
 
 ## Every generative/* manifest id, coord-driven or not (generative/clock has
-## coord == false, a pure time source per decision 4/15). New entries must be
-## added here on purpose (2026-09-15 unit-failure fix pass, review note 3: a
-## hardcoded ">= 11" count hid both additions and removals down to 11).
+## coord == false, a pure time source). New entries must be added here on
+## purpose.
 const EXPECTED_GENERATIVE_IDS: Array[String] = [
 	"generative/cell_borders", "generative/cellular_edges", "generative/checker", "generative/clock",
 	"generative/fbm", "generative/hash", "generative/linear_gradient", "generative/perlin",
@@ -106,12 +104,9 @@ func test_no_warp_axes_emits_neither_warp_term_nor_warp_strength_uniform() -> vo
 
 	var code: String = GSTCodegen.generate(stack, lib)
 
-	# Lines 0-1 are the header block (license notice, stack header); phase 6's
-	# real stack header always serializes the coord block's "warp_strength"
-	# JSON key regardless of whether a warp axis is set (docs/PLAN.md Phase 6
-	# Build: the header is full data fidelity, not a mirror of codegen's own
-	# conditional emission), so the substring check below is scoped to
-	# everything after the header block.
+	# Lines 0-1 are the header block (license notice, stack header); the stack
+	# header always serializes the coord block's "warp_strength" JSON key, so
+	# the substring check is scoped to everything after the header block.
 	var body: String = "\n".join(code.split("\n").slice(2))
 	assert_false(body.contains("warp_strength"), "no warp axis is set, so no warp_strength uniform or term is emitted")
 	assert_true(GSTShaderCompile.compiles(code), "a generator with no warp axes still compiles")
@@ -140,12 +135,9 @@ func test_transform_scroll_and_warp_emit_in_order() -> void:
 	assert_true(GSTShaderCompile.compiles(code), "a generator with both scroll and warp set compiles")
 
 
-## Not every "generative/" id is coord-driven (design: docs/DESIGN.md decision
-## 4, the taxonomy folder is organizational only, per decision 15). generative/
-## clock has coord == false and no inputs: a pure time source with no spatial
-## dependency, same shape as a zero-input operator. is_generator is read per
-## entry from library data rather than assumed true, matching the sdf loop
-## below that already separates generators from operators sharing one prefix.
+## Not every "generative/" id is coord-driven: generative/clock has
+## coord == false and no inputs, a pure time source. is_generator is read per
+## entry from library data, matching the sdf loop below.
 func test_every_generative_manifest_compiles_alone_with_default_params() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var generative_ids: Array[String] = []
@@ -163,13 +155,10 @@ func test_every_generative_manifest_compiles_alone_with_default_params() -> void
 		assert_true(GSTShaderCompile.compiles(code), "%s compiles alone with default params (coord-driven entries carry the scale/offset/rotation uniforms, others compile as a zero-input operator)" % id)
 
 
-## Phase 8: the 7 sdf generators (circle, box, rounded_box, polygon, star,
-## line, ring) are library/sdf/*.tres entries with coord == true, same shape
-## as the generative roster above; the 4 sdf operators (union, subtract,
-## intersect, smooth_union) share the "sdf/" id prefix but coord == false, so
-## this loop filters on entry.coord to reach only the generators. The
-## operators are covered by tests/test_codegen_fieldop.gd's own sdf loop,
-## alongside the rest of the field-op roster.
+## The 7 sdf generators (circle, box, rounded_box, polygon, star, line, ring)
+## are library/sdf/*.tres entries with coord == true; the 4 sdf operators
+## share the "sdf/" id prefix but coord == false, so this loop filters on
+## entry.coord. tests/test_codegen_fieldop.gd covers the operators.
 func test_every_sdf_generator_manifest_compiles_alone_with_default_params() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var sdf_generator_ids: Array[String] = []

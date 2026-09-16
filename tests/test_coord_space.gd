@@ -2,7 +2,6 @@ extends GSTTestBase
 
 ## Stack-level coord_space: uv / screen_uv / local each read the right
 ## source, and local adds the varying and vertex() function.
-## Design: docs/DESIGN.md, decision 11 and Codegen rules.
 
 
 func _single_generator_stack() -> Dictionary:

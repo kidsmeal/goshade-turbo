@@ -66,13 +66,9 @@ func run(plugin: EditorPlugin) -> void:
 		entry_variant = "recipe"
 	var entry_stack_path: String = "user://gst_ui_complete_entry_stack.tres"
 	_cleanup([entry_stack_path])
-	# Phase 3 (docs/SHADER_TABS_reviewed-plan.md): every branch below now
-	# activates a brand new GSTDocument with its own fresh, empty, actionless
-	# UndoRedo (open_document) instead of registering an undoable "Replace
-	# stack" action on the shared history captured above -- history is
-	# recaptured immediately after each transition so later checks in this
-	# function measure the actually-active document's own history, not a
-	# stale reference to whichever document was active before it.
+	# Each branch activates a new GSTDocument with its own empty UndoRedo
+	# (open_document); history is recaptured after each transition so later
+	# checks measure the active document's history.
 	match entry_variant:
 		"recipe":
 			panel.get_start_recipe_button("fire").pressed.emit()
@@ -108,12 +104,8 @@ func run(plugin: EditorPlugin) -> void:
 	if panel.is_picker_open():
 		_key(KEY_ESCAPE)
 		await _frames(2)
-	# Phase 3: there is no "Replace stack" action left to undo back to a
-	# common empty baseline regardless of entry variant (recipe/open loaded
-	# non-empty content into a document whose own history has nothing to
-	# undo). New now plays that role directly: it always creates and
-	# activates a fresh, independent, empty document, so it reaches the same
-	# common starting point every variant needs for the rest of this test.
+	# New creates and activates a fresh empty document, the common starting
+	# point every entry variant needs for the rest of this test.
 	panel._on_new_pressed()
 	await _frames(5)
 	if panel.is_picker_open():
@@ -125,11 +117,9 @@ func run(plugin: EditorPlugin) -> void:
 	_check("entry_then_new_reaches_empty", empty_stack.layers.is_empty() and not panel.is_start_screen_visible() and not history.has_undo() and add_button.is_visible_in_tree() and not add_button.disabled and panel.get_preview_status_label().text == "No effect yet", "variant='%s' start=%s has_undo=%s add=%s/%s status='%s'" % [entry_variant, panel.is_start_screen_visible(), history.has_undo(), add_button.is_visible_in_tree(), add_button.disabled, panel.get_preview_status_label().text])
 	_cleanup([entry_stack_path])
 
-	# Phase 3 fix pass 1, round 1, item 4: the document active here (from
-	# line 117's own New press) is itself already pristine and untouched --
-	# nothing dirtied it since -- so this second New (through the real File
-	# menu item, not panel._on_new_pressed() directly) must reuse that exact
-	# document instead of allocating another blank one.
+	# The active document (from the New press above) is pristine, so this
+	# second New (through the File menu item) must reuse it instead of
+	# allocating another.
 	var before_new: GSTStack = panel.get_stack()
 	var doc_before_new_press: GSTDocument = panel.get_active_document()
 	var docs_before_new_press: int = panel.get_documents().size()
@@ -142,10 +132,8 @@ func run(plugin: EditorPlugin) -> void:
 	empty_stack = panel.get_stack()
 	_check("cancelled_first_library", not panel.is_picker_open() and empty_stack.layers.is_empty() and add_button.is_visible_in_tree() and not add_button.disabled and panel.get_preview_status_label().text == "No effect yet", "picker=%s add_visible=%s add_disabled=%s status='%s'" % [panel.is_picker_open(), add_button.is_visible_in_tree(), add_button.disabled, panel.get_preview_status_label().text])
 
-	# Phase 3: the Recipes pick below activates a whole new GSTDocument
-	# rather than replacing this one's stack through an undoable action, so
-	# "undo"/"redo" of that transition is navigation between documents
-	# (activate_document), not history.undo()/redo() on a shared bucket.
+	# The Recipes pick activates a new GSTDocument; "undo"/"redo" of that
+	# transition is activate_document navigation, not history.undo()/redo().
 	var doc_before_recipe: GSTDocument = panel.get_active_document()
 	(panel.get_node("%RecipesButton") as Button).pressed.emit()
 	await _frames(2)
@@ -220,13 +208,10 @@ func run(plugin: EditorPlugin) -> void:
 	var raw_params_before: Dictionary = _snapshot_raw_params(recipe_stack)
 	var random_code_before: String = panel.get_shader_material().shader.code
 	var uniforms_before: Dictionary = _snapshot_param_uniforms(recipe_stack, panel.get_shader_material(), library)
-	# get_current_action(), not get_history_count(): the two preceding
-	# undo() calls (native_param_undo, native_coord_undo) each leave their
-	# own action as a dangling redo-able tail entry. create_action()'s own
-	# discard_redo() drops that dangling entry before pushing the new
-	# randomize action, so get_history_count() (total array size) can read
-	# unchanged even though exactly one new action was genuinely committed;
-	# get_current_action() (the position index) still advances by one.
+	# get_current_action(), not get_history_count(): the two preceding undo()
+	# calls leave dangling redo entries; create_action()'s discard_redo()
+	# drops one before pushing the randomize action, so get_history_count()
+	# can read unchanged while get_current_action() advances by one.
 	var random_history_before: int = history.get_current_action()
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 55291
@@ -500,8 +485,6 @@ func _find_layer(stack: GSTStack, entry_id: String) -> GSTLayer:
 	return null
 
 
-## Phase 2: every object shares the panel's one standalone UndoRedo now, so
-## this no longer needs an object-keyed EditorUndoRedoManager bucket lookup.
 func _history_for() -> UndoRedo:
 	var panel: GSTMainPanel = _plugin.get_panel() as GSTMainPanel
 	return panel.get_watched_history() if panel != null else null

@@ -2,13 +2,13 @@ extends SceneTree
 
 ## Writes sandbox/logo/logo.tscn from scratch:
 ## `godot --headless --path . -s res://sandbox/logo/build_logo_scene.gd [-- --font brunoace]`
-## Default font is zendots (decision 2026-09-11).
+## Default font is zendots.
 ## Text SubViewport (square, transparent): two stacked Labels in the chosen
 ## font with a FontVariation shear. Out SubViewport (square, transparent):
 ## a Sprite2D showing the Text viewport through logo.gdshader. A Preview
 ## sprite on the root shows Out in the editor. Overwrites the .tscn, so any
-## editor edits to it are lost; re-run only to reset. Font, size, shear and
-## text are the constants at the top.
+## editor edits to it are lost. Font, size, shear and text are the constants
+## at the top.
 
 const SCENE_OUT: String = "res://sandbox/logo/logo.tscn"
 const SHADER: String = "res://sandbox/logo/logo.gdshader"
@@ -64,10 +64,9 @@ func _run() -> void:
 
 	var variation: FontVariation = FontVariation.new()
 	variation.base_font = load(FONTS[font_key])
-	# Fake italic. Godot applies this transform transposed relative to a
-	# plain Transform2D: the slant goes in the x axis (docs example
-	# Transform2D(1.0, slant, 0.0, 1.0, 0.0, 0.0)). Putting it in the y axis
-	# skews the horizontals instead (verified 2026-09-11).
+	# Fake italic. Godot applies variation_transform transposed relative to a
+	# plain Transform2D: the slant goes in the x axis. Putting it in the y
+	# axis skews the horizontals instead.
 	variation.variation_transform = Transform2D(Vector2(1.0, SLANT), Vector2(0.0, 1.0), Vector2.ZERO)
 
 	for i: int in range(LINES.size()):

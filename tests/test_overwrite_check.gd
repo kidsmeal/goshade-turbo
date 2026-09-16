@@ -1,8 +1,7 @@
 extends GSTTestBase
 
-## GSTOverwriteCheck and GSTExport's overwrite gate (design decisions 8 and
-## 9, docs/PLAN.md Phase 6 Files). Writes only under user:// (mirrors
-## test_stack_io.gd: never into the repo).
+## GSTOverwriteCheck and GSTExport's overwrite gate. Writes only under
+## user://, never into the repo.
 
 
 func _scanned_library() -> GSTLibrary:
@@ -12,8 +11,8 @@ func _scanned_library() -> GSTLibrary:
 
 
 ## One generator wired into one field op, output_color the field op (field
-## converts to grayscale, decision 12) -- real shipped manifests, enough for
-## a real header and a real body to diff (real-input rule).
+## converts to grayscale), from the shipped manifests: enough for a real
+## header and body to diff.
 func _build_stack(lib: GSTLibrary) -> GSTStack:
 	var stack: GSTStack = GSTStack.new()
 	var fbm: GSTLayer = GSTStackOps.add_layer(stack, "generative/fbm", GSTLayer.Kind.FIELD, true)
@@ -24,8 +23,8 @@ func _build_stack(lib: GSTLibrary) -> GSTStack:
 
 
 ## Appends a trailing space to the first non-empty body line (the first line
-## strictly after the header), a one-character mutation that never touches
-## the header's own JSON.
+## after the header), a one-character mutation that never touches the header
+## JSON.
 func _mutate_body_char(text: String) -> String:
 	var lines: PackedStringArray = text.split("\n")
 	for i: int in range(lines.size()):

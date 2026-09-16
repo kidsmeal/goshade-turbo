@@ -186,10 +186,8 @@ func run(plugin: EditorPlugin) -> void:
 	await _frames(5)
 	_check("recipe_apply", panel.get_stack() != stack and panel.get_randomize_button().disabled == false and not panel.is_picker_open(), "recipe replacement applied")
 	stack = panel.get_stack()
-	# The "fire" pick above activates a brand new GSTDocument with its own
-	# fresh UndoRedo (phase 3, docs/SHADER_TABS_reviewed-plan.md): history
-	# above pointed at the previous document and would go stale from here on
-	# without this recapture.
+	# The "fire" pick activates a new GSTDocument with its own UndoRedo;
+	# history pointed at the previous document.
 	history = panel.get_watched_history()
 	(panel.get_stack_list().get_node("%AddButton") as Button).pressed.emit()
 	await _frames(3)

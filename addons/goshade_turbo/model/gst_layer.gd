@@ -3,14 +3,13 @@ class_name GSTLayer
 extends Resource
 
 ## One stack entry: a manifest function instance with its own slots and params.
-## Design: docs/DESIGN.md, Data model.
 
 enum Kind {
 	FIELD,
 	COLOR,
 }
 
-## Stable id, assigned once at creation. Never reused (decision 22).
+## Stable id, assigned once at creation. Never reused.
 @export var id: StringName = &""
 ## Manifest id, e.g. "generative/fbm".
 @export var entry: String = ""
@@ -23,12 +22,9 @@ enum Kind {
 ## Generators only. Null for operators.
 @export var coord: GSTCoordBlock = null
 
-## Non-exported: the manifest this layer's `entry` resolves to, set by the
-## panel on add and on load (phase 4, docs/PLAN.md Phase 4 Files). Backs the
-## dynamic inspector properties below. Never serialized: `entry` (the
-## manifest id string) is the saved reference, `manifest` is a runtime
-## convenience the panel re-resolves through GSTLibrary after loading a
-## stack (phase 6).
+## The manifest `entry` resolves to, set by the panel on add and on load.
+## Backs the dynamic inspector properties below. Never serialized: `entry` is
+## the saved reference; the panel re-resolves this through GSTLibrary.
 var manifest: GSTManifestEntry = null
 
 const EDITOR_HIDDEN_PROPERTIES: Array[StringName] = [
@@ -45,8 +41,9 @@ const EDITOR_HIDDEN_PROPERTIES: Array[StringName] = [
 ]
 
 
-## Keep serialized model fields in storage while removing bookkeeping and
-## inherited categories. Dynamic manifest params remain editor-visible.
+## Hides the serialized model fields and inherited categories from the
+## inspector while keeping their storage usage. Dynamic manifest params stay
+## editor-visible.
 func _validate_property(property: Dictionary) -> void:
 	var usage: int = int(property.get("usage", 0))
 	var property_name: StringName = StringName(property.get("name", &""))
@@ -54,13 +51,11 @@ func _validate_property(property: Dictionary) -> void:
 		property["usage"] = usage & ~PROPERTY_USAGE_EDITOR
 
 
-## One dynamic property per manifest param (decision 13: the inspector
-## column is the layer resource's own property editor). float and int
-## params get PROPERTY_HINT_RANGE from the manifest's min/max. A vec3 with
-## editor = color_rgb uses a native RGB picker while retaining Vector3
-## storage and shader values. Editor-only usage: params stays the single stored
-## source of truth via the @export above, so these are never also written
-## to the .tres by ResourceSaver.
+## One dynamic property per manifest param. float and int params get
+## PROPERTY_HINT_RANGE from the manifest's min/max. A vec3 with
+## editor = color_rgb uses a native RGB picker with Vector3 storage.
+## PROPERTY_USAGE_EDITOR only: `params` is the stored source of truth, so
+## ResourceSaver never writes these to the .tres.
 func _get_property_list() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
 	if manifest == null:
@@ -116,33 +111,27 @@ func _find_param(property: StringName) -> Variant:
 	return null
 
 
-## Read-only manifest schema used by GSTInspectorPlugin to replace the
-## editor-facing label and tooltip while keeping this property's original
-## path, type, hint, and stored params key.
+## The manifest param dict for `property`, or {}. gst_inspector_column.gd
+## reads label and description from it.
 func get_param_schema(property: StringName) -> Dictionary:
 	var param: Variant = _find_param(property)
 	return param as Dictionary if param is Dictionary else {}
 
 
-## True if property currently has an explicit stored entry in params, as
-## opposed to falling back to the manifest default through _get (phase 2
-## review round 1 fix pass: undo must restore this exact absence rather than
-## writing an explicit default, since the dirty fingerprint includes
-## serialized params keys).
+## True when `params` holds an explicit entry for property_name, as opposed
+## to _get falling back to the manifest default. Undo must restore this exact
+## absence: the dirty fingerprint includes serialized params keys.
 func has_param_value(property_name: StringName) -> bool:
 	return params.has(String(property_name))
 
 
-## Restores property_name to its implicit manifest default by erasing its
-## explicit params entry, the counterpart to has_param_value.
+## Erases the explicit params entry so _get falls back to the manifest default.
 func erase_param_value(property_name: StringName) -> void:
 	params.erase(String(property_name))
 
 
-## Unknown param types are a manifest data bug, not a script error: they fall
-## through to TYPE_FLOAT with a push_warning naming the offending entry and
-## param, rather than failing the inspector build (docs/PLAN.md phase 4 fix
-## pass 2, item 1).
+## An unknown param type is a manifest data bug: falls back to TYPE_FLOAT
+## with a push_warning rather than failing the inspector build.
 func _property_type_for(param_type: String, param_name: String) -> int:
 	match param_type:
 		"int":

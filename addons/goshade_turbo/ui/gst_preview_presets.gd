@@ -2,10 +2,9 @@
 class_name GSTPreviewPresets
 extends RefCounted
 
-## Builds the preview target node per preset (docs/DESIGN.md decision 11).
-## Switching a preset swaps the node only: GSTPreview keeps assigning the
-## same ShaderMaterial instance to whichever node is currently active
-## (assert in the phase 5 editor smoke, docs/EDITOR_SMOKE.md).
+## Builds the preview target node per preset. Switching a preset swaps the
+## node only; GSTPreview assigns the same ShaderMaterial instance to
+## whichever node is active.
 
 const SPRITE: String = "sprite"
 const TEXT: String = "text"
@@ -17,10 +16,9 @@ const TEXT_FONT_SIZE: int = 96
 
 
 ## sprite: a TextureRect showing preview_image, aspect-correct and centered.
-## text: a Label reading "GoShade" in a large font.
-## full_rect: a ColorRect filling the viewport. Any unknown name falls back
-## to sprite rather than returning null, so a stale preset name never leaves
-## GSTPreview with no target node.
+## text: a Label reading TEXT_LABEL at TEXT_FONT_SIZE.
+## full_rect: a ColorRect filling the viewport.
+## An unknown name falls back to sprite so GSTPreview never lacks a target.
 static func build(preset_name: String, preview_image: Texture2D) -> Control:
 	match preset_name:
 		TEXT:
@@ -55,12 +53,10 @@ static func _build_full_rect() -> ColorRect:
 	return rect
 
 
-## True when the text preset should suggest screen_uv (decision 11: no
-## automatic change, a suggestion only). UV in a canvas_item fragment shader
-## is the drawn quad's own local UV; a Label draws one quad per glyph, each
-## carrying that glyph's UV rect inside the font atlas texture, not a 0..1
-## span across the label's own bounding box, so `uv` space reads
-## meaninglessly on the text preset specifically. screen_uv reads the actual
-## screen position regardless of the target node's own per-quad UV layout.
+## True when the text preset should suggest screen_uv (a suggestion, no
+## automatic change). A Label draws one quad per glyph, each carrying that
+## glyph's font-atlas UV rect rather than a 0..1 span across the label, so
+## `uv` space is meaningless on the text preset; screen_uv is independent of
+## the target's per-quad UV layout.
 static func suggests_screen_uv(preset_name: String, coord_space: GSTStack.CoordSpace) -> bool:
 	return preset_name == TEXT and coord_space == GSTStack.CoordSpace.UV

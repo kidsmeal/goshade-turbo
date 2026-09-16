@@ -1,11 +1,10 @@
 extends GSTTestBase
 
-## Cross-product compile checks over the v0.1 roster (docs/PLAN.md Phase 8,
-## design Release checklist: "Combination tests: every field op with every
-## generator as input compiles; every color op with every color entry as
-## input compiles"). Each test wires one real stack per combination through
-## GSTStackOps and asserts GSTShaderCompile.compiles() on the codegen result,
-## then reports how many combinations it checked in the assertion message.
+## Cross-product compile checks over the roster: every field op with every
+## generator as input, every color op with every color entry as input. Each
+## test wires one real stack per combination through GSTStackOps and asserts
+## GSTShaderCompile.compiles() on the codegen result, reporting the
+## combination count in the assertion message.
 
 
 func _scanned_library() -> GSTLibrary:
@@ -15,9 +14,8 @@ func _scanned_library() -> GSTLibrary:
 
 
 ## True when every declared input of `entry` is field-kind. fieldops/alpha's
-## sole input is color-kind, so this excludes it from the field-op x
-## generator loop below; it is already covered by
-## tests/test_codegen_color.gd's test_fieldops_alpha_reads_the_color_alpha_channel.
+## sole input is color-kind, so it is excluded from the field-op x generator
+## loop; tests/test_codegen_color.gd covers it.
 func _all_inputs_field(entry: GSTManifestEntry) -> bool:
 	if entry.inputs.is_empty():
 		return false
@@ -62,7 +60,7 @@ const EXPECTED_COLOR_OP_IDS: Array[String] = [
 ]
 
 ## Every color-kind entry: the color/* roster, the source/* roster, and every
-## filter/* entry (its kind_out is color, decision 21). New entries must be
+## filter/* entry (its kind_out is color). New entries must be
 ## added here on purpose.
 const EXPECTED_COLOR_ENTRY_IDS: Array[String] = [
 	"color/add", "color/brightness_contrast", "color/fill", "color/gradient_map",
@@ -85,10 +83,9 @@ const EXPECTED_SDF_GENERATOR_IDS: Array[String] = [
 ]
 
 
-## Every field op with every generator (generative roster plus the sdf
-## generators, docs/PLAN.md Phase 8) wired into every one of that field op's
-## input slots, so a two-input op (e.g. fieldops/max) gets the same generator
-## on both "a" and "b". A generator is any entry with coord == true.
+## Every field op with every generator wired into every one of that field
+## op's input slots, so a two-input op (e.g. fieldops/max) gets the same
+## generator on both "a" and "b". A generator is any entry with coord == true.
 func test_every_field_op_compiles_with_every_generator_as_input() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var generator_ids: Array[String] = []
@@ -119,20 +116,17 @@ func test_every_field_op_compiles_with_every_generator_as_input() -> void:
 	assert_eq(checked, field_op_ids.size() * generator_ids.size(), "checked %d field-op x generator combinations (%d field ops x %d generators)" % [checked, field_op_ids.size(), generator_ids.size()])
 
 
-## True when `id` is a filter/* entry (samples_source, B10/B6): its own
-## color-kind input only accepts a source (texture/screen), never another
-## color-kind entry directly, so it needs a source/texture layer built and
-## wired ahead of it wherever it is used as a color-kind input elsewhere.
+## True when `id` is a filter/* entry (samples_source): its color-kind input
+## accepts only a source (texture/screen), so it needs a source/texture layer
+## wired ahead of it wherever it is used as a color-kind input.
 func _is_filter(id: String) -> bool:
 	return id.begins_with("filter/")
 
 
 ## Builds `color_entry_id` as a layer in `stack` and returns it, ready to be
-## wired as a color-kind input elsewhere. A plain color/* or source/* entry is
-## just added. A filter/* entry additionally needs a source/texture layer
-## added first and wired into the filter's own "source" (samples_source)
-## slot (B6: a samples_source slot accepts only a texture or screen layer),
-## so the returned layer is the filter, fed by that texture.
+## wired as a color-kind input. A color/* or source/* entry is added as is. A
+## filter/* entry gets a source/texture layer added first and wired into its
+## "source" (samples_source) slot; the returned layer is the filter.
 func _build_color_entry_layer(stack: GSTStack, color_entry_id: String, lib: GSTLibrary) -> GSTLayer:
 	if not _is_filter(color_entry_id):
 		return GSTStackOps.add_layer(stack, color_entry_id, GSTLayer.Kind.COLOR, false)
@@ -145,17 +139,12 @@ func _build_color_entry_layer(stack: GSTStack, color_entry_id: String, lib: GSTL
 	return filter_layer
 
 
-## Every color op (a color/* entry with at least one color-kind input; fill
-## has no inputs and gradient_map/palette take only a field input, so none of
-## the three are "color ops" for this loop) with every color-kind entry (the
-## full color/* roster, the two source/* entries, and every filter/* entry
-## fed by a source/texture layer -- decision 15's "color entries are the
-## color roster plus sources", amended in docs/PLAN.md Phase 8's
-## test_combinations.gd entry to include filters, since a filter's own
-## kind_out is color) wired into its first color input. A second color input
-## (the blend family, color/mix) is fed color/fill; a field input
-## (color/mix's mask) is fed generative/fbm. Matches docs/PLAN.md Phase 8
-## Build item 3, fix pass 3 item 5.
+## Every color op (a color/* entry with at least one color-kind input; fill,
+## gradient_map, and palette are excluded) with every color-kind entry (the
+## color/* roster, the two source/* entries, and every filter/* entry fed by
+## a source/texture layer) wired into its first color input. A second color
+## input (the blend family, color/mix) is fed color/fill; a field input
+## (color/mix's mask) is fed generative/fbm.
 func test_every_color_op_compiles_with_every_color_entry_as_input() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var color_op_ids: Array[String] = []
@@ -211,8 +200,7 @@ func test_every_color_op_compiles_with_every_color_entry_as_input() -> void:
 
 ## Every sdf operator (union, subtract, intersect, smooth_union) with every
 ## ordered pair of sdf generators (circle, box, rounded_box, polygon, star,
-## line, ring) wired into its "a" and "b" slots. docs/PLAN.md Phase 8 Build
-## item 3: "every sdf operator with every pair of sdf generators compiles".
+## line, ring) wired into its "a" and "b" slots.
 func test_every_sdf_operator_compiles_with_every_pair_of_sdf_generators() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var sdf_operator_ids: Array[String] = []

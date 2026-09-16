@@ -1,8 +1,7 @@
 extends GSTTestBase
 
 ## GSTMaterialSync: rebuilds a ShaderMaterial's code and uniforms from a
-## GSTStack's layer resources (decision 7). Design: docs/DESIGN.md decision
-## 7, docs/PLAN.md Phase 5 Files.
+## GSTStack's layer resources.
 
 
 func _scanned_library() -> GSTLibrary:
@@ -12,8 +11,7 @@ func _scanned_library() -> GSTLibrary:
 
 
 ## One generator (generative/fbm: a coord block plus octaves/gain params) and
-## one field op (fieldops/invert, wired to it) -- the real shipped manifests,
-## not a synthetic fixture (real-input rule).
+## one field op (fieldops/invert, wired to it), from the shipped manifests.
 func _build_stack(lib: GSTLibrary) -> Dictionary:
 	var stack: GSTStack = GSTStack.new()
 	var fbm: GSTLayer = GSTStackOps.add_layer(stack, "generative/fbm", GSTLayer.Kind.FIELD, true)
@@ -133,7 +131,7 @@ func test_sync_writes_one_uniform_per_param_and_coord_field() -> void:
 	var material: ShaderMaterial = ShaderMaterial.new()
 	var rect_size: Vector2 = Vector2(300.0, 150.0)
 	# gst_rect_size is only declared in `local` coord space (GSTCodegen's
-	# is_local branch); local exercises the real declared-uniform path here.
+	# is_local branch).
 	stack.coord_space = GSTStack.CoordSpace.LOCAL
 
 	var result: GSTCodegenResult = GSTMaterialSync.sync(stack, lib, material, &"", rect_size)
@@ -146,9 +144,8 @@ func test_sync_writes_one_uniform_per_param_and_coord_field() -> void:
 	assert_eq(material.get_shader_parameter(GSTUniformNames.param_uniform(fbm.id, "fbm", "gain")), 0.5, "gain uniform matches the manifest default (float)")
 	assert_eq(material.get_shader_parameter("gst_rect_size"), rect_size, "gst_rect_size uniform equals the given rect size (B5)")
 
-	# Coord scroll/warp_strength are omitted at zero (mirrors GSTCodegen):
-	# unset params are the caller's own layer defaults, so neither uniform
-	# exists in the compiled shader at all.
+	# Coord scroll/warp_strength are omitted at zero (mirrors GSTCodegen), so
+	# neither uniform exists in the compiled shader.
 	assert_eq(material.shader.get_shader_uniform_list().any(func(info: Dictionary) -> bool: return info["name"] == GSTUniformNames.coord_scroll(fbm.id)), false, "scroll uniform is not declared when coord.scroll is zero")
 
 
@@ -180,9 +177,8 @@ func test_codegen_failure_leaves_material_code_and_uniforms_unchanged() -> void:
 	var code_before: String = material.shader.code
 	var octaves_before: Variant = material.get_shader_parameter(GSTUniformNames.param_uniform(fbm.id, "fbm", "octaves"))
 
-	# An unwired filter slot (B10's "Unwired filter rule"): filter/pixelate's
-	# "source" slot defaults to "" and codegen refuses it (docs/PLAN.md
-	# Cross-cutting concern "Manifest code contracts (B10)").
+	# Unwired filter rule: filter/pixelate's "source" slot defaults to "" and
+	# codegen refuses it.
 	GSTStackOps.add_layer(stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
 
 	var fail_result: GSTCodegenResult = GSTMaterialSync.sync(stack, lib, material, &"", Vector2(256.0, 256.0))

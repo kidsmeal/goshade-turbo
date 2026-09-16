@@ -3,22 +3,17 @@ class_name GSTHeader
 extends RefCounted
 
 ## Serializes and parses the one-line JSON stack header embedded in every
-## exported .gdshader (design decision 8, docs/PLAN.md Cross-cutting concern
-## "Header JSON schema"). GSTCodegen's single header call site
-## (gst_codegen.gd::_header_lines) calls header_line() directly.
+## exported .gdshader. GSTCodegen._header_lines calls header_line().
 ##
 ## Schema: {schema: int, coord_space: String, output_color: String,
 ## output_alpha: String, next_id: int, layers: [{id, entry, kind_out, slots,
 ## params, coord}]}. coord_space is "uv" | "screen_uv" | "local". Vectors
 ## serialize as [x, y] / [x, y, z]; colors as [r, g, b, a]. coord is null for
-## an operator layer. The JSON never contains a newline (JSON.stringify with
-## an empty indent string never inserts one); the header is always exactly
-## one line.
+## an operator layer. JSON.stringify with an empty indent never inserts a
+## newline, so the header is always exactly one line.
 ##
-## Reopen refusals (design B8, docs/PLAN.md Blocker B8): a missing
-## "// stack: " prefix, unparsable JSON, or an unknown schema version are
-## each refused with a reason naming the failure. No new empty stack is
-## offered on any of these; the caller (gst_export.gd) surfaces the reason.
+## parse() refuses a missing "// stack: " prefix, unparsable JSON, or an
+## unknown schema version with a reason; no empty stack is offered.
 
 const HEADER_PREFIX: String = "// stack: "
 const SCHEMA_VERSION: int = 1
@@ -42,21 +37,18 @@ static func serialize(stack: GSTStack) -> String:
 	return JSON.stringify(data)
 
 
-## Parses a full header line (including the "// stack: " prefix) back into a
-## GSTStack. `{ok, stack, reason}`. `library` resolves each layer's
-## `manifest` for the inspector and material sync; a layer whose `entry` does
-## not resolve is left with `manifest == null` here (a caller that requires
-## every entry to resolve, e.g. gst_stack_io.gd, checks that itself).
+## Parses a full header line (prefix included) into a GSTStack.
+## `{ok, stack, reason}`. `library` resolves each layer's `manifest`; an
+## unresolved `entry` leaves `manifest == null` (gst_stack_io.gd enforces
+## resolution itself).
 static func parse(line: String, library: GSTLibrary) -> Dictionary:
 	if not line.begins_with(HEADER_PREFIX):
 		return {"ok": false, "stack": null, "reason": "missing '%s' header prefix" % HEADER_PREFIX}
 
 	var json_text: String = line.substr(HEADER_PREFIX.length())
-	# JSON.parse_string() prints an engine ERROR: line on malformed input
-	# (verified), which the headless test wrapper treats as a hard failure
-	# even on this expected-refusal path (never push_error/print an error on
-	# an expected path). The instance API's parse() returns an Error code
-	# silently instead.
+	# JSON.parse_string() prints an engine ERROR line on malformed input; the
+	# instance parse() returns an Error code silently. Expected refusals must
+	# not print errors (the headless test wrapper treats any as a failure).
 	var json: JSON = JSON.new()
 	if json.parse(json_text) != OK or not (json.get_data() is Dictionary):
 		return {"ok": false, "stack": null, "reason": "stack header JSON is unparsable"}
@@ -127,9 +119,8 @@ static func _params_to_json(params: Dictionary) -> Dictionary:
 	return out
 
 
-## Type is read from the value's own Variant type, not the manifest: a bare
-## GSTStack built without ever attaching a manifest (most codegen tests, and
-## any stack whose entry no longer resolves) must still serialize correctly.
+## Type comes from the value's Variant type, not the manifest, so a stack
+## with no manifest attached still serializes.
 static func _param_value_to_json(value: Variant) -> Variant:
 	match typeof(value):
 		TYPE_COLOR:
@@ -195,12 +186,10 @@ static func _slots_from_json(data: Variant) -> Dictionary:
 	return out
 
 
-## Param values decode from JSON as float or Array (JSON has no int/Color/
-## Vector distinction, verified: JSON.parse_string("4") returns a float).
-## `manifest` supplies the real type per param name so an int param (e.g.
-## fbm's octaves) round-trips as int rather than staying a float. A param
-## whose manifest cannot be resolved (manifest == null, or the name is not in
-## manifest.params) keeps its raw decoded JSON shape.
+## JSON decodes every number as float and every vector/color as Array.
+## `manifest` supplies the declared type per param name so int params
+## round-trip as int. A param with no resolvable manifest type keeps its raw
+## decoded shape.
 static func _params_from_json(data: Variant, manifest: GSTManifestEntry) -> Dictionary:
 	var out: Dictionary = {}
 	if not (data is Dictionary):

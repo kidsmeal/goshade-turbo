@@ -1,28 +1,17 @@
 @tool
 extends RefCounted
 
-## Phase 5 (docs/SHADER_TABS_reviewed-plan.md): binds Save, Save As, Export,
-## overwrite confirmation, preview-image selection, and delayed Open/Reopen
-## Shader dialog responses to the document that initiated them, not
-## whichever document happens to be active by the time the response arrives.
-## Drives the real dialog-opening "_pressed" handlers (which now capture a
-## stable document id + request identity) and the same *_file_selected/
-## _on_overwrite_confirmed seams a real EditorFileDialog/ConfirmationDialog
-## signal would call, switching the active document in between every open
-## and its response -- exactly the race decision 20's own file operations
-## never had to consider before tabs existed. Every write is verified by
-## reloading the file (GSTStackIO.load / GSTExport.build) and comparing
-## GSTDocument.compute_fingerprint / exact generated text against the
-## originating document's own stack, never by trusting current_path/message
-## state alone.
+## GST_EDITOR_SMOKE=tabs_files. Binds Save, Save As, Export, overwrite
+## confirmation, preview-image selection, and delayed Open/Reopen Shader
+## dialog responses to the document that opened the dialog. Drives the
+## *_pressed handlers and the *_file_selected/_on_overwrite_confirmed seams
+## directly, switching the active document between each open and its
+## response. Every write is verified by reloading the file (GSTStackIO.load /
+## GSTExport.build) against the originating document's stack.
 ##
-## "Stale/closed target" is mostly simulated here by removing a document from
-## _documents (and tearing it down) directly, the same bypass-the-guarded-UI
-## technique tests/gst_editor_ui_picker_smoke.gd already uses for a stale
-## picker-context installation (real document close landed in phase 6:
-## _run_real_close_then_stale_save_as_rejected below covers the same shape
-## through panel.close_document itself, plan Blockers: "Closed-document
-## callbacks receive their full runtime check after phase 6 adds closure").
+## Closed targets are simulated by erasing the document from _documents and
+## tearing it down; _run_real_close_then_stale_save_as_rejected covers the
+## same shape through panel.close_document.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -45,10 +34,8 @@ func run(plugin: EditorPlugin) -> void:
 		panel.get_picker().cancelled.emit()
 		await plugin.get_tree().process_frame
 
-	# doc_a (fire, 5 layers) and doc_b (dissolve, 10 layers) are independent
-	# recipe copies (phase 3: "Repeated recipes create independent
-	# layer/coord instances") with structurally distinct content, used
-	# throughout below as the two documents every check switches between.
+	# doc_a (fire, 5 layers) and doc_b (dissolve, 10 layers): distinct layer
+	# counts so reloaded content identifies which document wrote it.
 	panel.open_recipe("fire")
 	await plugin.get_tree().process_frame
 	var doc_a: GSTDocument = panel.get_active_document()
@@ -81,13 +68,9 @@ func run(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-## Opens Save As while doc_a is active (capturing doc_a's own stable id and
-## request identity), switches the active document to doc_b before the
-## dialog's own file-selected response arrives, then resolves it: the write
-## must still land on doc_a, doc_b must be completely untouched, and the
-## panel's own shared mirrors (get_active_document/get_current_path) must
-## keep showing doc_b, not doc_a, since doc_b is what the user is actually
-## looking at when the response resolves.
+## Save As opened on doc_a, active switched to doc_b before the response.
+## Asserts: write lands on doc_a, doc_b untouched, panel mirrors
+## (get_active_document/get_current_path) still show doc_b.
 func _run_save_as_switch(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument, fingerprint_a: String) -> void:
 	var save_path: String = "user://gst_tabs_files_save_as.tres"
 	_cleanup([save_path])
@@ -98,12 +81,9 @@ func _run_save_as_switch(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDo
 	await plugin.get_tree().process_frame
 	panel._on_save_as_file_selected(save_path)
 	await plugin.get_tree().process_frame
-	# A real EditorFileDialog closes itself once its own embedded selection
-	# flow runs; calling _on_save_as_file_selected directly (this test's own
-	# stand-in for a real dialog click) bypasses that, so the popped window
-	# stays open unless hidden explicitly -- otherwise a later check's own
-	# popup_centered*() call on a different dialog trips Window's "already
-	# has another exclusive child" error against this one.
+	# _on_save_as_file_selected bypasses the dialog's own close; hide it or a
+	# later popup_centered*() on another dialog fails with Window's "already
+	# has another exclusive child".
 	panel._save_as_dialog.hide()
 
 	var doc_a_ok: bool = doc_a.current_path == save_path and not doc_a.is_dirty()
@@ -114,10 +94,8 @@ func _run_save_as_switch(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDo
 	_check("save_as_switch_writes_originating_document", doc_a_ok and doc_b_untouched and active_unaffected and content_is_doc_a, "doc_a_path='%s' (expect '%s') doc_a_dirty=%s doc_b_path='%s' doc_b_dirty=%s active_is_b=%s current_path='%s' loaded_ok=%s content_is_doc_a=%s" % [doc_a.current_path, save_path, doc_a.is_dirty(), doc_b.current_path, doc_b.is_dirty(), panel.get_active_document() == doc_b, panel.get_current_path(), loaded["ok"], content_is_doc_a])
 
 
-## With doc_a already saved at save_path (by the check above) and doc_b
-## active, Save As to that same canonical path must refuse instead of
-## overwriting doc_a's own file with doc_b's content (Cross-cutting "Refuse
-## Save As to a canonical path owned by another open document").
+## doc_a is saved at save_path by the check above. Save As from doc_b to the
+## same canonical path must refuse rather than overwrite doc_a's file.
 func _run_save_as_path_conflict(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument, fingerprint_a: String) -> void:
 	var save_path: String = "user://gst_tabs_files_save_as.tres"
 	panel.activate_document(doc_b)
@@ -136,50 +114,29 @@ func _run_save_as_path_conflict(plugin: EditorPlugin, panel: GSTMainPanel, doc_a
 	_cleanup([save_path])
 
 
-## Exports doc_a once (clean write), hand-edits the file on disk, then opens
-## Export again while doc_a is active (capturing it), switches to doc_b, and
-## resolves the file-selected response against the same export_path: the
-## overwrite gate's own hand-edit check (GSTOverwriteCheck, decision 9) finds
-## the on-disk body no longer matches a fresh codegen of its own embedded
-## header and requires confirmation. Switches to doc_b again before
-## confirming: _on_overwrite_confirmed must still re-target doc_a (Cross-
-## cutting "bind its second confirmation to the original request"), not
-## doc_b, which was never involved in this export at all. doc_a carries a
-## real structural edit throughout (fix-now, phase 5 review round 2, note 3)
-## so both the clean write and the confirmed overwrite are proven to leave
-## it dirty (Cross-cutting "Export never clears dirty state").
+## Exports doc_a, hand-edits the file, then opens Export on doc_a, switches to
+## doc_b, and resolves against the same path: GSTOverwriteCheck finds the
+## on-disk body differs from a fresh codegen of its header and requires
+## confirmation. Switches to doc_b again before confirming;
+## _on_overwrite_confirmed must target doc_a. doc_a carries a structural edit
+## throughout so both writes are proven to leave it dirty.
 func _run_export_second_confirmation(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument) -> void:
 	var export_path: String = "user://gst_tabs_files_export.gdshader"
 	_cleanup([export_path])
 	panel.activate_document(doc_a)
 	await plugin.get_tree().process_frame
-	# Fix-now (phase 5 review round 2, note 3): doc_a is already clean here
-	# (_run_save_as_switch above just saved it), so nothing in this function
-	# could have caught a stray mark_baseline() in the export path -- the
-	# same blind spot round-1 note 2 found in _run_failed_save. A real
-	# structural edit (the same panel.get_undo().add_layer primitive
-	# _run_failed_save uses) makes doc_a genuinely dirty first, so the
-	# assertions below can actually prove Export never clears dirty state
-	# (Cross-cutting; docs/SHADER_TABS_reviewed.md decision 8) across both the
-	# clean write and the confirmed overwrite.
+	# doc_a is clean after _run_save_as_switch; a structural edit makes it
+	# dirty so a stray mark_baseline() in the export path would be detected.
 	panel.get_undo().add_layer("color/fill", GSTLayer.Kind.COLOR, false)
 	var dirty_before_export: bool = doc_a.is_dirty()
 	var expected_code: String = GSTExport.build(doc_a.stack, panel.get_library()).code
 
-	# hide_export_dialog() runs immediately after each _on_export_pressed()
-	# below, before resolving: a real EditorFileDialog closes itself the
-	# instant the user actually picks a file, before _export_stack_to_path
-	# ever runs (production order); this test's own direct
-	# _on_export_file_selected call is that same production handler with no
-	# real dialog interaction in front of it, so the window is closed here to
-	# match that same order instead of leaving it open under a second
-	# dialog's own popup_centered*() call (Window's "already has another
-	# exclusive child" otherwise).
+	# A real EditorFileDialog closes before _export_stack_to_path runs; the
+	# direct _on_export_file_selected call skips that, so hide the dialog
+	# first (Window's "already has another exclusive child" otherwise).
 	panel._on_export_pressed()
-	# abandon=false (phase 6): this call's own request must survive into the
-	# _on_export_file_selected call immediately below, not be cleared here --
-	# unlike a genuine abandonment (no resolution coming), which is
-	# hide_export_dialog()'s own default.
+	# abandon=false keeps the pending request for the _on_export_file_selected
+	# call below; the default clears it.
 	panel.hide_export_dialog(false)
 	panel._on_export_file_selected(export_path)
 	await plugin.get_tree().process_frame
@@ -207,18 +164,9 @@ func _run_export_second_confirmation(plugin: EditorPlugin, panel: GSTMainPanel, 
 	_cleanup([export_path])
 
 
-## Simulates a closed target via the same low-level bypass
-## tests/gst_editor_ui_picker_smoke.gd already uses for a stale
-## picker-context installation (a throwaway document captures a Save As
-## request, is then removed from _documents and torn down before the
-## dialog's response arrives), exercising _resolve_pending_document's own
-## rejection directly. _run_real_close_then_stale_save_as_rejected below
-## covers the same shape through the real, now-existing close path (phase 6).
-## The response must be rejected outright -- no file written, the active
-## document's own identity/content left untouched -- but (deferred note,
-## phase 5 review round 1, resolved phase 6) its own operation_messages now
-## does carry the closed-target diagnostic, surfaced instead of silently
-## discarded.
+## doc_c captures a Save As request, then is erased from _documents and torn
+## down before the response arrives. Asserts: no file written, active
+## document untouched, closed-target diagnostic on doc_a.operation_messages.
 func _run_stale_closed_save_as_rejected(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument) -> void:
 	var doc_c: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
@@ -241,23 +189,15 @@ func _run_stale_closed_save_as_rejected(plugin: EditorPlugin, panel: GSTMainPane
 	_check("stale_closed_save_as_rejected", nothing_written and active_untouched and message_surfaced, "file_exists=%s active_is_a=%s doc_a_message='%s'" % [FileAccess.file_exists(stale_path), panel.get_active_document() == doc_a, doc_a.operation_messages.get("Save", "")])
 
 
-## Regression (phase 6 review round 1, fix-now note 2): _on_export_file_
-## selected's own doc == null branch (gst_main_panel.gd, reached when
-## _resolve_pending_document finds no match for _pending_export) was
-## unexecuted by any test, even though docs/CURRENTNESS_AUDIT.md ticks it
-## alongside the runtime-verified Save As branch above. Same bypass shape as
-## _run_stale_closed_save_as_rejected: doc_c (opened, and so already active)
-## captures the Export request, is then removed from _documents and torn
-## down before the dialog's response arrives, so _resolve_pending_document
-## resolves null and the diagnostic must land on doc_a (active when the
-## response resolves), not be silently discarded.
+## Same bypass shape for Export: doc_c captures the request, is erased and
+## torn down, _resolve_pending_document returns null, and the diagnostic must
+## land on doc_a (active when the response resolves).
 func _run_stale_closed_export_rejected(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument) -> void:
 	var doc_c: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
 	panel._on_export_pressed()
-	# abandon=false: this call's own request must survive into the
-	# _on_export_file_selected call below (same reasoning as
-	# _run_export_second_confirmation's own hide_export_dialog(false) call).
+	# abandon=false keeps the pending request for the _on_export_file_selected
+	# call below.
 	panel.hide_export_dialog(false)
 	panel.activate_document(doc_a)
 	await plugin.get_tree().process_frame
@@ -276,13 +216,8 @@ func _run_stale_closed_export_rejected(plugin: EditorPlugin, panel: GSTMainPanel
 	_check("stale_closed_export_rejected", nothing_written and active_untouched and message_surfaced, "file_exists=%s active_is_a=%s doc_a_message='%s'" % [FileAccess.file_exists(stale_path), panel.get_active_document() == doc_a, doc_a.operation_messages.get("Export", "")])
 
 
-## Same shape as above, through the real close path (phase 6) instead of the
-## direct _documents.erase/teardown bypass: doc_c is pristine (clean), so
-## panel.close_document closes it immediately with no dialog. Proves the
-## close lifecycle's own teardown invalidates a pending Save As request the
-## same way the bypass above does, without a separate invalidation pass
-## (Cross-cutting "Invalidate pending file/picker/property callbacks for a
-## closed document").
+## Same shape through panel.close_document: doc_c is clean, so it closes
+## with no dialog. Asserts close teardown invalidates the pending Save As.
 func _run_real_close_then_stale_save_as_rejected(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument) -> void:
 	var doc_c: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
 	await plugin.get_tree().process_frame
@@ -307,9 +242,8 @@ func _run_real_close_then_stale_save_as_rejected(plugin: EditorPlugin, panel: GS
 	_cleanup([stale_path])
 
 
-## Opens the preview-image dialog while doc_a is active, switches to doc_b,
-## then resolves it: doc_a's own preview_image_path must update, doc_b's own
-## field (and the live preview it is currently showing) must not.
+## Preview-image dialog opened on doc_a, resolved with doc_b active. Asserts
+## doc_a.preview_image_path updates and doc_b's does not.
 func _run_delayed_preview_image(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument) -> void:
 	var image_path: String = "res://addons/goshade_turbo/assets/preview_default.png"
 	doc_a.preview_image_path = ""
@@ -333,19 +267,13 @@ func _run_delayed_preview_image(plugin: EditorPlugin, panel: GSTMainPanel, doc_a
 	_check("delayed_preview_image_survives_reactivation", restored_ok, "doc_a_image='%s'" % [doc_a.preview_image_path])
 
 
-## Opens the Open dialog while doc_a is active (capturing it for message
-## routing only -- Open always creates/reactivates its own document
-## independent of which one is active), switches to doc_b, then resolves
-## with a missing path: the failure message must land on doc_a, not on
-## doc_b (currently active and otherwise untouched).
+## Open dialog opened on doc_a (captured for message routing only; Open
+## creates or reactivates its own document), resolved with doc_b active and a
+## missing path. Asserts the failure message lands on doc_a, not doc_b.
 func _run_open_message_routing(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument) -> void:
 	var missing_path: String = "res://sandbox/stacks/gst_tabs_files_missing.tres"
-	# Clears every earlier check's own leftover messages (e.g. doc_b's own
-	# "Save" path-conflict message from _run_save_as_path_conflict above),
-	# not just "Open": those are real, correctly-attributed diagnostics on
-	# their own document, but they would otherwise make
-	# panel.get_message_label().text nonempty here for a reason unrelated to
-	# what this check is actually proving.
+	# Clears leftover messages from earlier checks on both documents; they
+	# would otherwise make panel.get_message_label().text nonempty here.
 	doc_a.operation_messages.clear()
 	doc_b.operation_messages.clear()
 	panel.activate_document(doc_a)
@@ -367,14 +295,11 @@ func _run_open_message_routing(plugin: EditorPlugin, panel: GSTMainPanel, doc_a:
 	_check("open_dialog_message_redisplays_on_reactivation", redisplayed, "shown='%s'" % [panel.get_message_label().text])
 
 
-## Same routing proof as Open above, using the Reopen Shader dialog and a
-## headerless .gdshader (B8's own refusal: "no new empty stack is offered").
+## Same routing proof for the Reopen Shader dialog with a headerless .gdshader.
 func _run_reopen_message_routing(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument) -> void:
 	var headerless_path: String = "user://gst_tabs_files_headerless.gdshader"
 	_write_file(headerless_path, "shader_type canvas_item;\nvoid fragment() { COLOR = vec4(1.0); }\n")
-	# Clears every earlier check's own leftover messages (e.g. doc_a's own
-	# "Open" failure message from _run_open_message_routing above), the same
-	# reason _run_open_message_routing itself clears both documents first.
+	# Clears leftover messages from earlier checks on both documents.
 	doc_a.operation_messages.clear()
 	doc_b.operation_messages.clear()
 	panel.activate_document(doc_a)
@@ -392,10 +317,8 @@ func _run_reopen_message_routing(plugin: EditorPlugin, panel: GSTMainPanel, doc_
 	_cleanup([headerless_path])
 
 
-## Save As's own EditorFileDialog.canceled -- the real Cancel button/Esc
-## path, not a direct .hide() -- must clear the captured pending request so
-## no later, unrelated response can resolve against it (defense-in-depth;
-## Cross-cutting "reject closed/stale targets").
+## EditorFileDialog.canceled on the Save As dialog must clear the pending
+## request so no later response can resolve against it.
 func _run_save_as_cancellation(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument) -> void:
 	panel.activate_document(doc_a)
 	await plugin.get_tree().process_frame
@@ -408,22 +331,11 @@ func _run_save_as_cancellation(plugin: EditorPlugin, panel: GSTMainPanel, doc_a:
 	_check("save_as_cancellation_clears_pending_request", captured_before_cancel and cleared_after_cancel, "captured_before=%s cleared_after=%s" % [captured_before_cancel, cleared_after_cancel])
 
 
-## A Save to a path whose parent directory does not exist fails at
-## FileAccess.open (GSTStackIO.save's own "cannot open ... for writing"
-## branch has no equivalent here -- ResourceSaver.save fails the same way):
-## the document must stay exactly as it was, with the failure reason on its
-## own operation_messages.
-## Fix-now (phase 5 review round 1, note 2): the original draft captured
-## dirty_before from doc_a while it was already clean (doc_a's own
-## _run_save_as_switch above left it saved/clean, and nothing between there
-## and here edits it), so dirty_after == dirty_before proved only that a
-## clean document stays clean, not that dirtiness survives a failed write --
-## the actual exit criterion this check covers. Adds a real structural edit
-## (panel.get_undo().add_layer, the same primitive
-## tests/gst_editor_documents_smoke.gd's own baseline_dirty_after_
-## structural_add check uses) to doc_a first so dirty_before is genuinely
-## true, and the check now asserts that directly instead of only comparing
-## before/after.
+## Save to a path whose parent directory does not exist fails in
+## ResourceSaver.save. Asserts the document keeps its path and dirty state
+## and the failure reason lands on operation_messages["Save"]. A structural
+## edit (panel.get_undo().add_layer) first makes doc_a dirty so dirty_before
+## is true.
 func _run_failed_save(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument) -> void:
 	var bad_path: String = "user://gst_tabs_files_missing_dir/gst_tabs_files_bad.tres"
 	panel.activate_document(doc_a)
@@ -446,16 +358,11 @@ func _run_failed_export(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDoc
 	_check("failed_export_invalid_path", failed_ok, "ok=%s file_exists=%s message='%s'" % [result["ok"], FileAccess.file_exists(bad_path), doc_a.operation_messages.get("Export", "")])
 
 
-## Regression (phase 5 review round 1, fix-now note 1): a fresh pristine
-## document takes a failed Open's diagnostic (open_path routes a refusal's
-## message onto _active_document -- gst_main_panel.gd's _open_path_for), then
-## _on_new_pressed reuses that same still-pristine, still-clean document
-## (_find_reusable_pristine_document: a failed Open never touches the
-## document's stack, so it stays clean) instead of allocating a new one.
-## Before the fix, _on_new_pressed blanked only _message_label.text, leaving
-## the stale "Open" entry in GSTDocument.operation_messages, so the very next
-## _refresh_operation_message_label() call (a tab switch back, or any later
-## message on that document) re-showed it even though New had just run.
+## A pristine document takes a failed Open's diagnostic (_open_path_for routes
+## it onto _active_document), then _on_new_pressed reuses that same clean
+## document (_find_reusable_pristine_document). Asserts New clears the "Open"
+## entry from GSTDocument.operation_messages, not only _message_label.text;
+## otherwise the next _refresh_operation_message_label() re-shows it.
 func _run_new_clears_stale_open_message(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
 	var missing_path: String = "res://sandbox/stacks/gst_tabs_files_missing.tres"
 	var pristine: GSTDocument = await panel.open_document(GSTStack.new(), "", false)
@@ -472,47 +379,34 @@ func _run_new_clears_stale_open_message(plugin: EditorPlugin, panel: GSTMainPane
 	var no_open_entry_after_new: bool = not pristine.operation_messages.has("Open")
 	_check("new_clears_stale_open_message", reused_same_document and label_empty_after_new and no_open_entry_after_new, "reused_same_doc=%s label='%s' has_open_entry=%s" % [reused_same_document, panel.get_message_label().text, pristine.operation_messages.has("Open")])
 
-	# A later message on this same document (a failed Save here; the fix-now
-	# note's own reproduction also covers a plain tab switch back) must not
-	# resurrect the "Open" entry operation_messages.clear() already removed.
+	# A later message on the same document (a failed Save) must not resurrect
+	# the cleared "Open" entry.
 	var bad_path: String = "user://gst_tabs_files_missing_dir/gst_tabs_files_new_pristine_bad.tres"
 	var result: Dictionary = await panel.save_to_path(bad_path)
 	var later_message_is_save_only: bool = not result["ok"] and not pristine.operation_messages.has("Open") and panel.get_message_label().text.contains("Save") and not panel.get_message_label().text.contains("Open")
 	_check("new_stale_open_message_does_not_reappear_on_later_message", later_message_is_save_only, "shown='%s' has_open_entry=%s" % [panel.get_message_label().text, pristine.operation_messages.has("Open")])
 
 
-## Regression (fix-now, phase 5 review round 3, note 1): reproduces the
-## forced-finish suspension path that used to route a delayed Open success
-## message onto whichever document was still active before a pending native
-## color-popup commit resolved, instead of the document open_path actually
-## installs -- reachable through open_document's own await
-## _finish_pending_edits() (gst_main_panel.gd _open_path_for/
-## _reopen_shader_path_for/open_recipe/_on_picker_choice's "recipe" case all
-## shared this shape). Mirrors tests/gst_editor_documents_smoke.gd's own
-## color_pending_edit_finishes_before_document_activation setup (a real
-## popped ColorPickerButton with typed, uncommitted hex text on a
-## color/palette layer), seeds color_doc with a stale "Open" diagnostic (as
-## if an earlier failed Open had landed on it), then calls open_path
-## fire-and-forget on a second, distinct .tres while that commit is still in
-## flight -- exactly how the real Open dialog's own file_selected signal
-## dispatches _on_open_file_selected. Polls (bounded) until activation
-## completes rather than a fixed frame count: closing a native color popup's
-## own close handler is CONNECT_DEFERRED and can span more than one frame
-## (tests/gst_editor_documents_smoke.gd's own comment on this same setup).
+## open_document's await _finish_pending_edits() suspends open_path while a
+## pending native color-popup commit resolves; the delayed Open message must
+## route to the document open_path installs, not the one still active before
+## the suspension. Setup mirrors tests/gst_editor_documents_smoke.gd's
+## color_pending_edit_finishes_before_document_activation: a popped
+## ColorPickerButton with typed, uncommitted hex text on a color/palette
+## layer, a stale "Open" entry seeded on color_doc, then a fire-and-forget
+## open_path on a second .tres. Polls (bounded) until activation completes:
+## the native color popup's close handler is CONNECT_DEFERRED and can span
+## more than one frame.
 func _run_open_path_finishes_pending_color_edit(plugin: EditorPlugin, panel: GSTMainPanel) -> void:
-	# _run_new_clears_stale_open_message above leaves the "Add Layer" picker
-	# open (_on_new_pressed's own trailing _on_chooser_requested call, never
-	# closed by that check since save_to_path -- unlike open_document -- carries
-	# no is_picker_open() guard): open_document below would otherwise return
-	# null here.
+	# _run_new_clears_stale_open_message leaves the "Add Layer" picker open
+	# (_on_new_pressed calls _on_chooser_requested); open_document below
+	# returns null while is_picker_open().
 	if panel.is_picker_open():
 		panel.get_picker().cancelled.emit()
 		await plugin.get_tree().process_frame
-	# "fire" already carries a color/palette layer (fed by generative/fbm):
-	# add_layer_by_entry_id("color/palette") on a bare GSTStack.new() refuses
-	# ("The first layer must work without another layer as input.",
-	# GSTUndo.add_layer_for_ui) since the entry has inputs and the stack
-	# would be empty.
+	# "fire" carries a color/palette layer fed by generative/fbm;
+	# add_layer_by_entry_id("color/palette") on an empty GSTStack.new()
+	# refuses (GSTUndo.add_layer_for_ui: first layer must not need an input).
 	await panel.open_recipe("fire")
 	await plugin.get_tree().process_frame
 	var color_doc: GSTDocument = panel.get_active_document()
@@ -543,11 +437,9 @@ func _run_open_path_finishes_pending_color_edit(plugin: EditorPlugin, panel: GST
 		if hex_edit != null:
 			await _type_into_line_edit(plugin, hex_edit, "336699")
 		var new_path: String = "res://addons/goshade_turbo/recipes/fire.tres"
-		# Fire-and-forget, matching a real Open dialog's own file_selected
-		# signal dispatch (_on_open_file_selected) -- not awaited here, so
-		# this reproduces the exact suspension path open_document's own
-		# await _finish_pending_edits() creates instead of relying on
-		# open_path's own internal await to block this test.
+		# Not awaited: matches _on_open_file_selected's signal dispatch and
+		# reproduces the suspension inside open_document's await
+		# _finish_pending_edits().
 		panel.open_path(new_path)
 		var deadline: int = Time.get_ticks_msec() + 3000
 		while Time.get_ticks_msec() < deadline and panel.get_active_document() == color_doc:
@@ -565,9 +457,7 @@ func _find_layer_by_entry(stack: GSTStack, entry_id: String) -> GSTLayer:
 	return null
 
 
-## Real-popup color-edit helpers (mirrors tests/gst_editor_documents_smoke.gd's
-## own helpers of the same name), needed here only for
-## open_path_finishes_pending_color_edit_before_switch above.
+## Real-popup color-edit helpers, same as tests/gst_editor_documents_smoke.gd's.
 func _find_color_button(node: Node) -> ColorPickerButton:
 	if node == null:
 		return null
@@ -589,9 +479,8 @@ func _find_hex_line_edit(picker: ColorPicker) -> LineEdit:
 	return null
 
 
-## Types text into edit without submitting it (no Enter, no focus change): a
-## real pending, unevaluated entry, matching the production close path's own
-## hex-text-commit-on-focus-exit contract.
+## Types text into edit without Enter or a focus change, leaving a pending
+## uncommitted entry (the close path commits hex text on focus exit).
 func _type_into_line_edit(plugin: EditorPlugin, edit: LineEdit, text: String) -> void:
 	edit.grab_focus()
 	await plugin.get_tree().process_frame
@@ -642,10 +531,8 @@ func _write_file(path: String, text: String) -> void:
 	file.close()
 
 
-## Appends a trailing space to the first non-empty line strictly after the
-## header line -- a real one-byte body mutation that never touches the
-## header's own JSON (mirrors tests/gst_editor_smoke.gd's/
-## tests/gst_editor_documents_smoke.gd's own _mutate_body_line).
+## Appends a trailing space to the first non-empty line after the header
+## line: a body mutation that leaves the header JSON intact.
 func _mutate_body_line(text: String) -> String:
 	var lines: PackedStringArray = text.split("\n")
 	for i: int in range(lines.size()):

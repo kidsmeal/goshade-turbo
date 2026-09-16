@@ -1,15 +1,11 @@
 class_name GSTShaderCompile
 extends RefCounted
 
-## Compiles a canvas_item shader body headless and reports success. The
-## --headless dummy rendering driver parses shaders and reports compile
-## errors, but Shader.get_shader_uniform_list() returns an empty list both
-## on a failed compile and on a genuinely successful zero-uniform compile
-## (docs/PLAN.md, Verified engine facts), so a zero-uniform-by-design test
-## stack (e.g. a single parameterless field op fed constants) must pass
-## `allow_zero_uniforms = true`, which injects one known sentinel uniform
-## right after `shader_type canvas_item;` so a successful compile always
-## reports at least one uniform.
+## Compiles a canvas_item shader body headless and reports success.
+## Shader.get_shader_uniform_list() returns an empty list both on a failed
+## compile and on a successful zero-uniform compile, so a zero-uniform test
+## stack must pass `allow_zero_uniforms = true`, which injects one sentinel
+## uniform after `shader_type canvas_item;`.
 
 const SENTINEL_LINE: String = "uniform float gst_compile_check_sentinel = 1.0;"
 const SHADER_TYPE_LINE: String = "shader_type canvas_item;"

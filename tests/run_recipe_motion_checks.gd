@@ -1,6 +1,7 @@
 extends SceneTree
 
-## GPU regression for recipes whose clamped gradients formerly became flat.
+## GPU check that sprite_foil and sprite_opal render, are deterministic,
+## and change over time.
 ## Run with a real renderer: godot --path . -s res://tests/run_recipe_motion_checks.gd
 
 const SIZE: Vector2i = Vector2i(128, 128)
@@ -10,13 +11,11 @@ var _material: ShaderMaterial
 var _failed: bool = false
 
 
-## The README's `--import` prerequisite leaves .recovery_mode_lock in the
-## user data dir on Godot 4.4/4.6 (removed only 1s after the editor's first
-## filesystem scan; an --import run quits before that timer fires, and
-## 4.4/4.6 also skip the Main::cleanup() removal 4.7 added). This wrapper
-## never passes --editor or --import itself, so it never creates that lock;
-## it only cleans up whatever the prerequisite left behind, once at start
-## and once before quit, so the next editor launch never sees it.
+## On Godot 4.4/4.6 the README's --import prerequisite leaves
+## .recovery_mode_lock in the user data dir (the editor removes it 1s after
+## its first filesystem scan; --import quits before that; 4.7 removes it in
+## Main::cleanup()). This script never passes --editor or --import, so it
+## only removes the stale lock, at start and before quit.
 func _remove_stale_recovery_lock() -> void:
 	var lock_path: String = OS.get_user_data_dir().path_join(".recovery_mode_lock")
 	if FileAccess.file_exists(lock_path):

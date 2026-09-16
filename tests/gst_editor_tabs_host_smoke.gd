@@ -1,20 +1,16 @@
 @tool
 extends RefCounted
 
-## Covers docs/SHADER_TABS_reviewed-plan.md phase 8's host-scene Verification
-## bullet: document-owned structural/native edits, a real scene switch away
-## from and back to GoShade, Save As bound to the document that requested it
-## while a sibling tab stays untouched, and alternating focused Undo/Redo --
-## including a native color popup's own keyboard boundary -- with a second
-## open document as a negative control throughout.
-## tests/gst_editor_native_undo_smoke.gd's own _check_host_scene_isolation
-## (phase 2) already proves isolation for a single document; this adds the
-## multi-tab case.
+## GST_EDITOR_SMOKE=tabs_host. Multi-document host-scene isolation: structural
+## and native edits on two documents, a real scene switch away from and back
+## to GoShade, Save As bound to the document that opened the dialog, and
+## alternating focused Undo/Redo including a native color popup's keyboard
+## boundary, with the second document as a negative control.
+## tests/gst_editor_native_undo_smoke.gd's _check_host_scene_isolation covers
+## the single-document case.
 ##
-## Save As is driven through the real _on_save_as_pressed()/
-## _on_save_as_file_selected(path) pair, not the plain save_to_path seam
-## those handlers call, so it captures whichever document is active when the
-## dialog opens and resolves the response against that captured request.
+## Save As is driven through _on_save_as_pressed()/_on_save_as_file_selected
+## so the request captures the document active when the dialog opens.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -64,13 +60,9 @@ func run(plugin: EditorPlugin) -> void:
 	_finish(plugin)
 
 
-## Doc A: a recipe (a named-origin unsaved document, decision 3's "unsaved
-## origin" rule) left untouched from here on as the negative control every
-## later check re-reads. Doc B: a fresh document dirtied by one structural
-## edit (add_layer) and one real native property edit (EditorProperty.
-## emit_changed, the same production row a slider drag lands on) so both
-## edit classes phase 8's own wording asks for ("document-owned structural
-## and native edits") are on record before the scene switch below.
+## doc_a: a recipe, untouched from here on as the negative control. doc_b: a
+## fresh document dirtied by one structural edit (add_layer) and one native
+## property edit (EditorProperty.emit_changed) before the scene switch.
 func _setup_two_documents(plugin: EditorPlugin, panel: GSTMainPanel) -> Dictionary:
 	await panel.open_recipe("glow")
 	await _frames(plugin, 2)
@@ -101,13 +93,9 @@ func _setup_two_documents(plugin: EditorPlugin, panel: GSTMainPanel) -> Dictiona
 	return {"a": doc_a, "b": doc_b}
 
 
-## Opens the real host scene (a genuine main-screen switch away from
-## GoShade, decision 9's "main-screen and scene switches preserve documents
-## and undo histories"), asserts the tab row hides with GoShade, then drives
-## a real editor action on the host scene and a real Ctrl+Z with focus left
-## in that scene -- proving Godot's own scene Undo neither reads nor writes
-## either shader document's own standalone UndoRedo (Cross-cutting "Never
-## clear or rewrite Godot scene/global history").
+## Opens the host scene, asserts the tab row hides with GoShade, then commits
+## an editor action on the host scene and presses Ctrl+Z with focus in that
+## scene. Asserts the scene undo touches neither document's UndoRedo.
 func _run_scene_switch_and_host_undo(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument) -> Node:
 	var a_layers_before: int = doc_a.stack.layers.size()
 	var b_layers_before: int = doc_b.stack.layers.size()
@@ -122,14 +110,10 @@ func _run_scene_switch_and_host_undo(plugin: EditorPlugin, panel: GSTMainPanel, 
 	var host_scene: Node = plugin.get_tree().edited_scene_root
 	var scene_opened: bool = host_scene != null and host_scene.scene_file_path == HOST_SCENE_PATH
 	var stacks_unchanged_after_switch: bool = doc_a.stack.layers.size() == a_layers_before and doc_b.stack.layers.size() == b_layers_before
-	# open_scene_from_path alone does not reliably move the active main-screen
-	# tab away from GoShade in this environment (the 2D/3D auto-switch Godot
-	# performs for a real user's own click depends on the opened scene's own
-	# root type); the panel's own visibility is driven only by plugin.gd's
-	# _make_visible(visible), called from EditorPlugin's main-screen-switch
-	# path, so this forces that path directly and checks its documented
-	# effect ("Hiding GoShade hides its tab row") independently of whether
-	# opening this particular host scene happened to also trigger it.
+	# open_scene_from_path does not reliably switch the main screen away from
+	# GoShade (the 2D/3D auto-switch depends on the scene root type). Panel
+	# visibility is driven only by plugin.gd's _make_visible, so force the
+	# main-screen switch directly.
 	EditorInterface.set_main_screen_editor("Script")
 	await _frames(plugin, 3)
 	var tab_row_hidden: bool = not panel.visible
@@ -156,11 +140,9 @@ func _run_scene_switch_and_host_undo(plugin: EditorPlugin, panel: GSTMainPanel, 
 	return host_scene
 
 
-## Real editor Redo (Ctrl+Shift+Z) with focus still in the host scene must
-## restore the host-scene meta and, symmetrically, must not touch either
-## shader document -- then switches the main screen back to GoShade and
-## confirms both documents' own state, active selection, and tab row
-## visibility all survived the round trip untouched (decision 9).
+## Ctrl+Shift+Z with focus in the host scene restores the host-scene meta and
+## touches neither document. Then switches back to GoShade and asserts both
+## documents are still open and the tab row is visible.
 func _run_return_to_goshade(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument) -> void:
 	var host_scene: Node = plugin.get_tree().edited_scene_root
 	var a_position_before: int = doc_a.undo_redo.get_current_action()
@@ -178,10 +160,8 @@ func _run_return_to_goshade(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GS
 	_check("return_to_goshade_preserves_state", host_redone and docs_untouched_by_host_redo and tab_row_visible and still_both_open, "host_redone=%s docs_untouched=%s tab_row_visible=%s still_both_open=%s" % [host_redone, docs_untouched_by_host_redo, tab_row_visible, still_both_open])
 
 
-## Save As, driven through the real dialog pair, must land on doc_b -- the
-## document active when the dialog opened -- and must never touch doc_a's
-## own path/dirty state, proving phase 5's stable-request binding still
-## holds once tabs and a scene round trip are both in play.
+## Save As through the dialog handler pair must land on doc_b (active when
+## the dialog opened) and leave doc_a's path and dirty state unchanged.
 func _run_save_as_on_initiating_document(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument) -> void:
 	panel.activate_document(doc_b)
 	await _frames(plugin, 2)
@@ -191,12 +171,9 @@ func _run_save_as_on_initiating_document(plugin: EditorPlugin, panel: GSTMainPan
 
 	panel._on_save_as_pressed()
 	panel._on_save_as_file_selected(SAVE_AS_PATH)
-	# Calling the handler directly (matching tests/gst_editor_document_close_
-	# smoke.gd's/gst_editor_document_files_smoke.gd's own precedent) bypasses
-	# the real dialog's own file_selected auto-hide; a left-visible
-	# EditorFileDialog absorbs every later input event before it reaches
-	# gst_main_panel's own _input(), so this later check's own keyboard
-	# Ctrl+Z/Ctrl+Shift+Z delivery would otherwise silently reach nothing.
+	# The direct handler call bypasses the dialog's file_selected auto-hide.
+	# A visible EditorFileDialog absorbs input before gst_main_panel's
+	# _input(), so the next check's Ctrl+Z/Ctrl+Shift+Z would reach nothing.
 	panel._save_as_dialog.hide()
 	await _frames(plugin, 2)
 
@@ -207,23 +184,16 @@ func _run_save_as_on_initiating_document(plugin: EditorPlugin, panel: GSTMainPan
 	_check("save_as_on_initiating_document", b_saved and content_matches and a_unaffected, "b_saved=%s content_matches=%s doc_a_unaffected=%s doc_a_path='%s'" % [b_saved, content_matches, a_unaffected, doc_a.current_path])
 
 
-## Alternates a real focused Ctrl+Z/Ctrl+Shift+Z pair on doc_b's own native
-## property row with a second real edit finished through the native RGB
-## popup's own keyboard boundary (gst_inspector_column.gd's
-## color_popup_undo_redo_requested path, the same mechanism
-## tests/gst_editor_native_undo_smoke.gd's own popup_focused_shortcut check
-## exercises for a single document) -- here with doc_a open as a sibling tab
-## throughout, so a cross-document leak would show up as doc_a's own
-## history position or layer count moving.
-## Delivers real keyboard events rather than calling doc_b.undo_redo.undo()/
-## redo() or inspector.finish_pending_edits() directly. The numeric half
-## grabs focus on the row's own EditorSpinSlider and pushes Ctrl+Z/
-## Ctrl+Shift+Z at the root viewport (matching gst_editor_native_undo_smoke.
-## gd's own _check_forced_finish_undo/_check_forced_finish_redo, since no
-## embedded subwindow is open at that point). The popup half delivers Ctrl+Z
-## to the popup's own Window instead of the root viewport (_push_popup_key
-## below, matching gst_editor_native_undo_smoke.gd's own helper), since a
-## focused native popup does not reliably receive a root-viewport delivery.
+## Focused Ctrl+Z/Ctrl+Shift+Z on doc_b's native property row, then a second
+## edit finished through the native RGB popup's keyboard boundary
+## (gst_inspector_column.gd color_popup_undo_redo_requested), with doc_a open
+## as a sibling tab. A cross-document leak shows as doc_a's history position
+## or layer count moving.
+## Keyboard events are delivered, not doc_b.undo_redo.undo()/redo() or
+## inspector.finish_pending_edits(). The numeric half focuses the row's
+## EditorSpinSlider and pushes keys at the root viewport. The popup half
+## pushes keys at the popup's own Window (_push_popup_key): a focused native
+## popup does not reliably receive a root-viewport delivery.
 func _run_alternating_undo_redo_with_popup(plugin: EditorPlugin, panel: GSTMainPanel, doc_a: GSTDocument, doc_b: GSTDocument) -> void:
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
 	var a_layers_snapshot: int = doc_a.stack.layers.size()
@@ -231,23 +201,17 @@ func _run_alternating_undo_redo_with_popup(plugin: EditorPlugin, panel: GSTMainP
 
 	var fbm: GSTLayer = doc_b.stack.layers[0]
 	inspector.edit(fbm.id)
-	# The row's own EditorSpinSlider is only visible_in_tree while the
-	# "Layer settings" tab is selected (gst_main_panel.gd's own narrow-tab
-	# TabContainer); a real grab_focus()/keyboard delivery needs that, unlike
-	# the direct emit_changed()/commit_property_change() calls above, which
-	# do not depend on visibility at all.
+	# The row's EditorSpinSlider is visible_in_tree only while the "Layer
+	# settings" narrow tab is selected; grab_focus() and keyboard delivery
+	# need that.
 	panel.set_narrow_tab(1)
 	await _frames(plugin, 3)
 	var gain_property: EditorProperty = inspector.find_editor_property(&"gain", fbm)
 	var gain_spin: EditorSpinSlider = _find_range(gain_property) as EditorSpinSlider
 	var original_gain: float = float(fbm.get("gain"))
 	var dragged_gain: float = original_gain + 0.2
-	# commit_action(false) is mutation-first (gst_undo.gd's own documented
-	# convention): it registers the action into history without
-	# re-executing the do method, so the live mutation must already be
-	# applied before this call, exactly like every other production caller
-	# of commit_property_change (gst_inspector_column.gd's own gesture
-	# finish handlers apply the value live during the gesture, then commit).
+	# commit_property_change registers the action without re-executing the do
+	# method (gst_undo.gd), so the mutation must be applied before the call.
 	fbm.set(&"gain", dragged_gain)
 	panel.get_undo().commit_property_change(fbm, &"gain", original_gain, dragged_gain)
 	await _frames(plugin, 2)
@@ -280,10 +244,8 @@ func _run_alternating_undo_redo_with_popup(plugin: EditorPlugin, panel: GSTMainP
 	var palette: GSTLayer = panel.get_undo().add_layer("color/palette", GSTLayer.Kind.COLOR, false)
 	await _frames(plugin, 2)
 	inspector.edit(palette.id)
-	# Matches tests/gst_editor_native_undo_smoke.gd's own
-	# _check_popup_focused_shortcut precedent: the settings tab must be the
-	# selected _editing_tabs page before a real popup/focus interaction with
-	# a property row is reliable.
+	# The settings tab must be the selected _editing_tabs page before a
+	# popup/focus interaction with a property row.
 	panel.set_narrow_tab(1)
 	await _frames(plugin, 2)
 	var actions_before_popup: int = doc_b.undo_redo.get_history_count()
@@ -296,12 +258,9 @@ func _run_alternating_undo_redo_with_popup(plugin: EditorPlugin, panel: GSTMainP
 	var button: ColorPickerButton = pending["button"]
 	var hex_edit: LineEdit = pending["hex_edit"]
 	var popup: Window = button.get_popup()
-	# Loops on get_history_count(), not get_current_action(): committing the
-	# pending edit then immediately undoing it (this check's own expected
-	# outcome) nets back to position_before_popup, indistinguishable from
-	# "nothing happened yet" if the loop condition read position instead --
-	# matching tests/gst_editor_native_undo_smoke.gd's own
-	# _check_popup_focused_shortcut precedent exactly.
+	# Loops on get_history_count(), not get_current_action(): commit then
+	# undo nets back to position_before_popup, indistinguishable from no
+	# activity by position alone.
 	var popup_attempts: int = 0
 	while popup_attempts < 5 and doc_b.undo_redo.get_history_count() == actions_before_popup:
 		popup_attempts += 1
@@ -398,12 +357,9 @@ func _push_key(target: Control, keycode: Key, ctrl: bool = false, shift: bool = 
 	target.get_viewport().push_input(event, true)
 
 
-## Delivers a synthetic key event to a native color popup's own Window
-## instead of the root viewport (_push_key above), matching how a real OS
-## keystroke is routed to whichever window currently holds focus (mirrors
-## tests/gst_editor_native_undo_smoke.gd's own helper). Window extends
-## Viewport, so push_input() here is correct both for a real, non-embedded
-## popup subwindow and for an embedded one (single_window_mode).
+## Delivers a key event to a native color popup's own Window instead of the
+## root viewport. Window extends Viewport, so push_input() works for both a
+## non-embedded popup subwindow and an embedded one (single_window_mode).
 func _push_popup_key(popup: Window, keycode: Key, ctrl: bool = false, shift: bool = false) -> void:
 	var event: InputEventKey = InputEventKey.new()
 	event.keycode = keycode

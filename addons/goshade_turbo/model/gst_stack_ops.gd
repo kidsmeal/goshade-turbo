@@ -3,12 +3,11 @@ class_name GSTStackOps
 extends RefCounted
 
 ## Structural mutations on a GSTStack: add, remove, reorder, slot assign.
-## Enforces decision 3 (no forward references) and decision 22 (stable ids,
-## reorder-above-referencer refusal, delete resets pointing slots to the
-## below default). Design: docs/DESIGN.md, decisions 3 and 22.
+## Enforces no forward references, stable ids, refusal of a reorder that
+## would put a layer above its referencer, and reset of slots pointing at a
+## deleted layer to the below default.
 ##
-## Phase 4 wraps every call here with EditorUndoRedoManager (decision 20).
-## This file never touches undo; it only mutates the GSTStack in place.
+## Never touches undo; mutates the GSTStack in place. GSTUndo wraps the calls.
 
 
 static func find_index(stack: GSTStack, layer_id: StringName) -> int:
@@ -26,7 +25,7 @@ static func find_layer(stack: GSTStack, layer_id: StringName) -> GSTLayer:
 
 
 ## Creates a new layer with the next monotonic id and appends it to the top
-## of the stack. `is_generator` allocates a coord block (decision 4).
+## of the stack. `is_generator` allocates a coord block.
 static func add_layer(stack: GSTStack, entry: String, kind_out: GSTLayer.Kind, is_generator: bool = false) -> GSTLayer:
 	var layer: GSTLayer = GSTLayer.new()
 	layer.id = StringName(str(stack.next_id))
@@ -64,20 +63,15 @@ static func initialize_inputs_from_immediate_below(stack: GSTStack, layer_id: St
 
 
 ## Removes a layer by id. Every slot and coord warp reference that pointed at
-## it resets to the below default (decision 3: below is the default
-## selection).
+## it resets to the below default.
 ##
-## `library` resolves a referencing layer's own entry to check
-## `samples_source` (B10, B6). When the reset target for a `samples_source`
-## slot is not a "source/texture" or "source/screen" layer, the slot is left
-## empty instead of pointing a filter at a non-source (the plan's
-## "Unwired filter rule": codegen then refuses that layer with an
-## invocation-local error rather than silently sampling the wrong thing).
-## `library` is required: a null library is a caller bug and the call
-## returns an empty list without deleting anything. An unresolved entry
-## keeps the below-default behavior; coord warp refs are never
-## samples_source slots and are unaffected. Returns the ids of the layers
-## whose references changed.
+## `library` resolves each referencing layer's entry to check
+## `samples_source`. When the reset target for a `samples_source` slot is not
+## a "source/texture" or "source/screen" layer, the slot is left empty;
+## codegen then refuses that layer instead of sampling a non-source. A null
+## library is a caller bug: returns an empty list without deleting. An
+## unresolved entry keeps the below-default behavior; coord warp refs are
+## unaffected. Returns the ids of the layers whose references changed.
 static func remove_layer(stack: GSTStack, layer_id: StringName, library: GSTLibrary) -> Array[StringName]:
 	var changed: Array[StringName] = []
 	var idx: int = find_index(stack, layer_id)
@@ -117,8 +111,7 @@ static func _below_default(stack: GSTStack, referencer_id: StringName) -> String
 
 
 ## True when `target_id` names a layer in `stack` whose entry is
-## "source/texture" or "source/screen" (decision 21, B6). Empty or unknown
-## ids are not a source.
+## "source/texture" or "source/screen". Empty or unknown ids are not a source.
 static func _is_source_layer(stack: GSTStack, target_id: StringName) -> bool:
 	if target_id == &"":
 		return false
@@ -146,9 +139,7 @@ static func _references_of(layer: GSTLayer) -> Array[StringName]:
 
 ## Moves the layer to `new_index`. Refused, with a reason, when the move
 ## would leave any layer referencing something at or above its own position
-## (decision 22: reordering a layer above a layer that references it, and
-## its mirror, moving a layer below something it itself references, are
-## both forward references and both refused).
+## (moving a layer above its referencer, or below something it references).
 static func reorder_layer(stack: GSTStack, layer_id: StringName, new_index: int) -> Dictionary:
 	var old_idx: int = find_index(stack, layer_id)
 	if old_idx == -1:
@@ -183,24 +174,16 @@ static func reorder_layer(stack: GSTStack, layer_id: StringName, new_index: int)
 
 
 ## Assigns `target_id` to `slot_name` on `layer_id`. Refused, with a reason,
-## when the target is not an earlier layer in the stack (decision 3: no
-## forward references).
+## when the target is not an earlier layer in the stack.
 ##
-## `library` is required: the assigning layer's own manifest entry must
-## resolve through `library` to check `samples_source` (decision 21, B6). If
-## it does not resolve, the assignment is refused: an unresolved entry must
-## never silently bypass the source-only rule. A `samples_source` slot
-## additionally refuses a target that is not a "source/texture" or
-## "source/screen" layer; filter-of-filter is refused because a filter
-## layer's `entry` is neither. A `null` library is a caller bug: the
-## assignment is refused and the slot is left unchanged.
+## The assigning layer's entry must resolve through `library` to check
+## `samples_source`; an unresolved entry or a null library refuses and leaves
+## the slot unchanged. A `samples_source` slot refuses a target that is not a
+## "source/texture" or "source/screen" layer, which also refuses
+## filter-of-filter.
 ##
-## Passing an empty target clears the slot, except a `samples_source` slot
-## cannot be cleared this way (plan Cross-cutting concern "Manifest `code`
-## contracts (B10)"): a filter always samples a wired source or none at all
-## by construction, never a slot the caller emptied out from under it. Only
-## `remove_layer`'s decision-22 reset may leave a `samples_source` slot
-## empty, when no source remains below.
+## An empty target clears the slot, except a `samples_source` slot, which
+## only remove_layer's reset may leave empty.
 static func assign_slot(stack: GSTStack, layer_id: StringName, slot_name: String, target_id: StringName, library: GSTLibrary) -> Dictionary:
 	var validation: Dictionary = validate_slot_assignment(stack, layer_id, slot_name, target_id, library)
 	if not validation["ok"]:
