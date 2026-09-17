@@ -8,7 +8,8 @@ extends GSTTestBase
 ## coord == false, a pure time source). New entries must be added here on
 ## purpose.
 const EXPECTED_GENERATIVE_IDS: Array[String] = [
-	"generative/cell_borders", "generative/cellular_edges", "generative/checker", "generative/clock",
+	"generative/cell_borders", "generative/cell_borders_edge_warp", "generative/cell_borders_round",
+	"generative/cell_borders_round_varied", "generative/cellular_edges", "generative/checker", "generative/clock",
 	"generative/fbm", "generative/hash", "generative/linear_gradient", "generative/perlin",
 	"generative/radial_gradient", "generative/snoise", "generative/stripes",
 	"generative/value_noise", "generative/voronoi",

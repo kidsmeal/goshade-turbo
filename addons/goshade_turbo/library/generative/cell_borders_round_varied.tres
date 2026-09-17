@@ -1,0 +1,72 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/cell_borders_round_varied"
+function = "cell_borders_round_varied"
+description = "distance to the Voronoi cell border with a different corner radius per cell; 0 at the border, increasing toward each cell center. Same two-pass bisector method as cell_borders_round, but the smooth-minimum radius is drawn per cell from a hash of the nearest cell's id, between roundness_min and roundness_max. Equal min and max reproduces cell_borders_round. Feed a field op like smoothstep or pow downstream to set the edge width."
+source_math = "Two-pass exact Euclidean distance to Voronoi edges over a jittered grid, per Inigo Quilez, \"Voronoi Edges\", https://iquilezles.org/articles/voronoilines/, with the second pass's min() replaced by the polynomial smooth minimum from Inigo Quilez, \"Smooth minimum\", https://iquilezles.org/articles/smin/. The per-cell radius, drawn from a hash of the owning cell's id so every plate rounds differently, is this project's own construction (GoShade Turbo, 2026-09-16)."
+source_code_url = ""
+source_code_license = "Written for this project from the cited techniques; no listing was ported."
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.02,
+"max": 0.5,
+"min": 0.001,
+"name": "roundness_min",
+"type": "float",
+"label": "Roundness min",
+"description": "Smallest corner radius a cell can draw, in cell units."
+}, {
+"default": 0.3,
+"max": 0.5,
+"min": 0.001,
+"name": "roundness_max",
+"type": "float",
+"label": "Roundness max",
+"description": "Largest corner radius a cell can draw, in cell units."
+}])
+coord = true
+samples_source = false
+depends = Array[String](["generative/hash"])
+code = "float cell_borders_round_varied(vec2 p, float roundness_min, float roundness_max) {
+	vec2 cell = floor(p);
+	vec2 local_fraction = fract(p);
+	vec2 nearest_neighbor = vec2(0.0);
+	vec2 nearest_diff = vec2(0.0);
+	float nearest_dist_sq = 8.0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 neighbor = vec2(float(x), float(y));
+			vec2 point = vec2(hash(cell + neighbor), hash(cell + neighbor + vec2(19.0, 12.0)));
+			vec2 diff = neighbor + point - local_fraction;
+			float dist_sq = dot(diff, diff);
+			if (dist_sq < nearest_dist_sq) {
+				nearest_dist_sq = dist_sq;
+				nearest_diff = diff;
+				nearest_neighbor = neighbor;
+			}
+		}
+	}
+	// One radius per plate: hashed from the owning cell's id, so every pixel
+	// in the same cell agrees on it.
+	float roundness = max(mix(roundness_min, roundness_max, hash(cell + nearest_neighbor + vec2(91.0, 53.0))), 0.001);
+	float border_dist = 10.0;
+	for (int y = -2; y <= 2; y++) {
+		for (int x = -2; x <= 2; x++) {
+			vec2 neighbor = nearest_neighbor + vec2(float(x), float(y));
+			vec2 point = vec2(hash(cell + neighbor), hash(cell + neighbor + vec2(19.0, 12.0)));
+			vec2 diff = neighbor + point - local_fraction;
+			if (dot(nearest_diff - diff, nearest_diff - diff) > 0.00001) {
+				float d = dot(0.5 * (nearest_diff + diff), normalize(diff - nearest_diff));
+				float h = clamp(0.5 + 0.5 * (border_dist - d) / roundness, 0.0, 1.0);
+				border_dist = mix(border_dist, d, h) - roundness * h * (1.0 - h);
+			}
+		}
+	}
+	return max(border_dist, 0.0);
+}
+"

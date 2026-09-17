@@ -1,0 +1,61 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/cell_borders_round"
+function = "cell_borders_round"
+description = "distance to the Voronoi cell border with rounded cell corners; 0 at the border, increasing toward each cell center. Same two-pass bisector method as cell_borders, but pass two folds the bisector distances with a smooth minimum instead of min(), which rounds the iso-lines at every corner. roundness 0 reproduces cell_borders exactly. Feed a field op like smoothstep or pow downstream to set the edge width."
+source_math = "Two-pass exact Euclidean distance to Voronoi edges over a jittered grid, per Inigo Quilez, \"Voronoi Edges\" (improved/exact version), https://iquilezles.org/articles/voronoilines/, with the second pass's min() replaced by the polynomial smooth minimum from Inigo Quilez, \"Smooth minimum\", https://iquilezles.org/articles/smin/. The smooth minimum can dip below the true minimum near corners, so the result is clamped at 0."
+source_code_url = "https://iquilezles.org/articles/voronoilines/, second (\"better\"/exact) code sample; https://iquilezles.org/articles/smin/, polynomial smin"
+source_code_license = "MIT, per Inigo Quilez's stated license for code published on iquilezles.org. Ported to this project's own generative/hash() in place of the article's hash2(), and to this project's own coordinate and loop-variable naming; the bisector-distance math is unchanged. The substitution of smin for min in pass two, the roundness parameter, and the clamp at 0 are this project's own combination."
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.15,
+"max": 0.5,
+"min": 0.001,
+"name": "roundness",
+"type": "float",
+"label": "Corner roundness",
+"description": "Radius of the corner rounding in cell units. Near 0 gives sharp polygon corners like cell_borders, 0.5 rounds most of the cell."
+}])
+coord = true
+samples_source = false
+depends = Array[String](["generative/hash"])
+code = "float cell_borders_round(vec2 p, float roundness) {
+	vec2 cell = floor(p);
+	vec2 local_fraction = fract(p);
+	vec2 nearest_neighbor = vec2(0.0);
+	vec2 nearest_diff = vec2(0.0);
+	float nearest_dist_sq = 8.0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 neighbor = vec2(float(x), float(y));
+			vec2 point = vec2(hash(cell + neighbor), hash(cell + neighbor + vec2(19.0, 12.0)));
+			vec2 diff = neighbor + point - local_fraction;
+			float dist_sq = dot(diff, diff);
+			if (dist_sq < nearest_dist_sq) {
+				nearest_dist_sq = dist_sq;
+				nearest_diff = diff;
+				nearest_neighbor = neighbor;
+			}
+		}
+	}
+	float border_dist = 10.0;
+	for (int y = -2; y <= 2; y++) {
+		for (int x = -2; x <= 2; x++) {
+			vec2 neighbor = nearest_neighbor + vec2(float(x), float(y));
+			vec2 point = vec2(hash(cell + neighbor), hash(cell + neighbor + vec2(19.0, 12.0)));
+			vec2 diff = neighbor + point - local_fraction;
+			if (dot(nearest_diff - diff, nearest_diff - diff) > 0.00001) {
+				float d = dot(0.5 * (nearest_diff + diff), normalize(diff - nearest_diff));
+				float h = clamp(0.5 + 0.5 * (border_dist - d) / roundness , 0.0, 1.0);
+				border_dist = mix(border_dist, d, h) - roundness * h * (1.0 - h);
+			}
+		}
+	}
+	return max(border_dist, 0.0);
+}
+"

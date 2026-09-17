@@ -1,0 +1,53 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "generative/cell_borders_edge_warp"
+function = "cell_borders_edge_warp"
+description = "cell border distance where only the borders wobble: the unwarped distance to the edge gates a simplex-noise domain warp, so pixels near a crack are displaced and pixels deep inside a plate are not. 0 at the border, increasing toward each cell center. warp_strength 0 reproduces cell_borders. Feed a field op like smoothstep or pow downstream to set the edge width."
+source_math = "Edge distance from generative/cell_borders (Inigo Quilez, \"Voronoi Edges\"), displaced by a two-channel simplex noise domain warp whose amplitude is 1 - smoothstep(0, edge_band, unwarped edge distance). Gating the warp by the field's own unwarped value, so the displacement is confined to a band around the cracks, is this project's own construction (GoShade Turbo, 2026-09-16)."
+source_code_url = ""
+source_code_license = "Written for this project; calls the library's own cell_borders and snoise entries, whose attribution stands in their manifests."
+kind_out = 0
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"default": 0.15,
+"max": 0.5,
+"min": 0.0,
+"name": "warp_strength",
+"type": "float",
+"label": "Crack wobble",
+"description": "How far a pixel on a crack is displaced, in cell units. 0 is straight edges."
+}, {
+"default": 3.0,
+"max": 8.0,
+"min": 0.5,
+"name": "warp_scale",
+"type": "float",
+"label": "Wobble frequency",
+"description": "Noise repeats per cell. Higher is finer wobble."
+}, {
+"default": 0.25,
+"max": 1.0,
+"min": 0.01,
+"name": "edge_band",
+"type": "float",
+"label": "Wobble band",
+"description": "Distance from the crack, in cell units, at which the wobble fades to zero."
+}])
+coord = true
+samples_source = false
+depends = Array[String](["generative/cell_borders", "generative/snoise"])
+code = "float cell_borders_edge_warp(vec2 p, float warp_strength, float warp_scale, float edge_band) {
+	// Feedback term: the unwarped edge distance decides how much this pixel
+	// may move. On a crack the weight is 1, at edge_band away it is 0.
+	float unwarped = cell_borders(p);
+	float weight = 1.0 - smoothstep(0.0, max(edge_band, 0.0001), unwarped);
+	vec2 q = p * warp_scale;
+	vec2 noise = vec2(snoise(q), snoise(q + vec2(41.0, 23.0)));
+	vec2 warped = p + noise * warp_strength * weight;
+	return cell_borders(warped);
+}
+"
