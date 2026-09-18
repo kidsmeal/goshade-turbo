@@ -2262,6 +2262,13 @@ User evidence: Fire preview contains sharp diagonal, parallelogram-shaped discon
 - The probe also checked `30` half-pixel scroll offsets at normal, `125%`, and `150%` editor scale without reproducing disappearing glyph pixels. Scaled runs used isolated settings.
 - Probe scripts and captures remain outside the repository in the evidence directory above, under `picker-*-probe.gd` and `row-*`. Temporary test instrumentation was removed.
 - Next reproduction: capture the affected row before closing the picker and record the preceding search, resize, or scroll action. Reopening clears the state needed for diagnosis.
+- 2026-09-16 recurrence (user screenshot, `4.4.0` stable, NVIDIA RTX 5070 Ti plus AMD 610M hybrid laptop, `1920x1200` at `96` DPI, editor scale auto): toolbar `File Save Recipes Randomize Export...` lost the top rows of every glyph; picker heading, tab titles, and search placeholder lost the bottom rows. Each string is cut along one horizontal line.
+- Layout ruled out: `Button` does not clip its canvas item (`scene/gui/button.cpp` 4.4-stable has no `canvas_item_set_clip`), no `clip_contents` in the plugin scenes or scripts, the picker is an in-tree `Control` (`gst_main_panel.tscn` ext_resource 6), not a `Window`. The cut is glyph-level.
+- Global font oversampling ruled out: only `Window::_update_viewport_size` writes it in 4.4 (`scene/main/window.cpp:1269`); the plugin creates no `Window` with a content scale.
+- Godot `4.4.1` changelog has no font atlas or glyph fix; no matching upstream issue found by title search.
+- Open discriminators: whether the Inspector and FileSystem docks slice at the same moment; whether disabling the preview `SubViewport` (`gst_preview.gd` `set_active(false)`) clears it; whether `4.6.2` on the same machine reproduces.
+- Resolved 2026-09-16 as an engine issue: the user observed a thin black bar at the bottom of the editor window appear, the whole editor content shift, and the cut text restore when the bar went away. This matches godotengine/godot#83975 (rendered area shrinks vertically by a few pixels on a maximized Windows 11 hybrid NVIDIA laptop after inactivity, black strip at the bottom, text rows missing; editor and Project Manager only) and godotengine/godot#94374 (window surface offset after resize on Windows, Forward+, NVIDIA/D3D12 driver level). Both open upstream. Not reproducible by the plugin's own controls, which explains the three failed fresh-editor probes.
+- Mitigations reported upstream, unverified here: Compatibility renderer, lower display refresh rate, V-Sync disabled in project settings.
 
 ## Preview transparency, recipe motion, and control explanations (2026-09-09)
 

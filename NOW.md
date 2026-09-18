@@ -13,7 +13,7 @@ Position: idle - pick a mode with /claudhd:start or /claudhd:design
 from: (unplanned work)
 Counts: queue 0 · quick fixes 0 · ideas untriaged 5
 
-Last touched: 2026-09-16
+Last touched: 2026-09-18
 
 ## Active thread (only one)
 

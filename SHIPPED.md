@@ -4,6 +4,11 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
+### 2026-09-16
+- library: three cell border entries, rounded, per-plate, edge-warped `51e2504`
+- v0.2 design board: layer ops, texture param and source/image, param links, custom layer with save-as-entry, user recipes; roadmap intent added, two ideas promoted `417f549`
+- Comments trimmed to technical content: phase numbers, plan-doc references, decision and fix-pass ids, and version history removed across addons, tests, and sandbox; 5226 comment lines to 3087, code untouched `011de03`
+
 ### 2026-09-15
 - Test wrappers remove the .recovery_mode_lock that a headless --import leaves on Godot 4.4 and 4.6, so the next editor launch does not offer Recovery Mode
 - Tab row: size the TabBar synchronously after add and close so the scroll arrows appear only on real overflow
