@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://igscxjuoj254"
-path="res://.godot/imported/ref_fieldops_pow.png-8b2e7c00ad86d707130b88d2cd6f13b6.ctex"
+uid="uid://bxdvbmjxfj34s"
+path="res://.godot/imported/weird2.png-6141f13276607e6ae56fb8557cf2b65f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sandbox/screenshots/ref_fieldops_pow.png"
-dest_files=["res://.godot/imported/ref_fieldops_pow.png-8b2e7c00ad86d707130b88d2cd6f13b6.ctex"]
+source_file="res://sandbox/screenshots/weird2.png"
+dest_files=["res://.godot/imported/weird2.png-6141f13276607e6ae56fb8557cf2b65f.ctex"]
 
 [params]
 

@@ -7,7 +7,7 @@ script = ExtResource("1")
 id = "filter/dither"
 function = "dither"
 description = "ordered dither before quantization, inline filter body template (decision 21, B6, docs/PLAN.md Blocker B10)"
-source_math = "ordered dithering via a per-pixel hash threshold before quantization, standard shader dither construction (hash after Sunday, GLSL hash function; matches Capsule Castle's own random())."
+source_math = "ordered dithering via a per-pixel hash threshold before quantization, standard shader dither construction (threshold from this library's hash() of the integer pixel coordinate FRAGCOORD.xy, so the pattern is per pixel and independent of UV scale)."
 source_code_url = ""
 source_code_license = ""
 kind_out = 1
@@ -30,7 +30,7 @@ coord = false
 samples_source = true
 depends = Array[String](["generative/hash"])
 code = "vec4 c = GST_SAMPLE(GST_UV);
-float bayer = hash(GST_UV);
+float bayer = hash(floor(FRAGCOORD.xy));
 float steps = float(max(GST_PARAM(levels) - 1, 1));
 vec3 stepped = floor(c.rgb * steps + bayer) / steps;
 GST_OUT = vec4(stepped, c.a);

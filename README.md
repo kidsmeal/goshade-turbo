@@ -164,9 +164,9 @@ godot --headless --path . -s res://tests/print_roster.gd
 | `generative/checker` | `checker` | () -> field (generator) | standard floor-parity checkerboard construction, common technique, no single canonical source. |
 | `generative/clock` | `clock` | () -> field | fract(TIME * speed), standard construction. Ignores position; feeds add or mix to animate a field value. Adding it before a fract is the same as adding unbounded time, since fract drops the whole part. |
 | `generative/fbm` | `fbm` | () -> field (generator) | fractional Brownian motion: standard sum-of-octaves construction. See D. Ebert et al., "Texturing & Modeling: A Procedural Approach" (3rd ed., 2003), ch. 2. |
-| `generative/hash` | `hash` | () -> field (generator) | sin/dot pseudo-random hash, a common GLSL technique. The Book of Shaders, ch. 10 "Random", https://thebookofshaders.com/10/ |
+| `generative/hash` | `hash` | () -> field (generator) | Hash without Sine, hash12: fract/dot mixing of the input, no trigonometry, so integer lattice inputs get no mirrored or striped output. David Hoskins, https://www.shadertoy.com/view/4djSRW, MIT. |
 | `generative/linear_gradient` | `linear_gradient` | () -> field (generator) | standard axis-aligned linear ramp, common technique, no single canonical source. Angle is driven by the layer's coord rotation rather than a dedicated param. |
-| `generative/perlin` | `perlin` | () -> field (generator) | classic 2D gradient (Perlin) noise: Ken Perlin, "An Image Synthesizer", SIGGRAPH 1985. Gradients here come from an angle derived through this library's own hash(), not a permutation table; that substitution is an implementation choice, not copied from any specific source. |
+| `generative/perlin` | `perlin` | () -> field (generator) | classic 2D gradient (Perlin) noise: Ken Perlin, "An Image Synthesizer", SIGGRAPH 1985. Gradients here come from an angle derived through this library's own hash(), not a permutation table; that substitution is an implementation choice, not copied from any specific source. Quintic fade per Perlin, "Improving Noise", SIGGRAPH 2002. |
 | `generative/radial_gradient` | `radial_gradient` | () -> field (generator) | standard normalized radial distance field, common technique, no single canonical source. |
 | `generative/snoise` | `snoise` | () -> field (generator) | 2D simplex noise construction: Ken Perlin (2001). Skew/unskew derivation per Stefan Gustavson, "Simplex noise demystified" (2005). Gradients here come from an angle derived through this library's own hash() rather than a permutation table; that substitution is an implementation choice, not copied from any specific source. |
 | `generative/stripes` | `stripes` | () -> field (generator) | standard periodic sine stripe construction, common technique, no single canonical source. Frequency and angle are driven by the layer's coord scale and rotation rather than a dedicated param. |
@@ -188,8 +188,7 @@ godot --headless --path . -s res://tests/print_roster.gd
 
 Every entry cites the source of its math. The code is written for this
 library. `source_code_license` is set only where code itself was copied
-from a permissive source (`generative/hash`, ported from the author's own
-Capsule Castle shader).
+from a permissive source (`generative/hash`, David Hoskins' hash12, MIT).
 
 ## Credits
 

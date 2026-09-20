@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "generative/snoise"
 function = "snoise"
-description = "2D simplex noise field, smoother and less axis-aligned than value noise"
+description = "2D simplex noise field in 0..1, smoother and less axis-aligned than value noise"
 source_math = "2D simplex noise construction: Ken Perlin (2001). Skew/unskew derivation per Stefan Gustavson, \"Simplex noise demystified\" (2005). Gradients here come from an angle derived through this library's own hash() rather than a permutation table; that substitution is an implementation choice, not copied from any specific source."
 source_code_url = ""
 source_code_license = ""
@@ -32,6 +32,6 @@ float snoise(vec2 p) {
 	vec3 h = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
 	// Integer corner addresses keep shared gradients consistent across renderers.
 	vec3 n = h * h * h * h * vec3(dot(a, gst_grad2(ivec2(i))), dot(b, gst_grad2(ivec2(i) + ivec2(o))), dot(c, gst_grad2(ivec2(i) + ivec2(1))));
-	return dot(n, vec3(70.0));
+	return dot(n, vec3(70.0)) * 0.5 + 0.5;
 }
 "

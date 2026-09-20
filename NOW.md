@@ -10,18 +10,18 @@ This file is generated (design section 4): the facts below (Mode, Position, from
 
 Mode: (none - idle)
 Position: idle - pick a mode with /claudhd:start or /claudhd:design
-from: (unplanned work)
+from: r-0907-1
 Counts: queue 0 · quick fixes 0 · ideas untriaged 5
 
-Last touched: 2026-09-18
+Last touched: 2026-09-19
 
 ## Active thread (only one)
 
-**Fix the 21 unit failures (roadmap)**
+**Ship v0.1 (`r-0907-1`): user tuning pass, last open checklist item (`docs/DESIGN.md` line 159)**
 
 Next physical action:
 
-- [ ] Fixed 2026-09-15 (0 failures on 4.4/4.6.2/4.7): test harness forced coord=true on generative/clock whose manifest says coord=false; 17 empty input descriptions across 14 blocks; 7 hardcoded roster totals replaced by explicit id rosters. Review PASS-WITH-NOTES; fix-now pass in flight; next: commit, then tab-row arrow fix
+- [ ] color folder swept, all 13 ok (2026-09-16). Next: sweep fieldops (11), filter (5), generative (11), sdf (11), source (2) via sandbox/stacks/ref_*.tres, report any slider with a dead range; then tick line 159, move tag v0.1.0 to HEAD (user gate), cut GitHub release (user gate)
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

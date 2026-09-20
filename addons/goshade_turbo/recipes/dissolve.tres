@@ -28,8 +28,8 @@ slots = {
 "x": &"1"
 }
 params = {
-"edge0": 0.0,
-"edge1": 0.05
+"edge0": 0.5,
+"edge1": 0.55
 }
 
 [sub_resource type="Resource" id="Resource_fju58"]
@@ -57,8 +57,8 @@ slots = {
 "x": &"1"
 }
 params = {
-"edge0": -0.1,
-"edge1": -0.05
+"edge0": 0.4,
+"edge1": 0.45
 }
 
 [sub_resource type="Resource" id="Resource_an635"]

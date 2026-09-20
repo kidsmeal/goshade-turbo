@@ -72,7 +72,7 @@ func _get_property_list() -> Array[Dictionary]:
 			prop["hint"] = PROPERTY_HINT_COLOR_NO_ALPHA
 		elif param_type == "float" or param_type == "int":
 			prop["hint"] = PROPERTY_HINT_RANGE
-			prop["hint_string"] = "%s,%s" % [str(param["min"]), str(param["max"])]
+			prop["hint_string"] = "%s,%s,or_greater" % [str(param["min"]), str(param["max"])]
 		list.append(prop)
 	return list
 

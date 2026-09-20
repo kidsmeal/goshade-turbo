@@ -1,5 +1,5 @@
 // GoShade Turbo generated shader. MIT License.
-// stack: {"coord_space":"uv","layers":[{"coord":null,"entry":"source/texture","id":"0","kind_out":1,"params":{},"slots":{}},{"coord":{"offset":[0.0,0.0],"rotation":0.0,"scale":[3.0,3.0],"scroll":[0.150000005960464,0.0500000007450581],"warp_strength":0.0,"warp_x":"","warp_y":""},"entry":"generative/snoise","id":"1","kind_out":0,"params":{},"slots":{}},{"coord":{"offset":[-1.0,0.0],"rotation":-1.5707963267949,"scale":[2.0,2.0],"scroll":[0.0,0.0],"warp_strength":0.12,"warp_x":"1","warp_y":""},"entry":"generative/linear_gradient","id":"2","kind_out":0,"params":{},"slots":{}},{"coord":null,"entry":"color/palette","id":"3","kind_out":1,"params":{"a":[0.150000005960464,0.709999978542328,0.649999976158142],"b":[0.519999980926514,0.490000009536743,0.159999996423721],"c":[0.920000016689301,0.370000004768372,0.829999983310699],"d":[0.819999992847443,0.0900000035762787,0.479999989271164]},"slots":{"t":"2"}},{"coord":{"offset":[0.0,0.0],"rotation":-1.5707963267949,"scale":[48.0,48.0],"scroll":[0.0,0.0],"warp_strength":0.0,"warp_x":"","warp_y":""},"entry":"generative/stripes","id":"4","kind_out":0,"params":{},"slots":{}},{"coord":null,"entry":"color/gradient_map","id":"5","kind_out":1,"params":{"color_a":[0.600000023841858,0.600000023841858,0.649999976158142,1.0],"color_b":[1.0,1.0,1.0,1.0]},"slots":{"t":"4"}},{"coord":null,"entry":"color/multiply","id":"6","kind_out":1,"params":{"t":0.5},"slots":{"a":"3","b":"5"}},{"coord":null,"entry":"filter/outline","id":"7","kind_out":1,"params":{"thickness":0.006,"threshold":0.1},"slots":{"source":"0"}},{"coord":null,"entry":"color/fill","id":"8","kind_out":1,"params":{"color":[0.0199999995529652,0.0500000007450581,0.119999997317791,1.0]},"slots":{}},{"coord":null,"entry":"color/mix","id":"9","kind_out":1,"params":{},"slots":{"a":"6","b":"8","mask":"7"}},{"coord":null,"entry":"fieldops/alpha","id":"10","kind_out":0,"params":{},"slots":{"color":"0"}},{"coord":null,"entry":"fieldops/max","id":"11","kind_out":0,"params":{},"slots":{"a":"10","b":"7"}}],"next_id":12,"output_alpha":"11","output_color":"9","schema":1}
+// stack: {"coord_space":"uv","layers":[{"coord":null,"entry":"source/texture","id":"0","kind_out":1,"params":{},"slots":{}},{"coord":{"offset":[0.0,0.0],"rotation":0.0,"scale":[3.0,3.0],"scroll":[0.150000005960464,0.0500000007450581],"warp_strength":0.0,"warp_x":"","warp_y":""},"entry":"generative/snoise","id":"1","kind_out":0,"params":{},"slots":{}},{"coord":{"offset":[-1.0,0.0],"rotation":-1.5708,"scale":[2.0,2.0],"scroll":[0.0,0.0],"warp_strength":0.12,"warp_x":"1","warp_y":""},"entry":"generative/linear_gradient","id":"2","kind_out":0,"params":{},"slots":{}},{"coord":null,"entry":"color/palette","id":"3","kind_out":1,"params":{"a":[0.150000005960464,0.709999978542328,0.649999976158142],"b":[0.519999980926514,0.490000009536743,0.159999996423721],"c":[0.920000016689301,0.370000004768372,0.829999983310699],"d":[0.819999992847443,0.0900000035762787,0.479999989271164]},"slots":{"t":"2"}},{"coord":{"offset":[0.0,0.0],"rotation":-1.5708,"scale":[48.0,48.0],"scroll":[0.0,0.0],"warp_strength":0.0,"warp_x":"","warp_y":""},"entry":"generative/stripes","id":"4","kind_out":0,"params":{},"slots":{}},{"coord":null,"entry":"color/gradient_map","id":"5","kind_out":1,"params":{"color_a":[0.600000023841858,0.600000023841858,0.649999976158142,1.0],"color_b":[1.0,1.0,1.0,1.0]},"slots":{"t":"4"}},{"coord":null,"entry":"color/multiply","id":"6","kind_out":1,"params":{"t":0.5},"slots":{"a":"3","b":"5"}},{"coord":null,"entry":"filter/outline","id":"7","kind_out":1,"params":{"thickness":0.006,"threshold":0.1},"slots":{"source":"0"}},{"coord":null,"entry":"color/fill","id":"8","kind_out":1,"params":{"color":[0.0199999995529652,0.0500000007450581,0.119999997317791,1.0]},"slots":{}},{"coord":null,"entry":"color/mix","id":"9","kind_out":1,"params":{},"slots":{"a":"6","b":"8","mask":"7"}},{"coord":null,"entry":"fieldops/alpha","id":"10","kind_out":0,"params":{},"slots":{"color":"0"}},{"coord":null,"entry":"fieldops/max","id":"11","kind_out":0,"params":{},"slots":{"a":"10","b":"7"}}],"next_id":12,"output_alpha":"11","output_color":"9","schema":1}
 shader_type canvas_item;
 
 group_uniforms L01_snoise;
@@ -10,7 +10,7 @@ uniform vec2 l1_scroll = vec2(0.15000000596046, 0.05000000074506);
 group_uniforms L02_linear_gradient;
 uniform vec2 l2_scale = vec2(2.0, 2.0);
 uniform vec2 l2_offset = vec2(-1.0, 0.0);
-uniform float l2_rotation = -1.5707963267949;
+uniform float l2_rotation = -1.5708;
 uniform float l2_warp_strength = 0.12;
 group_uniforms L03_palette;
 uniform vec3 l3_palette_a = vec3(0.15000000596046, 0.70999997854233, 0.64999997615814);
@@ -20,7 +20,7 @@ uniform vec3 l3_palette_d = vec3(0.81999999284744, 0.09000000357628, 0.479999989
 group_uniforms L04_stripes;
 uniform vec2 l4_scale = vec2(48.0, 48.0);
 uniform vec2 l4_offset = vec2(0.0, 0.0);
-uniform float l4_rotation = -1.5707963267949;
+uniform float l4_rotation = -1.5708;
 group_uniforms L05_gradient_map;
 uniform vec4 l5_gradient_map_color_a : source_color = vec4(0.60000002384186, 0.60000002384186, 0.64999997615814, 1.0);
 uniform vec4 l5_gradient_map_color_b : source_color = vec4(1.0, 1.0, 1.0, 1.0);
@@ -47,7 +47,9 @@ float luma(vec4 c) {
 
 
 float hash(vec2 p) {
-	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
 }
 
 vec2 gst_grad2(ivec2 i) {
@@ -66,7 +68,7 @@ float snoise(vec2 p) {
 	vec3 h = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
 	// Integer corner addresses keep shared gradients consistent across renderers.
 	vec3 n = h * h * h * h * vec3(dot(a, gst_grad2(ivec2(i))), dot(b, gst_grad2(ivec2(i) + ivec2(o))), dot(c, gst_grad2(ivec2(i) + ivec2(1))));
-	return dot(n, vec3(70.0));
+	return dot(n, vec3(70.0)) * 0.5 + 0.5;
 }
 
 float linear_gradient(vec2 p) {

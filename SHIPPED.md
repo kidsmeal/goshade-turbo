@@ -4,6 +4,9 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
+### 2026-09-18
+- Picker text slicing resolved as upstream godotengine/godot#83975; cell_borders tutorial and screenshot import companions added; NOW.md thread set to the v0.1 tuning pass `ecb3796`
+
 ### 2026-09-16
 - library: three cell border entries, rounded, per-plate, edge-warped `51e2504`
 - v0.2 design board: layer ops, texture param and source/image, param links, custom layer with save-as-entry, user recipes; roadmap intent added, two ideas promoted `417f549`

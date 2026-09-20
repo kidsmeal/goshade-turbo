@@ -27,7 +27,7 @@ params = {
 "a": Vector3(0.55, 0.25, 0.15),
 "b": Vector3(0.45, 0.35, 0.25),
 "c": Vector3(1, 0.9, 0.6),
-"d": Vector3(0, 0.1, 0.25)
+"d": Vector3(0.5, 0.65, 0.95)
 }
 
 [sub_resource type="Resource" id="Resource_0k5a1"]
@@ -38,8 +38,8 @@ slots = {
 "x": &"0"
 }
 params = {
-"edge0": -0.3,
-"edge1": 0.3
+"edge0": 0.2,
+"edge1": 0.8
 }
 
 [sub_resource type="Resource" id="Resource_bq11a"]

@@ -6,8 +6,8 @@
 script = ExtResource("1")
 id = "generative/fbm"
 function = "fbm"
-description = "layered noise, cloud like, octaves control detail"
-source_math = "fractional Brownian motion: standard sum-of-octaves construction. See D. Ebert et al., \"Texturing & Modeling: A Procedural Approach\" (3rd ed., 2003), ch. 2."
+description = "layered noise centered on 0.5, cloud like, octaves control detail"
+source_math = "fractional Brownian motion: standard sum-of-octaves construction. See D. Ebert et al., \"Texturing & Modeling: A Procedural Approach\" (3rd ed., 2003), ch. 2. Octaves sum signed simplex noise (snoise remapped back to -1..1) and the sum is offset by 0.5 so the default settles around 0.5 instead of 0."
 source_code_url = ""
 source_code_license = ""
 kind_out = 0
@@ -37,10 +37,10 @@ code = "float fbm(vec2 p, int octaves, float gain) {
 	float amp = 0.5;
 	float freq = 1.0;
 	for (int i = 0; i < octaves; i++) {
-		sum += amp * snoise(p * freq);
+		sum += amp * (snoise(p * freq) * 2.0 - 1.0);
 		freq *= 2.0;
 		amp *= gain;
 	}
-	return sum;
+	return sum + 0.5;
 }
 "

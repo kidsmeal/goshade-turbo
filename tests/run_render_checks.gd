@@ -300,7 +300,7 @@ func _check_noise_continuity(library: GSTLibrary) -> bool:
 	root.add_child(viewport)
 	var material: ShaderMaterial = ShaderMaterial.new()
 	material.shader = Shader.new()
-	material.shader.code = "shader_type canvas_item;\n" + library.get_entry("generative/hash").code + library.get_entry("generative/snoise").code + "\nvoid fragment() { float n = snoise((UV - vec2(0.5)) * 8.0); COLOR = vec4(vec3(n * 0.5 + 0.5), 1.0); }"
+	material.shader.code = "shader_type canvas_item;\n" + library.get_entry("generative/hash").code + library.get_entry("generative/snoise").code + "\nvoid fragment() { float n = snoise((UV - vec2(0.5)) * 8.0); COLOR = vec4(vec3(n), 1.0); }"
 	var target: ColorRect = ColorRect.new()
 	target.set_anchors_preset(Control.PRESET_FULL_RECT)
 	target.material = material
@@ -322,6 +322,7 @@ func _check_noise_continuity(library: GSTLibrary) -> bool:
 			maximum_value = maxf(maximum_value, value)
 			maximum_delta = maxf(maximum_delta, absf(value - image.get_pixel(x + 1, y).r))
 			maximum_delta = maxf(maximum_delta, absf(value - image.get_pixel(x, y + 1).r))
+	# snoise returns 0..1, shown directly.
 	# At 1/64 coordinate units per pixel the smooth field stays below 0.04;
 	# the discontinuous Forward+ path measured above 0.61. The range check
 	# stops blank output from passing as continuous.

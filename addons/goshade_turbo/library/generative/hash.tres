@@ -6,10 +6,10 @@
 script = ExtResource("1")
 id = "generative/hash"
 function = "hash"
-description = "pseudo-random scalar field from a 2D point, no periodicity guarantees"
-source_math = "sin/dot pseudo-random hash, a common GLSL technique. The Book of Shaders, ch. 10 \"Random\", https://thebookofshaders.com/10/"
-source_code_url = "Capsule Castle, shaders/sprite/SpriteGoldFoil.gdshader, function random()"
-source_code_license = "same author, no external license, ported verbatim"
+description = "pseudo-random scalar field from a 2D point, no periodicity guarantees, no sin() so it stays uniform at large coordinates"
+source_math = "Hash without Sine, hash12: fract/dot mixing of the input, no trigonometry, so integer lattice inputs get no mirrored or striped output. David Hoskins, https://www.shadertoy.com/view/4djSRW"
+source_code_url = "https://www.shadertoy.com/view/4djSRW (hash12)"
+source_code_license = "MIT, Copyright (c) 2014 David Hoskins"
 kind_out = 0
 inputs = Array[Dictionary]([])
 params = Array[Dictionary]([])
@@ -17,6 +17,8 @@ coord = true
 samples_source = false
 depends = Array[String]([])
 code = "float hash(vec2 p) {
-	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
 }
 "
