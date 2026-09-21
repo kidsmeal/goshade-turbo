@@ -6,8 +6,8 @@
 script = ExtResource("1")
 id = "generative/clock"
 function = "clock"
-description = "time as a field, a 0..1 sawtooth that repeats every cycle; same value at every pixel"
-source_math = "fract(TIME * speed), standard construction. Ignores position; feeds add or mix to animate a field value. Adding it before a fract is the same as adding unbounded time, since fract drops the whole part."
+description = "time as a field, 0..1 once per cycle, sine, triangle or sawtooth; same value at every pixel"
+source_math = "t = fract(TIME * speed); sine 0.5 - 0.5 * cos(TAU * t), triangle abs(2t - 1), sawtooth t. Standard constructions. Ignores position; feeds add or mix to animate a field value. Sawtooth added before a fract is the same as adding unbounded time, since fract drops the whole part."
 source_code_url = ""
 source_code_license = ""
 kind_out = 0
@@ -19,12 +19,27 @@ params = Array[Dictionary]([{
 "name": "speed",
 "type": "float",
 "label": "Cycles per second",
-"description": "0 holds at zero, 1 wraps once a second."
+"description": "0 holds still, 1 completes one cycle a second."
+}, {
+"default": 2,
+"max": 2,
+"min": 0,
+"name": "wave",
+"type": "int",
+"label": "Wave",
+"description": "0 sawtooth, ramps 0 to 1 then jumps back. 1 triangle, 0 to 1 to 0 with a kink. 2 sine, 0 to 1 to 0 with no kink."
 }])
 coord = false
 samples_source = false
 depends = Array[String]([])
-code = "float clock(float speed) {
-	return fract(TIME * speed);
+code = "float clock(float speed, int wave) {
+	float t = fract(TIME * speed);
+	if (wave == 1) {
+		return abs(t * 2.0 - 1.0);
+	}
+	if (wave == 2) {
+		return 0.5 - 0.5 * cos(TAU * t);
+	}
+	return t;
 }
 "

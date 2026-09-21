@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_clk01"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_clk02"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_clk03"]
+
+[sub_resource type="Resource" id="Resource_clk10"]
+script = ExtResource("2_clk02")
+
+[sub_resource type="Resource" id="Resource_clk11"]
+script = ExtResource("1_clk01")
+id = &"0"
+entry = "generative/linear_gradient"
+coord = SubResource("Resource_clk10")
+
+[sub_resource type="Resource" id="Resource_clk12"]
+script = ExtResource("1_clk01")
+id = &"1"
+entry = "generative/clock"
+
+[sub_resource type="Resource" id="Resource_clk13"]
+script = ExtResource("1_clk01")
+id = &"2"
+entry = "fieldops/add"
+slots = {
+"a": &"0",
+"b": &"1"
+}
+
+[sub_resource type="Resource" id="Resource_clk14"]
+script = ExtResource("1_clk01")
+id = &"3"
+entry = "fieldops/fract"
+slots = {
+"x": &"2"
+}
+
+[resource]
+script = ExtResource("3_clk03")
+layers = Array[ExtResource("1_clk01")]([SubResource("Resource_clk11"), SubResource("Resource_clk12"), SubResource("Resource_clk13"), SubResource("Resource_clk14")])
+output_color = &"3"
+next_id = 4

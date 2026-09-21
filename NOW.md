@@ -21,7 +21,7 @@ Last touched: 2026-09-20
 
 Next physical action:
 
-- [ ] v0.1.0 shipped 2026-09-20: tag at 663b953, GitHub release cut with goshade_turbo-0.1.0.zip. Next: README library table says 57 functions, roster is 61; regenerate via tests/print_roster.gd, then /claudhd:start the v0.2 roadmap item
+- [ ] v0.1.0 shipped 2026-09-20 (tag 663b953, release zip). README roster regenerated cb39d8d. clock wave param (sine default) added after the tag. Next: /claudhd:start the v0.2 roadmap item
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
