@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-20
+- ROADMAP: v0.1 moved to Shipped, Now pointer at r-0916-1
 - Activate r-0916-1: v0.2 thread enters design mode, roadmap wording restated
 - v0.2 design: param links amended to base plus amount (decisions 29, 30)
 - NOW.md cursor: v0.1.0 tag and zip moved to 85c2762
