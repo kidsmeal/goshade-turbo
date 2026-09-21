@@ -17,11 +17,11 @@ Last touched: 2026-09-20
 
 ## Active thread (only one)
 
-**Ship v0.1 (`r-0907-1`): release checklist all ticked, two user gates left (tag move, GitHub release)**
+**Ship v0.1 (`r-0907-1`): shipped, https://github.com/kidsmeal/goshade-turbo/releases/tag/v0.1.0**
 
 Next physical action:
 
-- [ ] tuning pass swept in editor, all 61 ref stacks, DESIGN.md line 159 ticked 2026-09-20 (0c0c606). Next: move tag v0.1.0 (at 032f0be) to HEAD (user gate), cut GitHub release (user gate)
+- [ ] v0.1.0 shipped 2026-09-20: tag at 663b953, GitHub release cut with goshade_turbo-0.1.0.zip. Next: README library table says 57 functions, roster is 61; regenerate via tests/print_roster.gd, then /claudhd:start the v0.2 roadmap item
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

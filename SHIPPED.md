@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-20
+- NOW.md cursor: v0.1.0 shipped, next is the README roster count and v0.2 start
 - NOW.md cursor: tuning pass done, next action is the tag move and GitHub release gates
 - Release checklist: tuning pass ticked, all 61 reference stacks swept in editor `0c0c606`
 - Slider step in PROPERTY_HINT_RANGE hint strings; fieldops ease and ratchet ref stacks; fieldops and filter sweep signed off `4dcc506`
