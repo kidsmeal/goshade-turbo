@@ -72,9 +72,28 @@ func _get_property_list() -> Array[Dictionary]:
 			prop["hint"] = PROPERTY_HINT_COLOR_NO_ALPHA
 		elif param_type == "float" or param_type == "int":
 			prop["hint"] = PROPERTY_HINT_RANGE
-			prop["hint_string"] = "%s,%s,or_greater" % [str(param["min"]), str(param["max"])]
+			prop["hint_string"] = range_hint_string(param_type, float(param["min"]), float(param["max"]))
 		list.append(prop)
 	return list
+
+
+## PROPERTY_HINT_RANGE text: "min,max,step,or_greater". Godot reads the
+## third slice as the step, so it is always present; a missing step would
+## read the flag as step 0 and the field would show unstepped floats.
+## or_greater keeps typed values above max; min stays a hard floor.
+static func range_hint_string(param_type: String, minimum: float, maximum: float) -> String:
+	var step: float = 1.0 if param_type == "int" else float_step(minimum, maximum)
+	var min_text: String = str(int(minimum)) if param_type == "int" else String.num(minimum, 6)
+	var max_text: String = str(int(maximum)) if param_type == "int" else String.num(maximum, 6)
+	return "%s,%s,%s,or_greater" % [min_text, max_text, String.num(step, 6)]
+
+
+## Slider step for a float range: the power of ten at or below one
+## hundredth of the span, so every slider has at least 100 positions.
+## 0..1 -> 0.01; 0.2..0.8 -> 0.001; 0.0005..0.02 -> 0.0001.
+static func float_step(minimum: float, maximum: float) -> float:
+	var span: float = maxf(maximum - minimum, 0.000001)
+	return pow(10.0, floor(log(span / 100.0) / log(10.0) + 0.000000001))
 
 
 func _get(property: StringName) -> Variant:

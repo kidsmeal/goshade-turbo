@@ -4,6 +4,9 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
+### 2026-09-19
+- Tuning pass fixes: soft slider max, sine-free hash, perlin quintic fade and gain, snoise 0..1 and fbm centered on 0.5, dither hashes FRAGCOORD `e5e833e`
+
 ### 2026-09-18
 - Picker text slicing resolved as upstream godotengine/godot#83975; cell_borders tutorial and screenshot import companions added; NOW.md thread set to the v0.1 tuning pass `ecb3796`
 

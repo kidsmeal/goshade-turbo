@@ -13,7 +13,7 @@ Position: idle - pick a mode with /claudhd:start or /claudhd:design
 from: r-0907-1
 Counts: queue 0 · quick fixes 0 · ideas untriaged 5
 
-Last touched: 2026-09-19
+Last touched: 2026-09-20
 
 ## Active thread (only one)
 
@@ -21,7 +21,7 @@ Last touched: 2026-09-19
 
 Next physical action:
 
-- [ ] color folder swept, all 13 ok (2026-09-16). Next: sweep fieldops (11), filter (5), generative (11), sdf (11), source (2) via sandbox/stacks/ref_*.tres, report any slider with a dead range; then tick line 159, move tag v0.1.0 to HEAD (user gate), cut GitHub release (user gate)
+- [ ] color (13), generative (16), sdf (11), fieldops (14), filter (5) swept ok in editor 2026-09-20; slider step from range_hint_string committed. Next: sweep source (2) via sandbox/stacks/ref_source_*.tres; then tick line 159, move tag v0.1.0 to HEAD (user gate), cut GitHub release (user gate)
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
