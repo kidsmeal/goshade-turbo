@@ -17,11 +17,11 @@ Last touched: 2026-09-20
 
 ## Active thread (only one)
 
-**Ship v0.1 (`r-0907-1`): user tuning pass, last open checklist item (`docs/DESIGN.md` line 159)**
+**Ship v0.1 (`r-0907-1`): release checklist all ticked, two user gates left (tag move, GitHub release)**
 
 Next physical action:
 
-- [ ] generative (16) and sdf (11) swept ok 2026-09-20; ref stacks added for fieldops/ease and fieldops/ratchet. Next: sweep fieldops (14), filter (5), source (2) via sandbox/stacks/ref_*.tres, report dead ranges; then tick line 159, move tag v0.1.0 to HEAD (user gate), cut GitHub release (user gate)
+- [ ] tuning pass swept in editor, all 61 ref stacks, DESIGN.md line 159 ticked 2026-09-20 (0c0c606). Next: move tag v0.1.0 (at 032f0be) to HEAD (user gate), cut GitHub release (user gate)
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
