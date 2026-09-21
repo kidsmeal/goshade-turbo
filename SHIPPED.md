@@ -5,6 +5,8 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-20
+- NOW.md cursor: v0.1.0 tag and zip moved to 85c2762
+- generative/clock: wave param, sine default; triangle and sawtooth kept `85c2762`
 - README: library table regenerated from the manifests, 61 functions
 - NOW.md cursor: v0.1.0 shipped, next is the README roster count and v0.2 start
 - NOW.md cursor: tuning pass done, next action is the tag move and GitHub release gates
