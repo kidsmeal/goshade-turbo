@@ -37,3 +37,4 @@ Delivered, newest first. Move an intent here when its work lands, with a one-lin
 Directions you have deliberately chosen not to take, each with the one-line why, so they stop coming back as ideas.
 
 - (a deliberately-killed direction) - why: (one line) `r-0907-4`
+- Free-form node graph (forward references, arbitrary wiring, inline expression node, canvas editor) - why: converges on Godot VisualShader with a worse skin and loses the stack's canonical order, one-line header, valid-by-construction slots and randomize; owner VisualShader trial 2026-09-21 recorded in `docs/V0_2_DESIGN.md` decision 34 `r-0921-1`

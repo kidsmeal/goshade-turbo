@@ -1,6 +1,6 @@
 # GoShade Turbo v0.2: design
 
-Status: decision board drafted 2026-09-16 from the v0.1 gap audit, user approved every recommendation the same day. Not yet grilled through `/claudhd:design`; not yet reviewed. Extends `docs/DESIGN.md`. Decision numbers continue from 22. Every v0.1 decision stays in force unless a decision below names it.
+Status: decision board drafted 2026-09-16 from the v0.1 gap audit, user approved every recommendation the same day. Not yet grilled through `/claudhd:design`; not yet reviewed. Decision 34 added 2026-09-21 (stack shape locked, VisualShader trial evidence). Extends `docs/DESIGN.md`. Decision numbers continue from 22. Every v0.1 decision stays in force unless a decision below names it.
 
 Roadmap item: `ROADMAP.md` Next, "GoShade Turbo v0.2". Done when the release checklist below is all ticked.
 
@@ -39,6 +39,8 @@ One schema change carries all five.
 32. Save as library entry. A button on a `custom` layer writes `addons/goshade_turbo/library/custom/<function>.tres` with `source_math = "own construction"` and empty license fields, then swaps the layer's `entry` to the new id and clears the custom fields. Refused when `function` collides with an existing roster function (codegen requires uniqueness). Undo covers the swap; the file stays. Beat: writing to the user recipes folder, which the library scan does not read.
 
 33. User recipes. Project setting `goshade_turbo/recipes_dir`, default `res://goshade_recipes/`. The Recipes menu lists the addon folder, then a separator, then the user folder. "Save as Recipe" in the File menu writes the active stack there by name and opens nothing. Randomize (decision 16) treats user recipes the same as bundled ones. Beat: editing the addon folder, lost on addon update.
+
+34. Stack shape, locked. The stack stays a linear, typed, downward-referencing list of whole-function layers. No free-form wiring, no forward references, no inline expression node, no canvas. Every v0.2 feature is checked against this: param links (29) reference one lower layer per param; `custom` (31) is a typed function with a declared signature and enters the library (32), never an inline glsl box on a wire. Evidence, 2026-09-21: first-time VisualShader trial by the project owner in this repo (`visualtest1.tres`, deleted). Scrolling noise with pulsing alpha took 6 nodes plus 3 nested resources (`Texture2D` node > `NoiseTexture2D` > `FastNoiseLite`) and still rendered the missing-texture magenta checker, did not scroll (`VectorOp b` unwired) and would blink (`sin(TIME)` unremapped into alpha); a correct version is 10 nodes. The goshade equivalent is `generative/noise` with scroll speed plus `fieldops/remap` on `generative/clock` into output alpha, two layers, zero resources. Owner verdict after 15 minutes: lost at the resource nesting, not a fan. What the stack buys that the graph cannot: canonical reading order, one-line json header that diffs and pastes, no invalid wiring by construction, randomize that always compiles, per-layer license and tests, single-pass codegen with no cycle check. What it gives up: fan-in beyond a layer's declared inputs, shader types other than `canvas_item`, arbitrary topology. Beat: evolving toward a graph, which converges on VisualShader with a worse skin and none of the above. Recorded in `ROADMAP.md` Non-goals.
 
 ## Data model delta
 
