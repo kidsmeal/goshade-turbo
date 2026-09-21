@@ -30,9 +30,9 @@ One schema change carries all five.
 
 28. `source/image`. New entry, kind `color`, `coord: true`, one texture param `image`. Body samples `texture(l<id>_image, coord<id>)`. Scale, offset, rotation, scroll and warp apply through the coord block. It joins `texture` and `screen` as an allowed filter input (decision 21): a filter on `source/image` samples `l<id>_image` at `coord<id> + offset`. `_is_source_layer` gains the entry. Beat: texture params on operators only, which gives masks but no transformable second image.
 
-29. Param links. `param_links: Dictionary`, param name to layer id. A linkable param is `type: float` or `type: int`; `color`, `vec3` and `texture` do not link in v0.2. The target must be below the layer; a `color` target converts via `luma` (decision 2). Codegen replaces the uniform with `mix(<min>, <max>, clamp(l<target>, 0.0, 1.0))`, wrapped in `int(round(...))` for int params. The uniform is not emitted while linked, same rule as scroll and `TIME`. Deleting the target clears the link and restores the slider (decision 22 reporting). Reordering the target above the linker is refused with the reason. Beat: raw field value into the param; every stack would need a remap layer first.
+29. Param links, base plus amount. `param_links: Dictionary`, param name to `{target: layer_id, amount: float}`. A linkable param is `type: float` or `type: int`; `color`, `vec3` and `texture` do not link in v0.2. The target must be below the layer; a `color` target converts via `luma` (decision 2). The slider stays live as the base value. `amount` is -1..1, default 1.0. Codegen replaces the uniform with `clamp(<base> + (l<target> - 0.5) * <amount> * (<max> - <min>), <min>, <max>)`, wrapped in `int(round(...))` for int params; `<base>` is the param's literal value from `params`, so amount 0 is identical to unlinked and linking never jumps. The target is per pixel, so a noise target varies the param across the surface and a `generative/clock` target animates it around the base. The uniform is not emitted while linked, same rule as scroll and `TIME`. Deleting the target clears the link (decision 22 reporting). Reordering the target above the linker is refused with the reason. Beats: `mix(min, max, field)`, which discards the slider and needs a remap layer for any modulation smaller than the full range; raw field value into the param, same remap cost. Amended 2026-09-20 from the mix form.
 
-30. Link UI. A link button beside every linkable slider in the inspector column opens the shared picker in a new mode listing field and color layers below the current layer, no library entries. A linked row shows the target's label or function name and an unlink button in place of the slider. Unlink restores the slider at the value it had when linked, kept in `params`. Beat: a separate "modulation" section, which splits one param across two places.
+30. Link UI. A link button beside every linkable slider in the inspector column opens the shared picker in a new mode listing field and color layers below the current layer, no library entries. A linked row keeps the slider (the base value) and adds a second line under it: the target's label or function name, an amount slider -1..1, an unlink button. Unlink removes the second line; the base slider is unchanged. Beats: replacing the slider with the target name, which loses the base value; a separate "modulation" section, which splits one param across two places. Amended 2026-09-20 with decision 29.
 
 31. `custom` layer. Entry id `custom`, not a manifest file. `custom_code: String` is a function body; codegen wraps it as `<kind> custom_l<id>(<inputs>, <params>) { <body> }` and emits the call like any operator. `custom_kinds: Dictionary` holds `kind_out` and `inputs` (name plus kind, up to 3). `custom_params: Array[Dictionary]` uses the manifest param schema (`name`, `type`, `min`, `max`, `default`), types `float`, `int`, `color`, `vec3`, `texture`. The inspector shows a code box, a kind dropdown, an inputs editor, a params editor. Compile errors surface through the existing codegen error label above the preview. Header json carries the whole block, so export and reopen need no library. A custom layer has no coord block in v0.2; use a generator input for coords. Beat: forcing every custom function through the library folder before it can be used.
 
@@ -46,7 +46,7 @@ One schema change carries all five.
 Layer (Resource)
   label: String = ""                      # decision 25
   enabled: bool = true                    # decision 26
-  param_links: Dictionary = {}            # param name -> layer id, decision 29
+  param_links: Dictionary = {}            # param name -> {target: layer id, amount: float}, decision 29
   custom_code: String = ""                # decision 31, entry == "custom" only
   custom_kinds: Dictionary = {}           # {kind_out, inputs: [{name, kind}]}
   custom_params: Array[Dictionary] = []   # manifest param schema
@@ -64,7 +64,7 @@ Layer (Resource)
 
 - Bypass: `_layer_body_lines` branches on `enabled` before kind dispatch (decision 26).
 - Texture uniform line: `_param_uniform_line` handles `texture` with no default and no range.
-- Param link: `_operator_body_lines` and `_generator_body_lines` substitute the linked expression for the uniform name; `_layer_uniform_lines` skips linked params.
+- Param link: `_operator_body_lines` and `_generator_body_lines` substitute the base-plus-amount expression for the uniform name, with base, amount, min and max as literals; `_layer_uniform_lines` skips linked params.
 - Custom: `_include_order` appends one synthetic entry per custom layer after the library walk; function name `custom_l<id>` cannot collide with roster functions.
 - Header: schema 2, new fields serialized only when non-default so schema 1 readers of exported bodies still see familiar json.
 
@@ -81,7 +81,7 @@ Layer (Resource)
 ## Release checklist (v0.2)
 
 - [ ] Schema 1 headers and `.tres` files from v0.1 reopen with every new field at its default.
-- [ ] Headless codegen tests: bypass per kind, linked float and int, texture uniform, `source/image` under every filter, custom layer with 0 to 3 inputs, custom function name uniqueness.
+- [ ] Headless codegen tests: bypass per kind, linked float and int, amount 0 emits the same body as unlinked, texture uniform, `source/image` under every filter, custom layer with 0 to 3 inputs, custom function name uniqueness.
 - [ ] Combination test: every field entry linked into every linkable param of every entry compiles.
 - [ ] Rendered checks on the new reference stacks pass the existing `GSTRenderAssert`.
 - [ ] Undo covers duplicate, rename, bypass, link, unlink, custom edit, save as library entry.
