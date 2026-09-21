@@ -4,6 +4,9 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
+### 2026-09-20
+- Slider step in PROPERTY_HINT_RANGE hint strings; fieldops ease and ratchet ref stacks; fieldops and filter sweep signed off `4dcc506`
+
 ### 2026-09-19
 - Tuning pass fixes: soft slider max, sine-free hash, perlin quintic fade and gain, snoise 0..1 and fbm centered on 0.5, dither hashes FRAGCOORD `e5e833e`
 

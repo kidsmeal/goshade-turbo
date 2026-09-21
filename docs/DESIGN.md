@@ -156,7 +156,7 @@ Randomize (v0.1): a button on an open recipe that sets every slider to a random 
 - [x] Combination tests: every field op with every generator as input compiles; every color op with every color entry as input compiles. (evidence: tests/test_combinations.gd)
 - [x] Rendered checks on every reference stack and every recipe: no NaN or inf pixels, alpha channel within `[0, 1]`, output not uniformly one value. (evidence: tests/gst_render_assert.gd via tests/run_render_checks.gd, docs/EDITOR_SMOKE.md Phase 8 section, `run_render_checks: PASS, 78 stack(s) checked`)
 - [x] All eight recipes build from the roster only and pass the rendered checks. (evidence: addons/goshade_turbo/recipes/*.tres (12 files: dissolve, outline, sprite_holographic from phase 7; water, fire, glow, hologram, metaball_portal, sprite_pearl, sprite_foil, sprite_oil_slick, sprite_opal from phase 8), docs/EDITOR_SMOKE.md Phase 8 render check section)
-- [ ] Tuning pass by the user: every slider produces a visible change across its whole range. (pending user sign-off)
+- [x] Tuning pass by the user: every slider produces a visible change across its whole range. (evidence: user sweep in editor of every sandbox/stacks/ref_*.tres, color 13, generative 16, sdf 11, fieldops 14, filter 5, source 2, signed off 2026-09-20)
 - [x] Undo covers add, remove, reorder, slot change, output change. (evidence: docs/EDITOR_SMOKE.md Phase 4 section, the 7-action undo sequence and the compound add-for-slot/output-change excursions)
 - [x] Runs on 4.4, 4.6, 4.7. (evidence: docs/EDITOR_SMOKE.md "Version matrix, final phase 8 tree": 123 headless tests and 78 render checks pass on 4.4, 4.6.2, 4.7)
 

@@ -21,7 +21,7 @@ Last touched: 2026-09-20
 
 Next physical action:
 
-- [ ] color (13), generative (16), sdf (11), fieldops (14), filter (5) swept ok in editor 2026-09-20; slider step from range_hint_string committed. Next: sweep source (2) via sandbox/stacks/ref_source_*.tres; then tick line 159, move tag v0.1.0 to HEAD (user gate), cut GitHub release (user gate)
+- [ ] generative (16) and sdf (11) swept ok 2026-09-20; ref stacks added for fieldops/ease and fieldops/ratchet. Next: sweep fieldops (14), filter (5), source (2) via sandbox/stacks/ref_*.tres, report dead ranges; then tick line 159, move tag v0.1.0 to HEAD (user gate), cut GitHub release (user gate)
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
