@@ -1,69 +1,114 @@
 [gd_resource type="Resource" script_class="GSTStack" format=3]
 
-[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_hchhx"]
-[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_7qnus"]
-[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_lgl88"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_layer"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_coord"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_stack"]
 
-[sub_resource type="Resource" id="Resource_h5v86"]
-script = ExtResource("2_7qnus")
-scale = Vector2(3, 3)
-scroll = Vector2(0, -0.4)
+[sub_resource type="Resource" id="Coord_warp"]
+script = ExtResource("2_coord")
+scale = Vector2(2, 1.5)
+scroll = Vector2(0, 0.4)
 
-[sub_resource type="Resource" id="Resource_8ywff"]
-script = ExtResource("1_hchhx")
+[sub_resource type="Resource" id="L6_warp_noise"]
+script = ExtResource("1_layer")
+id = &"6"
+entry = "generative/snoise"
+coord = SubResource("Coord_warp")
+
+[sub_resource type="Resource" id="L7_warp_centered"]
+script = ExtResource("1_layer")
+id = &"7"
+entry = "fieldops/remap"
+slots = {
+"x": &"6"
+}
+params = {
+"in_min": 0.0,
+"in_max": 1.0,
+"out_min": -1.0,
+"out_max": 1.0
+}
+
+[sub_resource type="Resource" id="Coord_fbm"]
+script = ExtResource("2_coord")
+scale = Vector2(5, 1.8)
+scroll = Vector2(0, 0.6)
+warp_x = &"7"
+warp_strength = 0.5
+
+[sub_resource type="Resource" id="L0_fbm"]
+script = ExtResource("1_layer")
 id = &"0"
 entry = "generative/fbm"
-coord = SubResource("Resource_h5v86")
+coord = SubResource("Coord_fbm")
+params = {
+"octaves": 5,
+"gain": 0.5
+}
 
-[sub_resource type="Resource" id="Resource_ibqqs"]
-script = ExtResource("1_hchhx")
+[sub_resource type="Resource" id="Coord_grad"]
+script = ExtResource("2_coord")
+scale = Vector2(1.1, 1.1)
+rotation = -1.5707963
+offset = Vector2(-0.5, 0)
+
+[sub_resource type="Resource" id="L1_grad"]
+script = ExtResource("1_layer")
 id = &"1"
+entry = "generative/linear_gradient"
+coord = SubResource("Coord_grad")
+
+[sub_resource type="Resource" id="L2_mul"]
+script = ExtResource("1_layer")
+id = &"2"
+entry = "fieldops/multiply"
+slots = {
+"a": &"0",
+"b": &"1"
+}
+
+[sub_resource type="Resource" id="L3_step"]
+script = ExtResource("1_layer")
+id = &"3"
+entry = "fieldops/smoothstep"
+slots = {
+"x": &"2"
+}
+params = {
+"edge0": 0.08,
+"edge1": 0.95
+}
+
+[sub_resource type="Resource" id="L4_pal"]
+script = ExtResource("1_layer")
+id = &"4"
 entry = "color/palette"
 kind_out = 1
 slots = {
-"t": &"0"
+"t": &"3"
 }
 params = {
-"a": Vector3(0.55, 0.25, 0.15),
-"b": Vector3(0.45, 0.35, 0.25),
-"c": Vector3(1, 0.9, 0.6),
-"d": Vector3(0.5, 0.65, 0.95)
+"a": Vector3(0.75, 0.45, 0),
+"b": Vector3(0.75, 0.5, 0.25),
+"c": Vector3(0.5, 0.5, 0.5),
+"d": Vector3(0.6, 0.5, 0.5)
 }
 
-[sub_resource type="Resource" id="Resource_0k5a1"]
-script = ExtResource("1_hchhx")
-id = &"2"
+[sub_resource type="Resource" id="L5_alpha"]
+script = ExtResource("1_layer")
+id = &"5"
 entry = "fieldops/smoothstep"
 slots = {
-"x": &"0"
+"x": &"2"
 }
 params = {
-"edge0": 0.2,
-"edge1": 0.8
-}
-
-[sub_resource type="Resource" id="Resource_bq11a"]
-script = ExtResource("2_7qnus")
-rotation = -1.5707963
-
-[sub_resource type="Resource" id="Resource_2l11f"]
-script = ExtResource("1_hchhx")
-id = &"3"
-entry = "generative/linear_gradient"
-coord = SubResource("Resource_bq11a")
-
-[sub_resource type="Resource" id="Resource_xddjq"]
-script = ExtResource("1_hchhx")
-id = &"4"
-entry = "fieldops/multiply"
-slots = {
-"a": &"2",
-"b": &"3"
+"edge0": 0.03,
+"edge1": 0.3
 }
 
 [resource]
-script = ExtResource("3_lgl88")
-layers = Array[ExtResource("1_hchhx")]([SubResource("Resource_8ywff"), SubResource("Resource_ibqqs"), SubResource("Resource_0k5a1"), SubResource("Resource_2l11f"), SubResource("Resource_xddjq")])
-output_color = &"1"
-output_alpha = &"4"
-next_id = 5
+script = ExtResource("3_stack")
+layers = Array[ExtResource("1_layer")]([SubResource("L6_warp_noise"), SubResource("L7_warp_centered"), SubResource("L0_fbm"), SubResource("L1_grad"), SubResource("L2_mul"), SubResource("L3_step"), SubResource("L4_pal"), SubResource("L5_alpha")])
+output_color = &"4"
+output_alpha = &"5"
+next_id = 8

@@ -34,7 +34,7 @@ func run(plugin: EditorPlugin) -> void:
 		panel.get_picker().cancelled.emit()
 		await plugin.get_tree().process_frame
 
-	# doc_a (fire, 5 layers) and doc_b (dissolve, 10 layers): distinct layer
+	# doc_a (fire, 6 layers) and doc_b (dissolve, 10 layers): distinct layer
 	# counts so reloaded content identifies which document wrote it.
 	panel.open_recipe("fire")
 	await plugin.get_tree().process_frame
