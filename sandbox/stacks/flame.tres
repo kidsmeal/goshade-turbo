@@ -1,0 +1,175 @@
+[gd_resource type="Resource" script_class="GSTStack" load_steps=18 format=3 uid="uid://tmnnxpuqebad"]
+
+[ext_resource type="Script" uid="uid://nqe51f4vxj3h" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_layer"]
+[ext_resource type="Script" uid="uid://oeqv6ongpfcd" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_coord"]
+[ext_resource type="Script" uid="uid://b8jioobudt2x3" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_stack"]
+
+[sub_resource type="Resource" id="Coord_noise"]
+script = ExtResource("2_coord")
+scale = Vector2(3, 2.2)
+offset = Vector2(0, 0)
+rotation = 0.0
+scroll = Vector2(0, 0.7)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="L0_noise"]
+script = ExtResource("1_layer")
+id = &"0"
+entry = "generative/voronoi"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Coord_noise")
+
+[sub_resource type="Resource" id="Coord_ramp"]
+script = ExtResource("2_coord")
+scale = Vector2(1, 1)
+offset = Vector2(-0.5, 0)
+rotation = -1.5708
+scroll = Vector2(0, 0)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="L1_ramp"]
+script = ExtResource("1_layer")
+id = &"1"
+entry = "generative/linear_gradient"
+kind_out = 0
+slots = {}
+params = {}
+coord = SubResource("Coord_ramp")
+
+[sub_resource type="Resource" id="L2_ramp_signed"]
+script = ExtResource("1_layer")
+id = &"2"
+entry = "fieldops/remap"
+kind_out = 0
+slots = {
+"x": &"1"
+}
+params = {
+"in_max": 1.0,
+"in_min": 0.0,
+"out_max": 1.0,
+"out_min": -0.65
+}
+
+[sub_resource type="Resource" id="L3_add"]
+script = ExtResource("1_layer")
+id = &"3"
+entry = "fieldops/add"
+kind_out = 0
+slots = {
+"a": &"0",
+"b": &"2"
+}
+params = {}
+
+[sub_resource type="Resource" id="Coord_box"]
+script = ExtResource("2_coord")
+scale = Vector2(1, 1)
+offset = Vector2(-0.5, -0.215)
+rotation = 0.0
+scroll = Vector2(0, 0)
+warp_x = &""
+warp_y = &""
+warp_strength = 0.0
+
+[sub_resource type="Resource" id="L4_box"]
+script = ExtResource("1_layer")
+id = &"4"
+entry = "sdf/rounded_box"
+kind_out = 0
+slots = {}
+params = {
+"corner_radius": 0.37,
+"half_height": 0.8,
+"half_width": 0.324
+}
+coord = SubResource("Coord_box")
+
+[sub_resource type="Resource" id="L5_box_outside"]
+script = ExtResource("1_layer")
+id = &"5"
+entry = "fieldops/smoothstep"
+kind_out = 0
+slots = {
+"x": &"4"
+}
+params = {
+"edge0": -0.32,
+"edge1": 0.12
+}
+
+[sub_resource type="Resource" id="L6_mask"]
+script = ExtResource("1_layer")
+id = &"6"
+entry = "fieldops/invert"
+kind_out = 0
+slots = {
+"x": &"5"
+}
+params = {}
+
+[sub_resource type="Resource" id="L7_field"]
+script = ExtResource("1_layer")
+id = &"7"
+entry = "fieldops/multiply"
+kind_out = 0
+slots = {
+"a": &"3",
+"b": &"6"
+}
+params = {}
+
+[sub_resource type="Resource" id="L8_t"]
+script = ExtResource("1_layer")
+id = &"8"
+entry = "fieldops/smoothstep"
+kind_out = 0
+slots = {
+"x": &"7"
+}
+params = {
+"edge0": 0.3,
+"edge1": 1.27
+}
+
+[sub_resource type="Resource" id="L9_pal"]
+script = ExtResource("1_layer")
+id = &"9"
+entry = "color/palette"
+kind_out = 1
+slots = {
+"t": &"8"
+}
+params = {
+"a": Vector3(0.75, 0.45, 0),
+"b": Vector3(0.75, 0.5, 0.3),
+"c": Vector3(0.5, 0.5, 0.5),
+"d": Vector3(0.65, 0.5, 0.5)
+}
+
+[sub_resource type="Resource" id="L10_alpha"]
+script = ExtResource("1_layer")
+id = &"10"
+entry = "fieldops/smoothstep"
+kind_out = 0
+slots = {
+"x": &"7"
+}
+params = {
+"edge0": 0.22,
+"edge1": 0.57
+}
+
+[resource]
+script = ExtResource("3_stack")
+coord_space = 0
+layers = Array[ExtResource("1_layer")]([SubResource("L0_noise"), SubResource("L1_ramp"), SubResource("L2_ramp_signed"), SubResource("L3_add"), SubResource("L4_box"), SubResource("L5_box_outside"), SubResource("L6_mask"), SubResource("L7_field"), SubResource("L8_t"), SubResource("L9_pal"), SubResource("L10_alpha")])
+output_color = &"9"
+output_alpha = &"10"
+next_id = 11
