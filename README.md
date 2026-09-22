@@ -1,10 +1,13 @@
 # GoShade Turbo
 
-![GoShade Turbo](sandbox/logo/goshade_turbo_logo.png)
-
-![Godot 4.4+](https://img.shields.io/badge/Godot-4.4%2B-478cbf?logo=godotengine&logoColor=white)
-![Version 0.1.0](https://img.shields.io/badge/version-0.1.0-blue)
-![License MIT](https://img.shields.io/badge/license-MIT-green)
+<p align="center">
+  <img src="sandbox/logo/goshade_turbo_logo.png" alt="GoShade Turbo">
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/Godot-4.4%2B-478cbf?logo=godotengine&logoColor=white" alt="Godot 4.4+">
+  <img src="https://img.shields.io/badge/version-0.1.0-blue" alt="Version 0.1.0">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT">
+</p>
 
 Godot editor plugin that composes `canvas_item` shaders from a typed layer library. Stack layers, tune them with sliders, preview live, export a `.gdshader`.
 

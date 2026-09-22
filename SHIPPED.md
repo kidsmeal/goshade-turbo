@@ -4,6 +4,14 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
+### 2026-09-22
+- README: center the logo and badge header
+- README: split usage, tests, library into docs, add tuning gif `74c1e7d`
+
+### 2026-09-21
+- add github action mirroring every push to gitlab `2a843aa`
+- v0.2 design: lock stack shape, record VisualShader trial (decision 34) `95d8647`
+
 ### 2026-09-20
 - ROADMAP: v0.1 moved to Shipped, Now pointer at r-0916-1
 - Activate r-0916-1: v0.2 thread enters design mode, roadmap wording restated
