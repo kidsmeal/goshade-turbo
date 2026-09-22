@@ -1,5 +1,3 @@
-# GoShade Turbo
-
 <p align="center">
   <img src="sandbox/logo/goshade_turbo_logo.png" alt="GoShade Turbo">
 </p>
