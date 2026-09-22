@@ -25,7 +25,7 @@ func _remove_stale_recovery_lock() -> void:
 	var lock_path: String = OS.get_user_data_dir().path_join(".recovery_mode_lock")
 	if FileAccess.file_exists(lock_path):
 		DirAccess.remove_absolute(lock_path)
-		print("removed stale %s (Godot's --import prerequisite leaves this on 4.4/4.6; see README.md Tests)" % lock_path)
+		print("removed stale %s (Godot's --import prerequisite leaves this on 4.4/4.6; see docs/TESTING.md)" % lock_path)
 
 
 func _initialize() -> void:

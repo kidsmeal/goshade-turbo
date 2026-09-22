@@ -1,9 +1,9 @@
 extends SceneTree
 
-## Prints the README "Library" table from the manifests:
+## Prints the docs/LIBRARY.md table from the manifests:
 ## `godot --headless --path . -s res://tests/print_roster.gd`
 ## One markdown row per entry under addons/goshade_turbo/library/, sorted by
-## id. Read-only. Paste the output over the table in README.md.
+## id. Read-only. Paste the output over the table in docs/LIBRARY.md.
 
 
 func _initialize() -> void:

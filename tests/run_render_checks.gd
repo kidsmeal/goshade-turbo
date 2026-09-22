@@ -28,7 +28,7 @@ const SETTLE_FRAMES: int = 3
 const WRITE_SCREENSHOTS_ARG: String = "--write-screenshots"
 
 
-## On Godot 4.4/4.6 the README's --import prerequisite leaves
+## On Godot 4.4/4.6 the docs/TESTING.md --import prerequisite leaves
 ## .recovery_mode_lock in the user data dir (the editor removes it 1s after
 ## its first filesystem scan; --import quits before that; 4.7 removes it in
 ## Main::cleanup()). This script never passes --editor or --import, so it
@@ -37,7 +37,7 @@ func _remove_stale_recovery_lock() -> void:
 	var lock_path: String = OS.get_user_data_dir().path_join(".recovery_mode_lock")
 	if FileAccess.file_exists(lock_path):
 		DirAccess.remove_absolute(lock_path)
-		print("removed stale %s (Godot's --import prerequisite leaves this on 4.4/4.6; see README.md Tests)" % lock_path)
+		print("removed stale %s (Godot's --import prerequisite leaves this on 4.4/4.6; see docs/TESTING.md)" % lock_path)
 
 
 func _initialize() -> void:
