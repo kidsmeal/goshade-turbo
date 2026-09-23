@@ -8,3 +8,8 @@
 *.uid text eol=lf
 *.md text eol=lf
 *.png binary
+
+# Asset Library ZIP (GitHub archive) ships only the addon folder.
+/**        export-ignore
+/addons    !export-ignore
+/addons/** !export-ignore
