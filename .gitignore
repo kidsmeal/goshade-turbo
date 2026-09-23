@@ -15,3 +15,6 @@ export_templates/
 feature_profiles/
 script_templates/
 text_editor_themes/
+
+# Render output of tests/run_render_checks.gd -- --write-screenshots
+sandbox/screenshots/

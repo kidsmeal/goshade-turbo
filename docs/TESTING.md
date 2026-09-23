@@ -30,7 +30,7 @@ godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd
 ```
 
 Add `-- --write-screenshots` to save every checked stack's 128x128 render to
-`sandbox/screenshots/<stack file stem>.png`.
+`sandbox/screenshots/<stack file stem>.png`. The folder is in `.gitignore`.
 
 Recipe motion checks at fixed times (1, 30 and 120 seconds):
 
