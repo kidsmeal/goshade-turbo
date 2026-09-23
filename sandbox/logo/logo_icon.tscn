@@ -1,0 +1,121 @@
+[gd_scene format=3]
+
+[ext_resource type="FontFile" path="res://sandbox/logo/fonts/ZenDots-Regular.ttf" id="1_nw0ow"]
+[ext_resource type="Shader" path="res://sandbox/logo/logo.gdshader" id="2_6821r"]
+
+[sub_resource type="FontVariation" id="FontVariation_kynjx"]
+base_font = ExtResource("1_nw0ow")
+variation_transform = Transform2D(1, 0.18, 0, 1, 0, 0)
+
+[sub_resource type="LabelSettings" id="LabelSettings_vebml"]
+font = SubResource("FontVariation_kynjx")
+font_size = 820
+
+[sub_resource type="LabelSettings" id="LabelSettings_5cxs4"]
+font = SubResource("FontVariation_kynjx")
+font_size = 820
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_6fpty"]
+shader = ExtResource("2_6821r")
+shader_parameter/l1_scale = null
+shader_parameter/l1_offset = null
+shader_parameter/l1_rotation = null
+shader_parameter/l1_scroll = null
+shader_parameter/l2_scale = null
+shader_parameter/l2_offset = null
+shader_parameter/l2_rotation = null
+shader_parameter/l2_warp_strength = null
+shader_parameter/l3_palette_a = null
+shader_parameter/l3_palette_b = null
+shader_parameter/l3_palette_c = null
+shader_parameter/l3_palette_d = null
+shader_parameter/l4_scale = null
+shader_parameter/l4_offset = null
+shader_parameter/l4_rotation = null
+shader_parameter/l5_gradient_map_color_a = null
+shader_parameter/l5_gradient_map_color_b = null
+shader_parameter/l6_color_multiply_t = null
+shader_parameter/l7_outline_thickness = null
+shader_parameter/l7_outline_threshold = null
+shader_parameter/l8_fill_color = null
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_6n2h1"]
+viewport_path = NodePath("TextG")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_khr6d"]
+viewport_path = NodePath("TextT")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_56t7t"]
+viewport_path = NodePath("Out")
+
+[node name="Logo" type="Node2D" unique_id=561885067]
+
+[node name="TextG" type="SubViewport" parent="." unique_id=2019580915]
+disable_3d = true
+transparent_bg = true
+size = Vector2i(2048, 2048)
+render_target_update_mode = 4
+
+[node name="Center" type="CenterContainer" parent="TextG" unique_id=1034155337]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -333.0
+offset_top = -102.0
+offset_right = -333.0
+offset_bottom = -102.0
+
+[node name="Lines" type="VBoxContainer" parent="TextG/Center" unique_id=1854108897]
+layout_mode = 2
+theme_override_constants/separation = -40
+
+[node name="Line0" type="Label" parent="TextG/Center/Lines" unique_id=2128828523]
+layout_mode = 2
+text = "G"
+label_settings = SubResource("LabelSettings_vebml")
+horizontal_alignment = 1
+
+[node name="TextT" type="SubViewport" parent="." unique_id=712610067]
+disable_3d = true
+transparent_bg = true
+size = Vector2i(2048, 2048)
+render_target_update_mode = 4
+
+[node name="Center" type="CenterContainer" parent="TextT" unique_id=319900555]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 176.0
+offset_top = 153.0
+offset_right = 176.0
+offset_bottom = 153.0
+
+[node name="Lines" type="VBoxContainer" parent="TextT/Center" unique_id=1652419847]
+layout_mode = 2
+theme_override_constants/separation = -40
+
+[node name="Line0" type="Label" parent="TextT/Center/Lines" unique_id=187263035]
+layout_mode = 2
+text = "T"
+label_settings = SubResource("LabelSettings_5cxs4")
+horizontal_alignment = 1
+
+[node name="Out" type="SubViewport" parent="." unique_id=1461723054]
+disable_3d = true
+transparent_bg = true
+size = Vector2i(2048, 2048)
+render_target_update_mode = 4
+
+[node name="LogoG" type="Sprite2D" parent="Out" unique_id=2031505449]
+material = SubResource("ShaderMaterial_6fpty")
+position = Vector2(1024, 1024)
+texture = SubResource("ViewportTexture_6n2h1")
+
+[node name="LogoT" type="Sprite2D" parent="Out" unique_id=551672215]
+material = SubResource("ShaderMaterial_6fpty")
+position = Vector2(1024, 1024)
+texture = SubResource("ViewportTexture_khr6d")
+
+[node name="Preview" type="Sprite2D" parent="." unique_id=459361020]
+position = Vector2(1024, 1024)
+texture = SubResource("ViewportTexture_56t7t")
