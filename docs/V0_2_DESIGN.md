@@ -1,20 +1,21 @@
 # GoShade Turbo v0.2: design
 
-Status: decision board drafted 2026-09-16 from the v0.1 gap audit, user approved every recommendation the same day. Not yet grilled through `/claudhd:design`; not yet reviewed. Decision 34 added 2026-09-21 (stack shape locked, VisualShader trial evidence). Extends `docs/DESIGN.md`. Decision numbers continue from 22. Every v0.1 decision stays in force unless a decision below names it.
+Status: decision board drafted 2026-09-16 from the v0.1 gap audit, user approved every recommendation the same day. Not yet grilled through `/claudhd:design`; not yet reviewed. Decision 34 added 2026-09-21 (stack shape locked, VisualShader trial evidence). Decision 35 added 2026-09-22 (dependency marks in the stack list). Extends `docs/DESIGN.md`. Decision numbers continue from 22. Every v0.1 decision stays in force unless a decision below names it.
 
 Roadmap item: `ROADMAP.md` Next, "GoShade Turbo v0.2". Done when the release checklist below is all ticked.
 
 ## What v0.2 adds
 
-Five capabilities a shader creator hits in the first session on v0.1 and cannot work around:
+Five capabilities a shader creator hits in the first session on v0.1 and cannot work around, plus one read-only view:
 
 - Layer ops: duplicate, rename, bypass.
 - Texture param type plus a `source/image` entry.
 - Any float or int param driven by a field layer.
 - `custom` layer type, with save-as-library-entry.
 - User recipes folder.
+- Dependency marks in the stack list (decision 35). No schema change.
 
-One schema change carries all five.
+One schema change carries the five capabilities.
 
 ## Locked decisions
 
@@ -41,6 +42,8 @@ One schema change carries all five.
 33. User recipes. Project setting `goshade_turbo/recipes_dir`, default `res://goshade_recipes/`. The Recipes menu lists the addon folder, then a separator, then the user folder. "Save as Recipe" in the File menu writes the active stack there by name and opens nothing. Randomize (decision 16) treats user recipes the same as bundled ones. Beat: editing the addon folder, lost on addon update.
 
 34. Stack shape, locked. The stack stays a linear, typed, downward-referencing list of whole-function layers. No free-form wiring, no forward references, no inline expression node, no canvas. Every v0.2 feature is checked against this: param links (29) reference one lower layer per param; `custom` (31) is a typed function with a declared signature and enters the library (32), never an inline glsl box on a wire. Evidence, 2026-09-21: first-time VisualShader trial by the project owner in this repo (`visualtest1.tres`, deleted). Scrolling noise with pulsing alpha took 6 nodes plus 3 nested resources (`Texture2D` node > `NoiseTexture2D` > `FastNoiseLite`) and still rendered the missing-texture magenta checker, did not scroll (`VectorOp b` unwired) and would blink (`sin(TIME)` unremapped into alpha); a correct version is 10 nodes. The goshade equivalent is `generative/noise` with scroll speed plus `fieldops/remap` on `generative/clock` into output alpha, two layers, zero resources. Owner verdict after 15 minutes: lost at the resource nesting, not a fan. What the stack buys that the graph cannot: canonical reading order, one-line json header that diffs and pastes, no invalid wiring by construction, randomize that always compiles, per-layer license and tests, single-pass codegen with no cycle check. What it gives up: fan-in beyond a layer's declared inputs, shader types other than `canvas_item`, arbitrary topology. Beat: evolving toward a graph, which converges on VisualShader with a worse skin and none of the above. Recorded in `ROADMAP.md` Non-goals.
+
+35. Dependency marks in the stack list. Selecting a layer marks, in the stack list, every layer it reads and every layer that reads it. Direct edges only. Edges are slots, coord `warp_x` and `warp_y`, and `param_links` targets (decision 29). A row the selected layer reads gets the suffix `  feeds: <names>`, the selected layer's slot, warp or param names that read it. A row that reads the selected layer gets `  reads: <names>`, that row's own slot, warp or param names. Both row types also take a background tint from the editor accent color; the suffix carries the information without color. The marks are derived in `GSTStackList.refresh()` from a named-edge form of `GSTStackOps._references_of` (edge list of `{target, name}`), which decision 29 extends with link targets for the reorder refusal anyway. Read only: no model field, no schema change, no undo record. Bypassed layers keep their marks, since the edge is still in the data. Recomputed on selection change and on every stack edit. Beats: transitive closure, which on a long stack marks most rows and shows nothing; a separate graph or dependency panel, which is a canvas under another name (decision 34) and splits one layer's wiring across two places; marks only on hover, which leaves nothing visible while editing the inspector. Evidence: the slot dropdowns show a layer's inputs only while that layer is selected, and no view shows its consumers; param links (decision 29) add edges that the linked layer's row does not show. Added 2026-09-22.
 
 ## Data model delta
 
@@ -75,7 +78,7 @@ Layer (Resource)
 1. Schema bump, `GSTLayer` fields, header schema 2 read and write, schema 1 reopen test, stack io roundtrip.
 2. Bypass and param links in codegen, headless tests for every emit path, combination test: every field under every linkable param compiles.
 3. Texture param type, `source/image`, filter on image, render checks with a bundled second image.
-4. Layer ops UI: duplicate, rename, bypass toggle, link button, picker layer mode. Undo coverage for each.
+4. Layer ops UI: duplicate, rename, bypass toggle, link button, picker layer mode. Undo coverage for each. Dependency marks (decision 35).
 5. `custom` layer: model, codegen, inspector editors, error surfacing, save as library entry.
 6. User recipes folder, project setting, File menu entries.
 7. Reference stacks and screenshots for `source/image`, one custom layer, one linked param. Release checklist.
@@ -86,6 +89,7 @@ Layer (Resource)
 - [ ] Headless codegen tests: bypass per kind, linked float and int, amount 0 emits the same body as unlinked, texture uniform, `source/image` under every filter, custom layer with 0 to 3 inputs, custom function name uniqueness.
 - [ ] Combination test: every field entry linked into every linkable param of every entry compiles.
 - [ ] Rendered checks on the new reference stacks pass the existing `GSTRenderAssert`.
+- [ ] Headless test: dependency marks for slot, warp and param link edges in both directions, suffix names, direct edges only.
 - [ ] Undo covers duplicate, rename, bypass, link, unlink, custom edit, save as library entry.
 - [ ] Every v0.1 recipe still passes the rendered and motion checks.
 - [ ] Runs on 4.4, 4.6, 4.7.
