@@ -4,6 +4,9 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
+### 2026-09-23
+- logo: add 256px GT icon for the asset library `edc4a60`
+
 ### 2026-09-22
 - README: center the logo and badge header
 - README: split usage, tests, library into docs, add tuning gif `74c1e7d`
