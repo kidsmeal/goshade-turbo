@@ -13,7 +13,7 @@ func _enter_tree() -> void:
 	_panel.set_editor_plugin(self)
 	_panel.hide()
 	var smoke_flag: String = OS.get_environment("GST_EDITOR_SMOKE")
-	if not smoke_flag.is_empty():
+	if not smoke_flag.is_empty() and ResourceLoader.exists("res://tests/gst_editor_smoke.gd"):
 		var smoke: RefCounted = load("res://tests/gst_editor_smoke.gd").new()
 		await smoke.run(self)
 
