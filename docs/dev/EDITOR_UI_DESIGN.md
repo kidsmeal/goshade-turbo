@@ -19,7 +19,7 @@ The earlier six directions and their rankings were discarded when the user reque
 
 ## Locked decisions
 
-Numbered in interview order. Owner is the user unless marked as an implementation decision by Codex. Benefits remain unverified until the redesigned editor is tested.
+Numbered in interview order. Owner is the user unless marked as an implementation decision. Benefits remain unverified until the redesigned editor is tested.
 
 1. Preview visibility: opening any layer or input picker leaves the preview visible and rendering. Pickers occupy the editing area. Beat: a popup covering the preview while the user chooses a function.
 
@@ -67,7 +67,7 @@ Numbered in interview order. Owner is the user unless marked as an implementatio
 
 ## Interaction details
 
-The following are implementation decisions by Codex within the approved design. They retain the existing product constraints.
+The following are implementation decisions within the approved design. They retain the existing product constraints.
 
 23. Stack identity: show each row's function, kind, and stable layer ID. Keep row height fixed and preserve the existing top-to-bottom display order. Selection, references, and scrolling use stable IDs. Beat: position-based identities or expanded controls that displace adjacent rows.
 

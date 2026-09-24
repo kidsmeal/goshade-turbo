@@ -16,7 +16,6 @@ The best current anchors. A session can rely on these.
 | Codebase lookup | `addons/goshade_turbo/` tree plus `docs/dev/EDITOR_SMOKE.md` evidence sections | No standing map file. `gst_main_panel.gd` owns documents, tabs, file ops, close, shutdown; `gst_document.gd`, `gst_document_recovery.gd`, `gst_inspector_column.gd`, `gst_undo.gd` are the phase 2 to 7 modules. |
 | Conventions / rules | `docs/dev/DESIGN.md` (locked decisions, prior art re-verified 2026-09-15, release checklist) | Reference, not a task queue. One checklist item open: the user tuning pass (line 159). |
 | Runtime verification | `docs/dev/RUNTIME_VERIFICATION_QUEUE.md` | Live list, refreshed 2026-09-15. |
-| Durable memory | `~/.claude/projects/.../memory/` (`codex-reviewer-only.md`, `claude-vs-codex-token-scale.md`) | Reviewer routing history and token scale; not a build queue. |
 
 ## Needs Reconciliation
 
@@ -60,7 +59,7 @@ A deferred note is not a dropped note - it lives here until someone clears it. R
 the work lands or the reason expires; `/claudhd:audit` prunes stale ones.
 Format: `- [ ] <note, with file:line>: <why deferred> (phase N, <feature or plan name>)`.
 
-- [ ] tests/run_render_checks.gd:38: the Codex reviewer sandbox has no GPU; the orchestrator's GPU runs on 4.4, 4.6.2, 4.7 are the evidence. Clears when a GPU-capable reviewer environment exists (phase 8, GoShade Turbo v0.1)
+- [ ] tests/run_render_checks.gd:38: the reviewer sandbox has no GPU; the orchestrator's GPU runs on 4.4, 4.6.2, 4.7 are the evidence. Clears when a GPU-capable reviewer environment exists (phase 8, GoShade Turbo v0.1)
 - [ ] docs/dev/EDITOR_SMOKE.md: `Failed to read the root certificate store` appears on some reviewer machine profiles and not in the orchestrator's isolated `APPDATA` runs (0 occurrences across phase 8). Clears when a run in an affected profile reports 0 (phase 2, Multiple shader tabs; last reproduced phase 8 review round 1)
 - [ ] addons/goshade_turbo/ui/gst_main_panel.gd `_save_external_data` path: `_finish_pending_edits()` cannot be awaited from the void virtual, so a color popup mid-edit could commit after the recovery write. The phase 8 probe on 4.4, 4.6.2, 4.7 (one untitled document, one popup) saw the pending value land in the record every time. Clears after a multi-document, mixed-pending-edit probe (phase 7, Multiple shader tabs)
 - [ ] tests/gst_editor_document_close_smoke.gd `dirty_named_close_discard` on 4.4: one `pass=10 fail=3` first run in phase 8 (`dialog_shown=true closed=false`, `disk_unchanged=true`), never reproduced in about 10 later fresh runs on any version. Clears when it recurs with the failing check names captured before any retry (phase 8, Multiple shader tabs)

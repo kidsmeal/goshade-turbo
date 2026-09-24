@@ -2044,7 +2044,7 @@ Source: `docs/dev/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 3. Phase 2 was commi
 
 - Phase 3 committed as `68d0c6e`; this section records phase 4 verification.
 - `GST_EDITOR_SMOKE=ui_picker` dispatches `tests/gst_editor_ui_picker_smoke.gd` inside the real editor.
-- Evidence directory: `C:/Users/atk67/.codex/visualizations/2026/09/09/01a083c7-014d-7361-ae67-8eddff9c46f1/phase4-evidence`.
+- Evidence directory: a local evidence directory, not in the repo.
 - Baseline `red.stdout.log`: embedded `PanelContainer` assertion failed before implementation.
 - Add Layer, inputs, distortion, Recipes, output color, and Transparency now share the editing-area chooser.
 - Input and distortion choices use Existing layers and Add new tabs; both include eligible automatic conversions.
@@ -2127,7 +2127,7 @@ Status: independent phase review passed; user authorized the phase 5 commit on 2
 - A later codegen failure retains only that installation's previous success; an empty stack clears success.
 - Codegen messages use a bounded scroll area above the preview. Control refusals retain their separate lifecycle.
 - Native pane minimum-size changes now schedule responsive layout updates, including while tabs are active.
-- Evidence directory: `C:/Users/atk67/.codex/visualizations/2026/09/09/01a083c7-014d-7361-ae67-8eddff9c46f1/phase5-evidence`.
+- Evidence directory: a local evidence directory, not in the repo.
 - Red editor baseline: `UI_COMPLETE SUMMARY pass=1 fail=1`; required entry/preview APIs were absent and the obsolete Solo API remained.
 - Red named unit baseline: all four new cache tests reported missing `reset_installation`; the wrapper correctly failed on script errors.
 - First green named unit run on `4.6.2`: `GST tests: 21 file(s), 142 test method(s), 0 failure(s)` and wrapper PASS.
@@ -2220,7 +2220,7 @@ Verified from redirected logs in the phase 5 evidence directory. Counts are pass
 User evidence: Fire preview contains sharp diagonal, parallelogram-shaped discontinuities.
 
 - Reproduced on Godot `4.6.2`, Forward+/Vulkan, NVIDIA RTX 5070 Ti Laptop GPU; the same isolated noise is continuous in Compatibility/OpenGL.
-- Evidence directory: `C:/Users/atk67/.codex/visualizations/2026/09/09/01a083c7-014d-7361-ae67-8eddff9c46f1/noise-audit`.
+- Evidence directory: a local evidence directory, not in the repo.
 - Fixed-time Fire and isolated simplex renders separate this defect from animation movement and background composition.
 - At `512x512` over an eight-unit coordinate span, the original Forward+ field's maximum adjacent grayscale difference is `0.615686`; `780` sampled pixels exceed `0.1`.
 - Changing only the simplex gradient helper and corner arguments to integer lattice addresses removes these seams. The public hash formula and simplex weighting remain unchanged.
@@ -2247,7 +2247,7 @@ User evidence: Fire preview contains sharp diagonal, parallelogram-shaped discon
 - Independent review found the legacy Randomize range test reading editor values. It now checks raw stored values against the manifest schema.
 - `4.6.2` regression checks: selector `4` passes `50/0`, selector `8` passes `16/0`, and `ui_complete` passes `34/0`; exits `0`, empty stderr.
 - Compatibility rendering on `4.6.2`: all `78` stacks and noise continuity pass; maximum adjacent difference `0.039216`, range `0.701961`, exit `0`, empty stderr.
-- Evidence directory: `C:/Users/atk67/.codex/visualizations/2026/09/09/01a083c7-014d-7361-ae67-8eddff9c46f1/phase5-evidence`; logs use `palette-` prefixes.
+- Evidence directory: a local evidence directory, not in the repo; logs use `palette-` prefixes.
 - Inspected `palette-4.6.2-palette-popup.png`: color wheel, RGB controls, and hex input visible; alpha absent. Swatch screenshot shows Color center beside the unchanged vector controls.
 - Native-popup texture readback fails on `4.4`; the smoke test retains root-window screenshots and verifies the popup through visible controls and input events.
 - Final `4.4` and `4.7` runs each pass `145/0` unit methods, `23/0` native-label checks including four screenshots, and `16/0` Randomize checks; all exit `0` with empty stderr (`palette-final3-<version>` logs).
