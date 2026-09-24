@@ -23,18 +23,14 @@ Committed and ordered, on-deck after Now. Each is a real intent you mean to buil
 
 Committed but not soon. Things you know you will do, just not next. Promote to Next when they get close.
 
-- [ ] (a known-but-not-soon intent) `r-0907-2`
-
 ## Shipped
 
 Delivered, newest first. Move an intent here when its work lands, with a one-line note of what shipped.
 
 - GoShade Turbo v0.1 - release checklist in `docs/dev/DESIGN.md` all ticked 2026-09-20; tag v0.1.0 at 85c2762, GitHub release with goshade_turbo-0.1.0.zip `r-0907-1`
-- (most recent shipped intent) `r-0907-3`
 
 ## Non-goals (decided, not "later")
 
 Directions you have deliberately chosen not to take, each with the one-line why, so they stop coming back as ideas.
 
-- (a deliberately-killed direction) - why: (one line) `r-0907-4`
 - Free-form node graph (forward references, arbitrary wiring, inline expression node, canvas editor) - why: converges on Godot VisualShader with a worse skin and loses the stack's canonical order, one-line header, valid-by-construction slots and randomize; owner VisualShader trial 2026-09-21 recorded in `docs/dev/V0_2_DESIGN.md` decision 34 `r-0921-1`
