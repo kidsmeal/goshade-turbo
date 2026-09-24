@@ -106,6 +106,7 @@ Commands, setup, and GPU requirements: `docs/TESTING.md`.
 ## Attribution
 - Logo: Zen Dots, SIL Open Font License 1.1, `sandbox/logo/fonts/`. Rendered through the plugin's export, `sandbox/logo/`.
 - `generative/hash`: David Hoskins hash12, MIT. Every other function cites its source in `docs/LIBRARY.md`.
+- AI use: the code, tests and docs were written by AI coding agents, Anthropic Claude and OpenAI Codex. The author made the design decisions and swept and tuned every library entry in the editor.
 
 ## License
 MIT. See `LICENSE`. Design and build history: `docs/dev/`.

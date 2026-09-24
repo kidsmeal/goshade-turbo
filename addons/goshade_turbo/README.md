@@ -35,6 +35,7 @@ Panel, picker, coordinate spaces, export header: https://github.com/kidsmeal/gos
 
 ## Attribution
 - `generative/hash`: David Hoskins hash12, MIT. Every other function cites its source in `docs/LIBRARY.md` in the repository.
+- AI use: the code, tests and docs were written by AI coding agents, Anthropic Claude and OpenAI Codex. The author made the design decisions and swept and tuned every library entry in the editor.
 
 ## License
 MIT. See `LICENSE` in this folder.
