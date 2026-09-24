@@ -1,0 +1,51 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: existing tag to package, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    if: github.repository == 'kidsmeal/goshade-turbo'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: check tag against plugin.cfg
+        id: ver
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          cfg=$(sed -n 's/^version="\(.*\)"$/\1/p' addons/goshade_turbo/plugin.cfg)
+          if [ "$tag" != "v$cfg" ]; then
+            echo "tag $tag does not match plugin.cfg version $cfg" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "zip=goshade_turbo-$cfg.zip" >> "$GITHUB_OUTPUT"
+
+      # .gitattributes export-ignores everything outside addons/, so the
+      # archive root is addons/goshade_turbo/, same as the Asset Library ZIP.
+      - name: build zip
+        run: git archive --format=zip -o "${{ steps.ver.outputs.zip }}" HEAD
+
+      - name: attach to a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.ver.outputs.tag }}"
+          zip="${{ steps.ver.outputs.zip }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$zip" --clobber
+          else
+            gh release create "$tag" "$zip" --draft --verify-tag --title "GoShade Turbo $tag" --notes ""
+          fi
