@@ -1,0 +1,35 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  codegen:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        godot: ["4.4.1", "4.6.2", "4.7"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install godot ${{ matrix.godot }}
+        run: |
+          name="Godot_v${{ matrix.godot }}-stable_linux.x86_64"
+          curl -fsSL -o "$RUNNER_TEMP/godot.zip" \
+            "https://github.com/godotengine/godot-builds/releases/download/${{ matrix.godot }}-stable/$name.zip"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          mv "$RUNNER_TEMP/godot/$name" "$RUNNER_TEMP/godot/godot"
+          echo "$RUNNER_TEMP/godot" >> "$GITHUB_PATH"
+
+      - name: build the script class cache
+        run: godot --headless --path . --import
+
+      - name: codegen and unit tests
+        run: godot --headless --path . -s res://tests/run_codegen_tests.gd
