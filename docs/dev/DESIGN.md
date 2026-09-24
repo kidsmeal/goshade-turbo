@@ -2,7 +2,7 @@
 
 Status: grilled and locked 2026-09-07, revised the same day after external review (12 findings, all applied, see Review revisions). Name: GoShade Turbo (locked 2026-09-07). Repo `goshade-turbo`, addon folder `addons/goshade_turbo`, class prefix `GST`.
 
-Editor UI redesign: the reviewed interview decisions are recorded in `docs/EDITOR_UI_DESIGN_reviewed.md`; implementation status is tracked in `docs/EDITOR_UI_DESIGN_reviewed-plan.md`. They supersede the output placement in decision `12` and picker/solo presentation in decision `13`, and add explicit output assignment to UI add actions. The data model and remaining product constraints are retained.
+Editor UI redesign: the reviewed interview decisions are recorded in `docs/dev/EDITOR_UI_DESIGN_reviewed.md`; implementation status is tracked in `docs/dev/EDITOR_UI_DESIGN_reviewed-plan.md`. They supersede the output placement in decision `12` and picker/solo presentation in decision `13`, and add explicit output assignment to UI add actions. The data model and remaining product constraints are retained.
 
 ## What it is
 
@@ -17,7 +17,7 @@ Verified 2026-09-07, re-verified 2026-09-15. Nothing does the combination: an or
 - Sprite Shader Mixer (spheras, MIT, 49 stars, last push 2026-05-17): the nearest neighbor. Ordered stack of whole shaders per Sprite2D/AnimatedSprite2D/Label/ColorRect, intensity per shader, generates a `.gdshader`; catalog downloaded from GitHub, local custom shaders added by a May 2026 PR. Whole shaders blended by intensity, not typed blocks with coord spaces; sprite-bound, no standalone preview panel, no undo integration, no per-block license fields, README still targets Godot 4.1.
 - PS1 Shader Mixer (Juanrod99, last push 2026-05-25) and PS1 Shader Mixer Pro (iHyobi, itch, paid): click, slide, export. Seven fixed post effects, no custom blocks.
 - CompositeMaterial (mFieldHouses, forum post 2026-03-21, last push 2026-07-13, no license): ordered layer stack for 3D PBR materials with masks; README says it depends on an unpublished module and will not work. Different target (spatial materials, not canvas effects).
-- Godot VisualShader plus ShaderV: node graph with preview and sliders. Graph shaped, not stack shaped. Owner trial 2026-09-21: scrolling noise plus pulsing alpha took 6 nodes and 3 nested resources and still rendered wrong; goshade does it in two layers. Evidence and the locked stack-shape decision: `docs/V0_2_DESIGN.md` decision 34.
+- Godot VisualShader plus ShaderV: node graph with preview and sliders. Graph shaped, not stack shaped. Owner trial 2026-09-21: scrolling noise plus pulsing alpha took 6 nodes and 3 nested resources and still rendered wrong; goshade does it in two layers. Evidence and the locked stack-shape decision: `docs/dev/V0_2_DESIGN.md` decision 34.
 - Godot 4.7 text shader editor: live preview of a text shader while editing. Erodes "preview" as a differentiator on its own; composition and the library remain the gap.
 - Material Maker 1.6 (2026-04): standalone procedural PBR texture graph on Godot 4.5.1, exports textures and materials; not an in-editor shader composer.
 - godotshaders.com and the Godot Shaders Library addon: whole shaders, browse and install, no composing.
@@ -47,7 +47,7 @@ Numbered in the order they were grilled. Each carries the alternative it beat. R
 17. Godot minimum 4.4, tested on 4.6 and 4.7. No api in the plan is newer than 4.4.
 18. Repo: a plain Godot project with the plugin in `addons/<name>/`, project root as the sandbox holding reference stacks and screenshots, a headless test runner for codegen.
 19. Picker: grouped by taxonomy folder, each entry shows function name, kind signature, and description. Search box. Opened from a slot, pre-filtered to entries whose output kind fits. Function names only, no display names, no thumbnails (user constraint).
-20. Undo (revised by user approval, 2026-09-09): each shader document owns a Godot `UndoRedo` instance. Every stack edit, including native property edits, registers with that document's history. Ctrl+Z/Ctrl+Shift+Z in GoShade affects the active shader; Godot scene history remains separate. Native sliders and color pickers remain the property-editing surface. Beat: shared `EditorUndoRedoManager` history that can undo edits in a hidden shader. Implementation and minimum-version verification are tracked in `docs/SHADER_TABS_reviewed-plan.md`.
+20. Undo (revised by user approval, 2026-09-09): each shader document owns a Godot `UndoRedo` instance. Every stack edit, including native property edits, registers with that document's history. Ctrl+Z/Ctrl+Shift+Z in GoShade affects the active shader; Godot scene history remains separate. Native sliders and color pickers remain the property-editing surface. Beat: shared `EditorUndoRedoManager` history that can undo edits in a hidden shader. Implementation and minimum-version verification are tracked in `docs/dev/SHADER_TABS_reviewed-plan.md`.
 21. Filters that sample neighbors (blur, pixelate, chromatic split, outline, dither) operate on sources only in v0.1: they take a `texture` or `screen` layer and sample it at offset coordinates. A filter cannot take an arbitrary layer, because a layer is one value at this pixel. The general fix, compiling every layer as a function of coord so any layer can be re-evaluated at neighbors, is an expansion (new, from review).
 22. Layer identity. Each layer has a stable id assigned at creation. References, uniform names, and undo records use the id. Reordering a layer above any layer it references is refused with the reason shown. Deleting a referenced layer resets every slot that pointed at it to the below default and reports which layers changed (new, from review).
 
@@ -151,14 +151,14 @@ Randomize (v0.1): a button on an open recipe that sets every slider to a random 
 ## Release checklist (v0.1)
 
 - [x] Every roster entry above exists as a manifest file and compiles alone in the preview. (evidence: tests/test_codegen_generator.gd, tests/test_codegen_fieldop.gd, tests/test_codegen_color.gd, tests/test_library_index.gd's `test_scan_indexes_the_full_library_roster` (explicit 58-id roster since 2026-09-15) plus the sdf compile-alone loops)
-- [x] Every entry has a reference stack with default sliders; `tests/run_render_checks.gd -- --write-screenshots` renders its screenshot on demand (untracked since 2026-09-23). (evidence: sandbox/stacks/*.tres, docs/EDITOR_SMOKE.md Phase 8 section "Headless suite and render checks, 4.6.2 baseline")
-- [x] Headless codegen tests pass: entry to shader text, include walk dedupe, slot conversion insertion, filter input refusal, id stability across reorder, delete of a referenced layer, header roundtrip, overwrite check, `TIME` emitted only with nonzero scroll. (evidence: docs/EDITOR_SMOKE.md "Version matrix, final phase 8 tree", `GST tests: 21 file(s), 123 test method(s), 0 failure(s)` on 4.4, 4.6.2, 4.7)
+- [x] Every entry has a reference stack with default sliders; `tests/run_render_checks.gd -- --write-screenshots` renders its screenshot on demand (untracked since 2026-09-23). (evidence: sandbox/stacks/*.tres, docs/dev/EDITOR_SMOKE.md Phase 8 section "Headless suite and render checks, 4.6.2 baseline")
+- [x] Headless codegen tests pass: entry to shader text, include walk dedupe, slot conversion insertion, filter input refusal, id stability across reorder, delete of a referenced layer, header roundtrip, overwrite check, `TIME` emitted only with nonzero scroll. (evidence: docs/dev/EDITOR_SMOKE.md "Version matrix, final phase 8 tree", `GST tests: 21 file(s), 123 test method(s), 0 failure(s)` on 4.4, 4.6.2, 4.7)
 - [x] Combination tests: every field op with every generator as input compiles; every color op with every color entry as input compiles. (evidence: tests/test_combinations.gd)
-- [x] Rendered checks on every reference stack and every recipe: no NaN or inf pixels, alpha channel within `[0, 1]`, output not uniformly one value. (evidence: tests/gst_render_assert.gd via tests/run_render_checks.gd, docs/EDITOR_SMOKE.md Phase 8 section, `run_render_checks: PASS, 78 stack(s) checked`)
-- [x] All eight recipes build from the roster only and pass the rendered checks. (evidence: addons/goshade_turbo/recipes/*.tres (12 files: dissolve, outline, sprite_holographic from phase 7; water, fire, glow, hologram, metaball_portal, sprite_pearl, sprite_foil, sprite_oil_slick, sprite_opal from phase 8), docs/EDITOR_SMOKE.md Phase 8 render check section)
+- [x] Rendered checks on every reference stack and every recipe: no NaN or inf pixels, alpha channel within `[0, 1]`, output not uniformly one value. (evidence: tests/gst_render_assert.gd via tests/run_render_checks.gd, docs/dev/EDITOR_SMOKE.md Phase 8 section, `run_render_checks: PASS, 78 stack(s) checked`)
+- [x] All eight recipes build from the roster only and pass the rendered checks. (evidence: addons/goshade_turbo/recipes/*.tres (12 files: dissolve, outline, sprite_holographic from phase 7; water, fire, glow, hologram, metaball_portal, sprite_pearl, sprite_foil, sprite_oil_slick, sprite_opal from phase 8), docs/dev/EDITOR_SMOKE.md Phase 8 render check section)
 - [x] Tuning pass by the user: every slider produces a visible change across its whole range. (evidence: user sweep in editor of every sandbox/stacks/ref_*.tres, color 13, generative 16, sdf 11, fieldops 14, filter 5, source 2, signed off 2026-09-20)
-- [x] Undo covers add, remove, reorder, slot change, output change. (evidence: docs/EDITOR_SMOKE.md Phase 4 section, the 7-action undo sequence and the compound add-for-slot/output-change excursions)
-- [x] Runs on 4.4, 4.6, 4.7. (evidence: docs/EDITOR_SMOKE.md "Version matrix, final phase 8 tree": 123 headless tests and 78 render checks pass on 4.4, 4.6.2, 4.7)
+- [x] Undo covers add, remove, reorder, slot change, output change. (evidence: docs/dev/EDITOR_SMOKE.md Phase 4 section, the 7-action undo sequence and the compound add-for-slot/output-change excursions)
+- [x] Runs on 4.4, 4.6, 4.7. (evidence: docs/dev/EDITOR_SMOKE.md "Version matrix, final phase 8 tree": 123 headless tests and 78 render checks pass on 4.4, 4.6.2, 4.7)
 
 ## Expansions (out of v0.1, named so they are not relitigated)
 
@@ -195,5 +195,5 @@ External review returned 12 findings. Disposition:
 
 ## Open
 
-- Manifest file format: resolved at planning, `.tres` (see `docs/PLAN.md`, Decisions made at planning).
-- Remaining planning blockers B2, B6, B7, B8 are listed in `docs/PLAN.md`.
+- Manifest file format: resolved at planning, `.tres` (see `docs/dev/PLAN.md`, Decisions made at planning).
+- Remaining planning blockers B2, B6, B7, B8 are listed in `docs/dev/PLAN.md`.

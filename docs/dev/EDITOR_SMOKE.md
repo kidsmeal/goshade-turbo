@@ -2,11 +2,11 @@
 
 Current UI redesign evidence is recorded in the final `Editor UI redesign` sections. Earlier sections describe the original phase 4 through 8 implementation.
 
-Per-phase record of `tests/gst_editor_smoke.gd` runs (docs/PLAN.md Phase 4
+Per-phase record of `tests/gst_editor_smoke.gd` runs (docs/dev/PLAN.md Phase 4
 Files). Method: `$env:GST_EDITOR_SMOKE="4"; godot --editor --path .`,
 captured stdout, `config/features` in `project.godot` reset to `"4.4"`
 afterward (the 4.6.2 editor rewrites it to `"4.6"` on every run, per
-docs/PLAN.md Cross-cutting concern "`project.godot` `config/features`
+docs/dev/PLAN.md Cross-cutting concern "`project.godot` `config/features`
 churn").
 
 ## Phase 4 (2026-09-08, `Godot_v4.6.2-stable_win64.exe`)
@@ -133,7 +133,7 @@ SMOKE SUMMARY pass=18 fail=0
 
 stderr: empty.
 
-### Deviation from docs/PLAN.md Phase 4 Verification wording
+### Deviation from docs/dev/PLAN.md Phase 4 Verification wording
 
 The plan's original Verification section describes five undo steps ("the
 output change, the slot change, the reorder, the second add, and the first
@@ -566,7 +566,7 @@ size, but nothing re-read it after the preview column's own rect changed;
 `GSTMaterialSync.sync()` only ran from `stack_changed`, the shared
 `EditorUndoRedoManager` history's `version_changed`, layer selection under
 solo, and a preset/image change, none of which a bare resize fires. An S1
-violation of B5 at `docs/PLAN.md:44`.
+violation of B5 at `docs/dev/PLAN.md:44`.
 
 Fix: `GSTPreview` gained `signal target_rect_changed(size: Vector2)`,
 connected to the active target node's own `resized` signal (reconnected on
@@ -741,7 +741,7 @@ undo history bucket and never proved a real inspector-driven edit -- whose
 `create_action()` call does not pass that context -- reaches the material at
 all; item 3a checked only the message label text for the text preset, never
 a rendered pixel; `GSTMainPanel.get_preview_slot()` was documented in
-`docs/PLAN.md` phase 4 as "removed in phase 5 as obsolete" but was never
+`docs/dev/PLAN.md` phase 4 as "removed in phase 5 as obsolete" but was never
 actually removed; several other `GSTMainPanel`/`GSTPreview` public accessors
 had no live caller in `addons/` and no `Wired-by` declaration.
 
@@ -798,7 +798,7 @@ individually against `addons/` and `tests/` to confirm each is smoke-only.
 `GSTPreview.set_shader_material`, `set_preset`, `set_image`, and
 `get_target_rect_size` keep no such line: each has a live caller in
 `gst_main_panel.gd`. `GSTMainPanel.set_stack()` also keeps no such line: it
-has no live caller yet, but is explicitly forward-wired in `docs/PLAN.md`
+has no live caller yet, but is explicitly forward-wired in `docs/dev/PLAN.md`
 phase 4's own `Wired-by: phase 6` note ("the open and reopen entry point"),
 not an editor-smoke-only seam.
 
@@ -1434,7 +1434,7 @@ as phases 4-7, 180s timeout, `config/features` reset to `"4.4"` afterward.
 
 ### Regression found while building the recipes: `generative/checker.tres` gained a `cells` param
 
-docs/PLAN.md Phase 8 Build item 1 added a `cells` int param (default 8) to
+docs/dev/PLAN.md Phase 8 Build item 1 added a `cells` int param (default 8) to
 `generative/checker.tres`, multiplying the coord inside the function so a
 checker at pure default coord (scale 1) renders 8 cells across instead of one
 uniform cell. Re-running the phase 5 smoke as a regression check (any file
@@ -1603,7 +1603,7 @@ pre-existing behavior from phase 7, not new here).
 
 ## Version matrix
 
-Run for docs/PLAN.md Phase 8 Build item 5 and Blocker B2: the same two named
+Run for docs/dev/PLAN.md Phase 8 Build item 5 and Blocker B2: the same two named
 verification commands against 4.4 and 4.7 by absolute path, plus the 4.6.2
 baseline above recorded again here for one-place comparison. Every summary
 line below is the runner's own verbatim output.
@@ -1869,7 +1869,7 @@ run_render_checks: PASS, 78 stack(s) checked
 
 ## Editor UI redesign, phase 1 (2026-09-08)
 
-Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 1. Verification uses `tests/gst_editor_ui_layout_smoke.gd` through selector `GST_EDITOR_SMOKE=ui_layout` on Godot `4.6.2`, OpenGL compatibility rendering, NVIDIA GeForce RTX 5070 Ti Laptop GPU.
+Source: `docs/dev/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 1. Verification uses `tests/gst_editor_ui_layout_smoke.gd` through selector `GST_EDITOR_SMOKE=ui_layout` on Godot `4.6.2`, OpenGL compatibility rendering, NVIDIA GeForce RTX 5070 Ti Laptop GPU.
 
 ### Geometry and interaction evidence
 
@@ -1932,7 +1932,7 @@ SMOKE SUMMARY pass=14 fail=0
 
 ## Editor UI redesign, phase 2 (2026-09-08)
 
-Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 2. Phase 1 was committed as `1c7ae37` before phase 2 began.
+Source: `docs/dev/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 2. Phase 1 was committed as `1c7ae37` before phase 2 began.
 
 ### Test-first evidence and limits
 
@@ -1975,7 +1975,7 @@ Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 2. Phase 1 was committed
 
 ## Editor UI redesign, phase 3 (2026-09-08)
 
-Source: `docs/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 3. Phase 2 was committed as `161a27b` before phase 3 began.
+Source: `docs/dev/EDITOR_UI_DESIGN_reviewed-plan.md`, phase 3. Phase 2 was committed as `161a27b` before phase 3 began.
 
 ### Test-first evidence
 
@@ -2457,7 +2457,7 @@ Isolated projects synced from the repo before each run: `.now/tabs-validation/pr
 5. **Replace stale-target/history-count checks with delivered late signals and real resource/history-position assertions. Applied.** `_check_stale_target_rejection` now captures the pre-rebind `EditorProperty`/`EditorSpinSlider`, triggers the rebind, and -- in the same call frame, before any await lets the queued `queue_free()` actually run -- emits `property_changed` and `grabbed`/`ungrabbed` directly on the still-valid-but-dictionary-erased captured objects, then asserts the resource value and action count are both unaffected (previously only asserted `find_editor_property` returned null, never delivering an actual late signal). `_check_host_scene_isolation` now compares `history.get_current_action()` (the position, which does advance) instead of `history.get_history_count()` (the total array size, which an undo does not change -- the same measurement bug already documented and fixed in `tests/gst_editor_ui_complete_smoke.gd`'s `randomize_undo`).
 6. **Migrate `_drive_real_property_edit` to the production native-row route. Applied.** `tests/gst_editor_smoke.gd`'s `_run_phase5_checker_render` now selects the checker layer through the real `stack_list.select_layer` and drives `panel.get_inspector_column().find_coord_editor_property(&"scale")`'s own `EditorProperty.emit_changed`, instead of a throwaway `EditorInspector.new()` pointed directly at `coord`. The throwaway-inspector helper `_drive_real_property_edit` is removed.
 7. **Include the Godot-generated `.uid` companion. Applied.** Copied verbatim from `.now/tabs-validation/project/tests/gst_editor_native_undo_smoke.gd.uid` (already generated there by an earlier isolated import) to `tests/gst_editor_native_undo_smoke.gd.uid`.
-8. **Plan bookkeeping allowance: already present** (orchestrator-applied; `docs/SHADER_TABS_reviewed-plan.md` phase 2 Files list already lists `NOW.md` and the `.uid` companion). **Named verification re-run with writable isolated settings/save destinations: applied**, see below -- no `Cannot save file 'user://...'` errors observed in any run this pass.
+8. **Plan bookkeeping allowance: already present** (orchestrator-applied; `docs/dev/SHADER_TABS_reviewed-plan.md` phase 2 Files list already lists `NOW.md` and the `.uid` companion). **Named verification re-run with writable isolated settings/save destinations: applied**, see below -- no `Cannot save file 'user://...'` errors observed in any run this pass.
 
 ### Verification commands and results
 
@@ -2499,7 +2499,7 @@ Isolated projects synced from the repo before each run: `.now/tabs-validation/pr
 3. **Complete `tabs_native` coverage (real drags, repeated gestures, pending text, forced boundaries, popup-focused undo/redo). Applied, with one item reported as a real architectural constraint rather than resolved.** See "Root cause and fixes" below.
 4. **Preserve exact existing content on no-op finishes. Applied.** `_commit_row`'s no-op branch (`GSTUndo.values_equal` is approximate) now calls `target.set(property_name, old_value)` when `old_present` is true, restoring the exact original bytes instead of leaving whatever an intermediate live write applied; the absent case is unchanged (`GSTUndo.restore_absent_param`).
 5. **Release the panel-owned history and retained action bindings during teardown. Applied.** `gst_main_panel.gd` adds `_exit_tree()`: frees `_undo_redo` (a plain `Object`, not `RefCounted`, with no Node owner to free it automatically) and nulls `_undo`. Verified: every run in this pass (`tabs_native` x3 on `4.4`, all seven required selectors on `4.6.2`) produced **empty stderr** except the two pre-existing `LayerPane`/`SettingsPane` owner warnings on `tabs_native` runs -- no `ObjectDB instances leaked at exit` or `N resources still in use at exit` line, where round 1's evidence for this exact `tabs_native` selector recorded both every time (see "Shader tabs phase 2 review round 1 fixes verified" above, and the implementer pass before it).
-6. **Add `addons/goshade_turbo/model/gst_layer.gd` to phase 2's Files list. Already applied by the orchestrator** (confirmed present in `docs/SHADER_TABS_reviewed-plan.md` phase 2 Files list). **Verification evidence updated: this section.**
+6. **Add `addons/goshade_turbo/model/gst_layer.gd` to phase 2's Files list. Already applied by the orchestrator** (confirmed present in `docs/dev/SHADER_TABS_reviewed-plan.md` phase 2 Files list). **Verification evidence updated: this section.**
 
 ### Root cause and fixes for the round-2 reproduced `tabs_native` failures
 
@@ -2538,7 +2538,7 @@ Fixes applied, in `tests/gst_editor_native_undo_smoke.gd`:
 - `addons/goshade_turbo/ui/gst_main_panel.gd` (fix 5).
 - `tests/gst_editor_native_undo_smoke.gd` (fix 3).
 - `tests/gst_editor_ui_labels_smoke.gd` (test-fixture correction consequent to fix 1; the cited fix's behavior change, not new scope -- see "Test commands and results" above).
-- `docs/EDITOR_SMOKE.md` (this section).
+- `docs/dev/EDITOR_SMOKE.md` (this section).
 
 ### Blockers / open decisions
 
@@ -2641,7 +2641,7 @@ Isolated project synced from the repo before this run: `.now/tabs-validation/pro
 
 ### Scope
 
-- Files touched: `tests/gst_editor_native_undo_smoke.gd` (the cited `_check_popup_focused_shortcut` redo half and its preceding docstring only) and `docs/EDITOR_SMOKE.md` (this section). Nothing else in the phase `2` Files list was touched this pass; no production file was edited.
+- Files touched: `tests/gst_editor_native_undo_smoke.gd` (the cited `_check_popup_focused_shortcut` redo half and its preceding docstring only) and `docs/dev/EDITOR_SMOKE.md` (this section). Nothing else in the phase `2` Files list was touched this pass; no production file was edited.
 
 ### Blockers / open decisions
 
@@ -2702,7 +2702,7 @@ None of these four are current, unresolved limitations: all were reproduced, roo
 - `tests/gst_editor_documents_smoke.gd` (new), `tests/gst_editor_documents_smoke.gd.uid` (new, generated companion).
 - `tests/gst_editor_smoke.gd`, `tests/gst_editor_ui_complete_smoke.gd`, `tests/gst_editor_ui_picker_smoke.gd`.
 - `tests/gst_editor_ui_actions_smoke.gd`, `tests/gst_editor_ui_labels_smoke.gd`: read in full, run for verification, not edited.
-- `docs/EDITOR_SMOKE.md` (this section).
+- `docs/dev/EDITOR_SMOKE.md` (this section).
 
 ### Blockers / open decisions
 
@@ -2726,7 +2726,7 @@ Fix pass against round 1's `FAIL` verdict (eight required fixes). Isolated proje
 4. **Reuse the initial pristine document in `open_document()`. Applied.** Added `_find_reusable_pristine_document()` (a still-open document with an empty `current_path` and `not is_dirty()`; recipe/import documents can never match because of fix 3's `starts_dirty`). `open_document` checks it first whenever the call is a plain "New" (`new_path` empty, `new_recipe_open`/`new_reopened_import` both false) and, if found, activates and returns that document instead of creating another one. Replaced the round-1 fingerprint-equality proxy at `tests/gst_editor_documents_smoke.gd` (`pristine_fingerprint_reusable`, which only proved two independently-constructed empty stacks fingerprint identically and never exercised reuse at all) with `pristine_initial_document_reused`: an identity assertion (`pristine == initial_doc`) plus a count assertion (`panel.get_documents().size()` unchanged) around the same `open_document(GSTStack.new(), "", false)` call the baseline/dirty-rules section already made. Also updated `tests/gst_editor_ui_complete_smoke.gd`'s `file_new_library` check, which asserted the opposite (a File-menu New always allocates a new instance): the document active at that point in the test is itself already pristine from an earlier New press, so the correct, reviewed behavior is reuse; the check now asserts `panel.get_stack() == before_new`, `panel.get_active_document() == doc_before_new_press`, and `panel.get_documents().size()` unchanged, alongside the pre-existing empty-layers/picker-open assertions.
 5. **Implement filesystem-appropriate canonical identity in `_canonical_path()`. Applied.** Now `ProjectSettings.globalize_path(path.simplify_path()).to_lower()`: `simplify_path()` first, then `globalize_path()` so a `res://`/`user://` path and its already-absolute filesystem equivalent compare equal, then `to_lower()` so two spellings differing only in letter case compare equal on Windows' case-insensitive filesystem (the tested platform); `doc.current_path` itself keeps the caller's original spelling. Tested by new `tabs_documents` check `canonical_path_reuse_alternate_spelling`: after `pristine` is saved to a `user://` path and reactivated by canonical path once, reopening the same file through `ProjectSettings.globalize_path(save_path).to_upper()` (an upper-cased absolute-path spelling) reactivates the same `pristine` document instead of creating a second one.
 6. **Retain recipe name/import origin when creating documents. Applied.** Added `GSTDocument.recipe_name: String` and `GSTDocument.reopened_import: bool`; `_create_document`/`open_document` gained matching optional parameters. `open_recipe` now passes the recipe `name`; `_on_picker_choice`'s `"recipe"` case passes `value` (the picked recipe name); `reopen_shader_path` passes `reopened_import = true`. Phase 4 reads these for tab titles/tooltips; phase 3 only stores them (no new assertion beyond confirming the values are threaded through -- covered incidentally by fix 3's dirtiness checks, which depend on `starts_dirty` deriving from these same call sites).
-7. **Plan/evidence bookkeeping. Applied.** The `NOW.md` Files-list allowance in `docs/SHADER_TABS_reviewed-plan.md` was already added by the orchestrator before this pass began. Corrected `docs/EDITOR_SMOKE.md`'s own prior "Shader tabs phase 3" Scope section, which incorrectly stated `NOW.md` was not touched; `git status`/`git diff` at the start of this pass showed it genuinely modified (Mode/Position/Active-thread lines), so the note now says so.
+7. **Plan/evidence bookkeeping. Applied.** The `NOW.md` Files-list allowance in `docs/dev/SHADER_TABS_reviewed-plan.md` was already added by the orchestrator before this pass began. Corrected `docs/dev/EDITOR_SMOKE.md`'s own prior "Shader tabs phase 3" Scope section, which incorrectly stated `NOW.md` was not touched; `git status`/`git diff` at the start of this pass showed it genuinely modified (Mode/Position/Active-thread lines), so the note now says so.
 8. **Run the named selectors sequentially with captured exit codes and full output. Applied.** See "Verification commands and results" below.
 
 ### Bugs found and fixed while building the new `tabs_documents` checks for fixes 1/2 (before any independent review)
@@ -2770,7 +2770,7 @@ Each selector below was run as its own process, serially, with isolated `APPDATA
 
 ### Scope
 
-- Files touched this pass: `addons/goshade_turbo/ui/gst_document.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_documents_smoke.gd`, `tests/gst_editor_ui_complete_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section and the one correction above). All are in the plan's phase 3 Files list already (the plan's own list's `NOW.md` allowance was already applied by the orchestrator before this pass, and `NOW.md` was not re-touched by this pass itself).
+- Files touched this pass: `addons/goshade_turbo/ui/gst_document.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_documents_smoke.gd`, `tests/gst_editor_ui_complete_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section and the one correction above). All are in the plan's phase 3 Files list already (the plan's own list's `NOW.md` allowance was already applied by the orchestrator before this pass, and `NOW.md` was not re-touched by this pass itself).
 - No file outside the plan's phase 3 Files list was edited by this pass. The isolated-project copies under `.now/tabs-validation/` were synced (copied) but are verification scratch, not repo source.
 
 ## Shader tabs phase 3 review round 2 fix-now (2026-09-11)
@@ -2780,7 +2780,7 @@ Fix pass against round 2's `PASS-WITH-NOTES` verdict (two fix-now notes: S2, S3)
 ### Fix status
 
 1. **S2: Preserve case-sensitive path identity at `gst_main_panel.gd:805`. Applied.** Split `_canonical_path` into a new `static func _canonical_path_for(path: String, case_insensitive: bool) -> String` (pure: `simplify_path()`, `globalize_path()`, then `to_lower()` only when `case_insensitive` is true) plus the instance method `_canonical_path`, which now gates the fold on `OS.get_name() in ["Windows", "macOS"]` instead of folding unconditionally -- the two platforms with a case-insensitive default filesystem. Every other platform name (Linux, FreeBSD, etc.) keeps distinct-case paths distinct. `doc.current_path` itself is untouched by either function; the fold only ever affects the comparison key. Tested by new `tabs_documents` check `canonical_path_case_fold_gated_by_platform`, which calls `GSTMainPanel._canonical_path_for` directly with a forced `case_insensitive` argument (independent of the real platform, per the reviewer's own guidance): `case_insensitive=false` on `user://Fire.tres` vs `user://fire.tres` asserts the two canonical strings stay distinct; `case_insensitive=true` on the same two paths asserts they fold to the same string. The existing `canonical_path_reuse_alternate_spelling` check (real document reuse through the platform-gated instance method, exercised on this pass's actual Windows test run) is unchanged and still passes, proving the real Windows behavior itself is unaffected by the gate.
-2. **S3: Correct `docs/EDITOR_SMOKE.md:2716`'s description of the numeric pending-edit check. Applied.** The sentence claiming "a real mid-drag `EditorSpinSlider` gesture" now reads that `tests/gst_editor_documents_smoke.gd:182` emits `EditorSpinSlider.grabbed` and `EditorProperty.emit_changed` directly -- a synthetic numeric gesture, not an actual mid-drag mouse interaction -- while the color-popup half of the same sentence (a real open native popup with a typed, unsubmitted hex value) is unchanged, since that half was already accurate. No test behavior changed; this is a documentation-only correction. Checked the rest of `docs/EDITOR_SMOKE.md` for the same "mid-drag" phrase (`grep -n "mid-drag"`): the only other occurrence is line 2449, in the unrelated phase 2 round 1 section describing a different check (`_check_real_text_focus`) that the reviewer did not cite and which already states no synthetic `.emit()` calls are used -- left untouched.
+2. **S3: Correct `docs/dev/EDITOR_SMOKE.md:2716`'s description of the numeric pending-edit check. Applied.** The sentence claiming "a real mid-drag `EditorSpinSlider` gesture" now reads that `tests/gst_editor_documents_smoke.gd:182` emits `EditorSpinSlider.grabbed` and `EditorProperty.emit_changed` directly -- a synthetic numeric gesture, not an actual mid-drag mouse interaction -- while the color-popup half of the same sentence (a real open native popup with a typed, unsubmitted hex value) is unchanged, since that half was already accurate. No test behavior changed; this is a documentation-only correction. Checked the rest of `docs/dev/EDITOR_SMOKE.md` for the same "mid-drag" phrase (`grep -n "mid-drag"`): the only other occurrence is line 2449, in the unrelated phase 2 round 1 section describing a different check (`_check_real_text_focus`) that the reviewer did not cite and which already states no synthetic `.emit()` calls are used -- left untouched.
 
 ### Verification commands and results
 
@@ -2809,7 +2809,7 @@ Each selector below was run as its own process, serially, with isolated `APPDATA
 
 ### Scope
 
-- Files touched this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (S2), `tests/gst_editor_documents_smoke.gd` (S2 coverage), `docs/EDITOR_SMOKE.md` (S3, plus this section). All are inside the plan's phase 3 Files list; `sandbox/**` was not touched.
+- Files touched this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (S2), `tests/gst_editor_documents_smoke.gd` (S2 coverage), `docs/dev/EDITOR_SMOKE.md` (S3, plus this section). All are inside the plan's phase 3 Files list; `sandbox/**` was not touched.
 - No file outside that list was edited. The isolated-project copies under `.now/tabs-validation/` were synced (copied) but are verification scratch, not repo source.
 
 ## Shader tabs phase 4: shader tabs and activation state (2026-09-11)
@@ -2823,7 +2823,7 @@ Implementer pass (not yet independently reviewed). Isolated projects synced from
 - `addons/goshade_turbo/ui/gst_main_panel.gd`:
   - `_ready()`: connects the trailing `NewTabButton` to the existing `_on_new_pressed`, and `visibility_changed` to a new `_on_panel_visibility_changed` (`_preview.set_active(is_visible_in_tree())`) -- pauses the shared `SubViewport`'s own render loop while the GoShade main-screen tab is hidden, resumes it when shown again.
   - `_activate_document(doc)`: before rebinding, captures the *previous* active document's own `list_scroll_anchor_id`/`list_scroll_offset` from the still-installed stack list (selection itself is already tracked live by the existing `_on_layer_selected`). After `_install_document_state` rebinds the stack/undo/preview-material triple, calls two new private methods -- `_restore_document_selection(doc)` (clears any selection `_install_stack`'s own `refresh()` carried over by coincidence, then reapplies `doc.selected_layer_id` and `doc.list_scroll_anchor_id`/`offset` if still valid) and `_restore_document_preview_controls(doc)` (reselects `doc.preview_preset`/reloads `doc.preview_image_path` through `_preset_option.select`/`_preview.set_preset`/`_preview.set_image`/`reset_image`, falling back to the shipped defaults for `""`) -- then calls a new `_refresh_tabs()`.
-  - `activate_document(doc)`: removed the old `is_picker_open() and not _applying_choice` refusal. Decision 5 (docs/SHADER_TABS_reviewed.md): switching now cancels any open picker instead of refusing to switch or leaving it open against a stack it no longer destinations into. `_close_picker` gained a `restore_focus: bool = true` parameter; `activate_document` calls `_close_picker(false)` so no stale deferred `grab_focus()` targets rows `_install_stack` is about to free (`_picker.cancelled`'s own connection is unaffected, since a zero-arg signal emission uses the parameter's default). `open_document`'s own guard (used internally by `_on_picker_choice`'s `"recipe"` case through `_applying_choice`) is unchanged -- decision 5 is specifically about switching between already-open documents, not about creating new ones (decision 2).
+  - `activate_document(doc)`: removed the old `is_picker_open() and not _applying_choice` refusal. Decision 5 (docs/dev/SHADER_TABS_reviewed.md): switching now cancels any open picker instead of refusing to switch or leaving it open against a stack it no longer destinations into. `_close_picker` gained a `restore_focus: bool = true` parameter; `activate_document` calls `_close_picker(false)` so no stale deferred `grab_focus()` targets rows `_install_stack` is about to free (`_picker.cancelled`'s own connection is unaffected, since a zero-arg signal emission uses the parameter's default). `open_document`'s own guard (used internally by `_on_picker_choice`'s `"recipe"` case through `_applying_choice`) is unchanged -- decision 5 is specifically about switching between already-open documents, not about creating new ones (decision 2).
   - New `_refresh_tabs()`: full teardown/rebuild of the tab row from `_documents` (matching `gst_stack_list.gd`'s own full-rebuild-per-change convention), one `Button` per document (`toggle_mode`, `button_pressed = doc == _active_document`, `clip_text`, `custom_minimum_size.x = 96.0`, `pressed` bound to `activate_document.bind(doc)`), tracked in a new `_tab_buttons` map (`session_id -> Button`, editor smoke seam only). No close button: phase 6 wires it. Called from `_activate_document`, `_on_stack_changed`, `_on_property_changed` (a native property edit's own dirty-star update, which never goes through `_on_stack_changed`), and `save_to_path` on success.
   - New `_tab_title(doc, untitled_index)`/`_tab_tooltip(doc)` (decision 4): filename without extension once saved, recipe name (capitalized) before that, else a numbered `Untitled N`; a trailing `*` for `doc.is_dirty()`. Recipe/import documents start dirty from `GSTDocument.setup`'s own `starts_dirty` (phase 3), so a freshly opened recipe's tab reads e.g. `Fire*` immediately, not `Fire`. Tooltip is the full path, the recipe origin, the reopened-import origin, or "New shader (not yet saved)."
   - New accessors `get_tab_button(doc)`, `get_new_tab_button()`, `get_tab_scroll()`, `get_tab_row()` (editor smoke seams).
@@ -2857,7 +2857,7 @@ Each selector below was run as its own process, serially, with isolated `APPDATA
 - `20` layers: `list.get_item_count() == 20` on the built document; `preview_rect`/`output_rect` from `get_layout_measurements()` were `[P: (764.0, 256.0), S: (319.0, 195.0)]` / `[P: (764.0, 496.0), S: (319.0, 99.0)]` respectively, both `is_equal_approx` identical before opening another document and switching back.
 - Preview/output rectangles are the same `get_layout_measurements()` fields ui_layout_smoke.gd already exercises; this phase's own check confirms they do not move across a tab switch, not a new measurement shape.
 - Narrow layout (`720x600` window): `panel.get_tab_row().is_visible_in_tree()` stayed `true` and the active document's own tab button remained resolvable through `get_tab_button()` at the same width `ui_layout_smoke.gd`'s own `responsive_tabs` check collapses Layers/Layer settings into tabs.
-- `150%` editor scale: not run this pass. Every prior scaled run in this file (`docs/EDITOR_SMOKE.md` "Editor UI redesign, phase 5" `scaled150-<version>` logs) set the isolated `APPDATA`'s own `interface/editor/display_scale` editor setting through a real editor session ahead of time; reproducing that setup step was not attempted in the time available for this pass. Flagged as an open verification gap below rather than fabricated.
+- `150%` editor scale: not run this pass. Every prior scaled run in this file (`docs/dev/EDITOR_SMOKE.md` "Editor UI redesign, phase 5" `scaled150-<version>` logs) set the isolated `APPDATA`'s own `interface/editor/display_scale` editor setting through a real editor session ahead of time; reproducing that setup step was not attempted in the time available for this pass. Flagged as an open verification gap below rather than fabricated.
 
 ### Bugs found and fixed during self-verification (before any independent review)
 
@@ -2874,7 +2874,7 @@ None of these three are current, unresolved limitations: all were reproduced, ro
 
 ### Scope
 
-- Files touched this pass: `addons/goshade_turbo/ui/gst_document.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `addons/goshade_turbo/ui/gst_main_panel.tscn`, `addons/goshade_turbo/ui/gst_preview.gd`, `addons/goshade_turbo/ui/gst_stack_list.gd`, `tests/gst_editor_tabs_smoke.gd` (new), `tests/gst_editor_smoke.gd`, `tests/gst_editor_ui_layout_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section), `NOW.md` (Active thread next-action line only). All are inside the plan's phase 4 Files list plus the harness's own NOW.md bookkeeping allowance.
+- Files touched this pass: `addons/goshade_turbo/ui/gst_document.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `addons/goshade_turbo/ui/gst_main_panel.tscn`, `addons/goshade_turbo/ui/gst_preview.gd`, `addons/goshade_turbo/ui/gst_stack_list.gd`, `tests/gst_editor_tabs_smoke.gd` (new), `tests/gst_editor_smoke.gd`, `tests/gst_editor_ui_layout_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section), `NOW.md` (Active thread next-action line only). All are inside the plan's phase 4 Files list plus the harness's own NOW.md bookkeeping allowance.
 - `tests/gst_editor_ui_picker_smoke.gd` and `tests/gst_editor_ui_complete_smoke.gd` are in that list and were read/run per the plan's own instruction; neither needed an edit.
 - No file outside the plan's phase 4 Files list was edited. `sandbox/**` was not touched. The isolated-project copies under `.now/tabs-validation/` were synced (copied) but are verification scratch, not repo source.
 
@@ -2940,7 +2940,7 @@ Each selector below was run as its own process, serially, with isolated `APPDATA
 
 ### Scope
 
-- Files touched this pass: `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_tabs_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section), `NOW.md` (Active thread next-action line only), plus the generated `tests/gst_editor_tabs_smoke.gd.uid` companion (unchanged, already present). All are inside the plan's phase 4 Files list plus the fix-pass's own stated scope (the five findings' cited `gst_main_panel.gd`/`gst_editor_tabs_smoke.gd` locations) and the harness's own `NOW.md` bookkeeping allowance.
+- Files touched this pass: `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_tabs_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section), `NOW.md` (Active thread next-action line only), plus the generated `tests/gst_editor_tabs_smoke.gd.uid` companion (unchanged, already present). All are inside the plan's phase 4 Files list plus the fix-pass's own stated scope (the five findings' cited `gst_main_panel.gd`/`gst_editor_tabs_smoke.gd` locations) and the harness's own `NOW.md` bookkeeping allowance.
 - `addons/goshade_turbo/ui/gst_document.gd`, `gst_main_panel.tscn`, `gst_preview.gd`, `gst_stack_list.gd`, `tests/gst_editor_smoke.gd`, `tests/gst_editor_ui_layout_smoke.gd` (already in the phase 4 Files list from the original implementer pass) were read this pass but not re-edited; none of the five findings cited them.
 - `.now/tabs-validation/appdata-4.4-scaled150` (new, this pass's own `150%` profile) and the temporary `git worktree add .now/tabs-validation/worktree-9dee58f 9dee58f` (removed via `git worktree remove` immediately after fix 5's reproduction attempt) are verification scratch under the already-`.gitignore`d `.now/`, not repo source. No file outside the plan's phase 4 Files list was edited. `sandbox/**` was not touched.
 
@@ -2985,7 +2985,7 @@ Each selector below was run as its own process, serially, with isolated `APPDATA
 
 ### Scope
 
-- Files touched this pass: `addons/goshade_turbo/ui/gst_stack_list.gd` (S2 fix), `tests/gst_editor_tabs_smoke.gd` (S2 regression), `docs/EDITOR_SMOKE.md` (this section). All are inside the plan's phase 4 Files list; the S2 finding's own cited location (`gst_stack_list.gd:231`) authorizes the production edit.
+- Files touched this pass: `addons/goshade_turbo/ui/gst_stack_list.gd` (S2 fix), `tests/gst_editor_tabs_smoke.gd` (S2 regression), `docs/dev/EDITOR_SMOKE.md` (this section). All are inside the plan's phase 4 Files list; the S2 finding's own cited location (`gst_stack_list.gd:231`) authorizes the production edit.
 - No file outside the plan's phase 4 Files list was edited. `sandbox/**` was not touched. No git worktree was created this pass. The isolated-project copies under `.now/tabs-validation/` were synced (copied) and, for the fix-verification step only, briefly reverted and re-fixed in place; both are verification scratch under the already-`.gitignore`d `.now/`, not repo source.
 
 ## Shader tabs phase 5: bind file operations to their initiating document (2026-09-11)
@@ -3002,7 +3002,7 @@ Implementer pass (not yet independently reviewed). Isolated projects synced from
 - `tests/gst_editor_document_files_smoke.gd` (new, selector `tabs_files`): drives the real dialog-opening `_pressed` handlers and the same `*_file_selected`/`_on_overwrite_confirmed` seams a real dialog signal would call, switching the active document between every dialog open and its response (including between an export and its own second overwrite confirmation). Verifies success (Save As and Export each write the *originating* document's content, proved by reloading the file through `GSTStackIO.load`/comparing `GSTDocument.compute_fingerprint`, and by exact `GSTExport.build(...).code` text equality, never by trusting `current_path`/message state alone), a Save As canonical-path conflict refusal, a synthetically closed target's request rejected without writing (real close does not exist until phase 6; simulated by removing a document from `_documents` and tearing it down directly, the same bypass-the-guarded-UI technique `tests/gst_editor_ui_picker_smoke.gd` already uses for a stale picker-context installation), a delayed preview-image response landing on its own originating document and surviving reactivation, Open/Reopen Shader failure messages routing to the document that opened the dialog (and redisplaying correctly on reactivation) while leaving the actually-active document untouched, explicit dialog cancellation clearing its own captured request, and failed Save/Export (an unwritable path) leaving the document's content/dirty state untouched with the reason on its own `operation_messages`.
 - `tests/gst_editor_smoke.gd`: added the `tabs_files` dispatch case. One existing-test fix (see "Bugs found" below).
 - `tests/gst_editor_ui_complete_smoke.gd`: read in full, run for verification (plan's own "existing selectors ... `ui_complete` on `4.6.2`"), not edited -- it never calls any file-operation `_pressed`/`_file_selected`/`_on_overwrite_confirmed` seam.
-- `docs/EDITOR_SMOKE.md` (this section). `NOW.md`: Active-thread next-action line only (bookkeeping, no phase content).
+- `docs/dev/EDITOR_SMOKE.md` (this section). `NOW.md`: Active-thread next-action line only (bookkeeping, no phase content).
 
 ### Bugs found and fixed during self-verification (before any independent review)
 
@@ -3046,7 +3046,7 @@ Each selector below was run as its own process, serially, with isolated `APPDATA
 
 ### Scope
 
-- Files touched this pass: `addons/goshade_turbo/ui/gst_document.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_document_files_smoke.gd` (new), `tests/gst_editor_document_files_smoke.gd.uid` (new, generated companion), `tests/gst_editor_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section). All are in the plan's phase 5 Files list.
+- Files touched this pass: `addons/goshade_turbo/ui/gst_document.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_document_files_smoke.gd` (new), `tests/gst_editor_document_files_smoke.gd.uid` (new, generated companion), `tests/gst_editor_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section). All are in the plan's phase 5 Files list.
 - `tests/gst_editor_ui_complete_smoke.gd` is in the plan's phase 5 Files list and was read in full and run per the plan's own instruction ("existing selectors ... `ui_complete` on `4.6.2`"); it required no edit.
 - `NOW.md` was touched (Active-thread next-action line only, bookkeeping, per the implementer's own standing allowance -- no phase content), matching the pattern phases 2/3 already used.
 - No file outside the plan's phase 5 Files list (plus `NOW.md` bookkeeping) was edited. `sandbox/**` was not touched. No git worktree was created this pass. The isolated-project copies under `.now/tabs-validation/` were synced (copied), not committed; they are verification scratch under the already-`.gitignore`d `.now/`, not repo source.
@@ -3094,7 +3094,7 @@ Command shape unchanged from the phase 5 pass: `GST_EDITOR_SMOKE=<selector> APPD
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_document.gd` (note 3's doc comment), `addons/goshade_turbo/ui/gst_main_panel.gd` (note 1's `_on_new_pressed` fix), `tests/gst_editor_document_files_smoke.gd` (note 2's `_run_failed_save` fix plus the new `_run_new_clears_stale_open_message` regression), `docs/EDITOR_SMOKE.md` (this section). All are in the plan's phase 5 Files list. No file outside it was touched. `sandbox/**` not touched. No git worktree created. The isolated-project copies under `.now/tabs-validation/` were re-synced (copied), not committed.
+- Files modified this pass: `addons/goshade_turbo/ui/gst_document.gd` (note 3's doc comment), `addons/goshade_turbo/ui/gst_main_panel.gd` (note 1's `_on_new_pressed` fix), `tests/gst_editor_document_files_smoke.gd` (note 2's `_run_failed_save` fix plus the new `_run_new_clears_stale_open_message` regression), `docs/dev/EDITOR_SMOKE.md` (this section). All are in the plan's phase 5 Files list. No file outside it was touched. `sandbox/**` not touched. No git worktree created. The isolated-project copies under `.now/tabs-validation/` were re-synced (copied), not committed.
 
 ## Shader tabs phase 5 review round 2 fix-now (2026-09-11)
 
@@ -3115,7 +3115,7 @@ Applies the phase reviewer's three fix-now notes from round 2 (PASS-WITH-NOTES).
 
 ### Note 3: `_run_export_second_confirmation` proved nothing about dirty state
 
-- `tests/gst_editor_document_files_smoke.gd` (`_run_export_second_confirmation`): `doc_a` was already clean when this check ran (`_run_save_as_switch` above had just saved it), so the check was structurally incapable of catching a stray `mark_baseline()` in the export path -- the same blind spot round-1 note 2 found in `_run_failed_save`, and the negative half of the exit criterion "only successful saves update baseline/path" / Cross-cutting "Export never clears dirty state" / `docs/SHADER_TABS_reviewed.md` decision 8 that nothing asserted. Fixed by dirtying `doc_a` with a real structural edit (`panel.get_undo().add_layer("color/fill", GSTLayer.Kind.COLOR, false)`, the same primitive `_run_failed_save` and `tests/gst_editor_documents_smoke.gd`'s own `baseline_dirty_after_structural_add` check use) before the first export, capturing `dirty_before_export`, and adding two new assertions: `export_clean_write_preserves_dirty_state` (after the first, unconfirmed write) and `export_confirmed_overwrite_preserves_dirty_state` (after the second export's confirmed overwrite).
+- `tests/gst_editor_document_files_smoke.gd` (`_run_export_second_confirmation`): `doc_a` was already clean when this check ran (`_run_save_as_switch` above had just saved it), so the check was structurally incapable of catching a stray `mark_baseline()` in the export path -- the same blind spot round-1 note 2 found in `_run_failed_save`, and the negative half of the exit criterion "only successful saves update baseline/path" / Cross-cutting "Export never clears dirty state" / `docs/dev/SHADER_TABS_reviewed.md` decision 8 that nothing asserted. Fixed by dirtying `doc_a` with a real structural edit (`panel.get_undo().add_layer("color/fill", GSTLayer.Kind.COLOR, false)`, the same primitive `_run_failed_save` and `tests/gst_editor_documents_smoke.gd`'s own `baseline_dirty_after_structural_add` check use) before the first export, capturing `dirty_before_export`, and adding two new assertions: `export_clean_write_preserves_dirty_state` (after the first, unconfirmed write) and `export_confirmed_overwrite_preserves_dirty_state` (after the second export's confirmed overwrite).
 - Verified by reading, independent of the new test assertions: `_export_stack_to_path` (`gst_main_panel.gd:1634-1658`) contains no `mark_baseline()` call anywhere on any branch -- the shipped code was already correct; the gap was only in proof.
 - Status: **fixed**. Evidence: `tabs_files` below reports `pass=21` (`19` prior + these `2` new checks), both new checks passing on both `4.4` runs.
 
@@ -3147,7 +3147,7 @@ Command shape unchanged: `GST_EDITOR_SMOKE=<selector> APPDATA=<isolated> LOCALAP
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (note 1's `_on_new_pressed` `await` fix; note 2's `_raw_set_current_path` deletion and `_save_stack_to_path` call-site fix), `tests/gst_editor_document_files_smoke.gd` (note 3's `_run_export_second_confirmation` dirty-state assertions), `docs/EDITOR_SMOKE.md` (this section). All are in the plan's phase 5 Files list. `addons/goshade_turbo/ui/gst_document.gd` was read (per the fix-now instructions) but not modified. No file outside the phase 5 Files list was touched. `sandbox/**` not touched. No git worktree created. The isolated-project copies under `.now/tabs-validation/` were re-synced (copied), not committed.
+- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (note 1's `_on_new_pressed` `await` fix; note 2's `_raw_set_current_path` deletion and `_save_stack_to_path` call-site fix), `tests/gst_editor_document_files_smoke.gd` (note 3's `_run_export_second_confirmation` dirty-state assertions), `docs/dev/EDITOR_SMOKE.md` (this section). All are in the plan's phase 5 Files list. `addons/goshade_turbo/ui/gst_document.gd` was read (per the fix-now instructions) but not modified. No file outside the phase 5 Files list was touched. `sandbox/**` not touched. No git worktree created. The isolated-project copies under `.now/tabs-validation/` were re-synced (copied), not committed.
 
 ## Shader tabs phase 5 review round 3 fix-now (2026-09-11)
 
@@ -3208,7 +3208,7 @@ Command shape unchanged: `GST_EDITOR_SMOKE=<selector> APPDATA=<isolated> LOCALAP
 
 - The pre-fix revert-and-restore diligence above ran only against the isolated `.now/tabs-validation/project` copy of `gst_main_panel.gd`; a `diff` against the real repo's `addons/goshade_turbo/ui/gst_main_panel.gd` confirmed byte-for-byte restoration before any of the "real" runs recorded above.
 - Godot Engine versions observed: `v4.4.stable.official.4c311cbee` (`4.4` runs), `v4.6.2.stable.official.71f334935` (`4.6.2` runs), both `OpenGL API 3.3.0 NVIDIA ... Compatibility` renderer, matching every prior pass in this document.
-- `git status` in the real repo at the start of this pass showed only files already modified/added by phase 5 rounds 1-2 (`NOW.md`, `addons/goshade_turbo/ui/gst_document.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `docs/CURRENTNESS_AUDIT.md`, `docs/EDITOR_SMOKE.md`, `docs/SHADER_TABS_reviewed-plan.md`, `tests/gst_editor_smoke.gd`, plus the untracked `tests/gst_editor_document_files_smoke.gd`/`.uid`) -- no unrelated `sandbox/**`, `.gitignore`, or `README.md` changes were present this pass. None were touched by this pass beyond the two files listed under Scope below.
+- `git status` in the real repo at the start of this pass showed only files already modified/added by phase 5 rounds 1-2 (`NOW.md`, `addons/goshade_turbo/ui/gst_document.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `docs/dev/CURRENTNESS_AUDIT.md`, `docs/dev/EDITOR_SMOKE.md`, `docs/dev/SHADER_TABS_reviewed-plan.md`, `tests/gst_editor_smoke.gd`, plus the untracked `tests/gst_editor_document_files_smoke.gd`/`.uid`) -- no unrelated `sandbox/**`, `.gitignore`, or `README.md` changes were present this pass. None were touched by this pass beyond the two files listed under Scope below.
 
 ### Blockers / open decisions
 
@@ -3216,7 +3216,7 @@ Command shape unchanged: `GST_EDITOR_SMOKE=<selector> APPDATA=<isolated> LOCALAP
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (note 1's four-site `await`/target-capture fix plus their four callers' own `await`; note 2's two doc-comment corrections), `tests/gst_editor_document_files_smoke.gd` (note 1's new `_run_open_path_finishes_pending_color_edit` regression plus its own `_find_layer_by_entry`/`_find_color_button`/`_find_hex_line_edit`/`_type_into_line_edit`/`_push_key` helpers), `docs/EDITOR_SMOKE.md` (this section). All are in the plan's phase 5 Files list. No file outside it was touched. `sandbox/**` not touched. No git worktree created. The isolated-project copies under `.now/tabs-validation/` were re-synced (copied), not committed.
+- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (note 1's four-site `await`/target-capture fix plus their four callers' own `await`; note 2's two doc-comment corrections), `tests/gst_editor_document_files_smoke.gd` (note 1's new `_run_open_path_finishes_pending_color_edit` regression plus its own `_find_layer_by_entry`/`_find_color_button`/`_find_hex_line_edit`/`_type_into_line_edit`/`_push_key` helpers), `docs/dev/EDITOR_SMOKE.md` (this section). All are in the plan's phase 5 Files list. No file outside it was touched. `sandbox/**` not touched. No git worktree created. The isolated-project copies under `.now/tabs-validation/` were re-synced (copied), not committed.
 
 ## Shader tabs phase 6: protect document close (2026-09-11)
 
@@ -3237,7 +3237,7 @@ Implementer pass (not yet independently reviewed). Isolated projects synced from
 - New `tests/gst_editor_document_close_smoke.gd` (selector `tabs_close`): clean-close-immediate, dirty-named Save (writes to the existing path and closes only after success), dirty-named Discard (no write, `is_instance_valid(history) == false` after teardown), a real Ctrl+Z after a Discard cannot reopen the closed document (Cross-cutting "undo cannot reopen a closed document"), dirty Cancel (document/tab/content untouched), untitled Save-As-on-close success/failure/cancel (a failed or cancelled Save As leaves the document open and dirty; success closes only the originating document), inactive-document close, adjacent-tab selection after closing a middle then a last tab, a stale close continuation rejected without touching a distinct replacement document, and the last close restoring the entry surface behind a freshly created pristine document. Every tab close Button and every `_close_dialog` Save/Discard/Cancel Button is driven with a real InputEventMouseButton press/release at its own global rect through its own Viewport (`_click_button`), including buttons inside the popped-up ConfirmationDialog's own embedded Window -- never `Button.pressed.emit()`, never the production handlers called directly.
 - `tests/gst_editor_document_files_smoke.gd`: two `hide_export_dialog()` call sites in `_run_export_second_confirmation` changed to `hide_export_dialog(false)`. `_run_stale_closed_save_as_rejected`'s own assertion updated to match the corrected closed-target behavior: it now asserts the surfaced "no longer open" message on the active document instead of asserting no message was written. New `_run_real_close_then_stale_save_as_rejected`: the same shape through the real `panel.close_document()` instead of the direct `_documents.erase`/`teardown()` bypass.
 - `tests/gst_editor_smoke.gd`: added the `tabs_close` dispatch case. The old caller-side `panel._pending_export = {}` workaround is removed: `hide_export_dialog()`'s own new default now does that clear itself.
-- `docs/CURRENTNESS_AUDIT.md`: ticked both phase-5-review-round-1 deferred notes with a one-clause resolution note each.
+- `docs/dev/CURRENTNESS_AUDIT.md`: ticked both phase-5-review-round-1 deferred notes with a one-clause resolution note each.
 
 ### Bugs found and fixed during self-verification (before any independent review)
 
@@ -3287,7 +3287,7 @@ Each selector below was run as its own process, serially, with isolated APPDATA/
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_document_close_smoke.gd` (new), `tests/gst_editor_document_files_smoke.gd`, `tests/gst_editor_smoke.gd`, `docs/CURRENTNESS_AUDIT.md` (two ticks), `docs/EDITOR_SMOKE.md` (this section), `NOW.md` (Active thread next-action line only), plus the generated `tests/gst_editor_document_close_smoke.gd.uid` companion. All are inside the plan's phase 6 Files list plus its stated NOW.md/docs/CURRENTNESS_AUDIT.md/.uid allowances.
+- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_document_close_smoke.gd` (new), `tests/gst_editor_document_files_smoke.gd`, `tests/gst_editor_smoke.gd`, `docs/dev/CURRENTNESS_AUDIT.md` (two ticks), `docs/dev/EDITOR_SMOKE.md` (this section), `NOW.md` (Active thread next-action line only), plus the generated `tests/gst_editor_document_close_smoke.gd.uid` companion. All are inside the plan's phase 6 Files list plus its stated NOW.md/docs/dev/CURRENTNESS_AUDIT.md/.uid allowances.
 - `addons/goshade_turbo/ui/gst_document.gd` is in the plan's phase 6 Files list; read in full this pass, not edited.
 - No file outside the plan's phase 6 Files list was edited. `sandbox/**` was not touched. No git worktree was created. The isolated-project copies under `.now/tabs-validation/` were synced (copied), not committed.
 
@@ -3318,7 +3318,7 @@ Each selector below was run as its own process, serially, with isolated APPDATA/
 - `4.4` `tabs_files`/`tabs_close` stderr held only the documented deliberate diagnostics listed above; no unexpected script/engine error.
 - `4.6.2` `tabs_files` stderr held the same deliberate diagnostics with added GDScript backtraces (engine-version formatting difference only, not a new error class).
 - No leftover `gst_tabs_files_export_stale.gdshader` found under either isolated project after either `tabs_files` run (checked by find).
-- git status in the real repo before this pass showed the same pre-existing modifications as the round-1 pass (`NOW.md`, `docs/CURRENTNESS_AUDIT.md`, `docs/EDITOR_SMOKE.md`, `docs/SHADER_TABS_reviewed-plan.md` status line) plus this pass's own edits; no unrelated `sandbox/**`, `.gitignore`, or `README.md` changes were present.
+- git status in the real repo before this pass showed the same pre-existing modifications as the round-1 pass (`NOW.md`, `docs/dev/CURRENTNESS_AUDIT.md`, `docs/dev/EDITOR_SMOKE.md`, `docs/dev/SHADER_TABS_reviewed-plan.md` status line) plus this pass's own edits; no unrelated `sandbox/**`, `.gitignore`, or `README.md` changes were present.
 
 ### Blockers / open decisions
 
@@ -3326,7 +3326,7 @@ Each selector below was run as its own process, serially, with isolated APPDATA/
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (fix-now note 1 only), `tests/gst_editor_document_files_smoke.gd` (fix-now note 2), `tests/gst_editor_document_close_smoke.gd` (fix-now note 3), `docs/EDITOR_SMOKE.md` (this section). All are inside the plan's phase 6 Files list.
+- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (fix-now note 1 only), `tests/gst_editor_document_files_smoke.gd` (fix-now note 2), `tests/gst_editor_document_close_smoke.gd` (fix-now note 3), `docs/dev/EDITOR_SMOKE.md` (this section). All are inside the plan's phase 6 Files list.
 - No file outside the plan's phase 6 Files list was edited. `sandbox/**` was not touched. No git worktree was created. The isolated-project copies under `.now/tabs-validation/` were synced (copied), not committed. No commit was made.
 
 ## Shader tabs phase 6 review round 2 fix-now (2026-09-11)
@@ -3356,7 +3356,7 @@ Selector run as its own process with isolated `APPDATA`/`LOCALAPPDATA` set on th
 
 - Godot Engine version observed: `v4.4.stable.official.4c311cbee` (unchanged from every prior 4.4 run in this section).
 - Isolated project copy at `.now/tabs-validation/project` was re-synced from the repo's `addons/` and `tests/` directories immediately before this run so the doc-comment rewrites were present in the copy actually exercised; verified byte-identical to the repo copy of `addons/goshade_turbo/ui/gst_main_panel.gd` after the sync.
-- git status in the real repo before this pass showed the same pre-existing modifications as the round-1 pass (`NOW.md`, `docs/CURRENTNESS_AUDIT.md`, `docs/EDITOR_SMOKE.md`, `docs/SHADER_TABS_reviewed-plan.md` status line, plus the phase 6 test files) plus this pass's own edit to `gst_main_panel.gd`; no unrelated `sandbox/**`, `.gitignore`, or `README.md` changes were present.
+- git status in the real repo before this pass showed the same pre-existing modifications as the round-1 pass (`NOW.md`, `docs/dev/CURRENTNESS_AUDIT.md`, `docs/dev/EDITOR_SMOKE.md`, `docs/dev/SHADER_TABS_reviewed-plan.md` status line, plus the phase 6 test files) plus this pass's own edit to `gst_main_panel.gd`; no unrelated `sandbox/**`, `.gitignore`, or `README.md` changes were present.
 
 ### Blockers / open decisions
 
@@ -3364,7 +3364,7 @@ Selector run as its own process with isolated `APPDATA`/`LOCALAPPDATA` set on th
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (both fix-now notes), `docs/EDITOR_SMOKE.md` (this section). Both are inside the plan's phase 6 Files list.
+- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd` (both fix-now notes), `docs/dev/EDITOR_SMOKE.md` (this section). Both are inside the plan's phase 6 Files list.
 - No file outside the plan's phase 6 Files list was edited. `sandbox/**` was not touched. No git worktree was created. The isolated-project copy under `.now/tabs-validation/project` was synced (copied), not committed. No commit was made.
 
 ## Shader tabs phase 7: confirmed-shutdown save and project-local recovery (2026-09-11)
@@ -3425,7 +3425,7 @@ The dual-failure case's own `_recover_document` `push_error` was observed verbat
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/plugin.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `addons/goshade_turbo/ui/gst_document.gd`, new `addons/goshade_turbo/ui/gst_document_recovery.gd` (+ generated `.gd.uid`), new `tests/gst_editor_document_recovery_smoke.gd` (+ generated `.gd.uid`), `tests/gst_editor_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only). All inside the plan's phase 7 Files list (plus the two Godot-generated `.uid` companions and the `NOW.md` bookkeeping allowance the orchestrator's own instructions grant every phase).
+- Files modified this pass: `addons/goshade_turbo/plugin.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `addons/goshade_turbo/ui/gst_document.gd`, new `addons/goshade_turbo/ui/gst_document_recovery.gd` (+ generated `.gd.uid`), new `tests/gst_editor_document_recovery_smoke.gd` (+ generated `.gd.uid`), `tests/gst_editor_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only). All inside the plan's phase 7 Files list (plus the two Godot-generated `.uid` companions and the `NOW.md` bookkeeping allowance the orchestrator's own instructions grant every phase).
 - `tests/fixtures/shader_tabs_host.tscn` (listed in the plan's phase 7 Files list) was read and used unmodified as the fixture scene for the nonempty-`for_scene` check; its existing bare content already sufficed, so no edit was needed.
 - No file outside the plan's phase 7 Files list was edited. `sandbox/**` was not touched. No git worktree was created. No recovery record or stage file was ever written into the real repository's own `.godot/`; every write happened inside `.now/tabs-validation/project`/`project-462`, both gitignored. No commit was made.
 
@@ -3488,7 +3488,7 @@ Status: fixed.
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section). `NOW.md` bookkeeping lines only, per the orchestrator's own standing allowance.
+- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section). `NOW.md` bookkeeping lines only, per the orchestrator's own standing allowance.
 - `addons/goshade_turbo/ui/gst_main_panel.gd`, `addons/goshade_turbo/ui/gst_document.gd`, and `addons/goshade_turbo/plugin.gd` were read (fix 4's cited location, decision 10, and `needs_shutdown_attention()`) but not edited: fix 4's root cause and fix, and fixes 1-2, resolved entirely inside `gst_document_recovery.gd`.
 - No file outside the plan's phase 7 Files list was edited. `sandbox/**` was not touched. No git worktree was created. No recovery record or stage file was ever written into the real repository's own `.godot/`; every write happened inside `.now/tabs-validation/project`/`project-462`, both gitignored. No commit was made.
 
@@ -3536,7 +3536,7 @@ Stale-state hazard from the prior round-1 evidence pass repeated here: both isol
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section). No `NOW.md` bookkeeping change was made this pass.
+- Files modified this pass: `addons/goshade_turbo/ui/gst_main_panel.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section). No `NOW.md` bookkeeping change was made this pass.
 - `addons/goshade_turbo/ui/gst_document_recovery.gd` was read in full and diff-checked against its own untracked working-tree state, but not edited: the resumed partial edit already satisfied note 1's write-side and read-side contract completely (`write_record`'s `quarantined_path`, `_quarantine_unreadable_index`'s `{ok, path}`, `load_all`'s `_find_quarantined_indexes` scan).
 - Both fix-now notes stayed inside the plan's phase 7 Files list (`gst_main_panel.gd`, `tests/gst_editor_document_recovery_smoke.gd`). No file outside that list was edited.
 
@@ -3600,7 +3600,7 @@ None. All three required fixes resolved entirely inside `gst_document_recovery.g
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only).
 - `addons/goshade_turbo/ui/gst_main_panel.gd` was read in full (the cited `_recover_document`/`save_external_data`/`_describe_document` locations) but not edited: both required S1 fixes resolved entirely inside `gst_document_recovery.gd`, and `_recover_document`'s existing success-gated assignment was already correct once its own input (`write_result["ok"]`) became trustworthy.
 - No file outside the plan's phase 7 Files list was edited. `sandbox/**` was not touched. No git worktree was created. No recovery record or stage file was ever written into the real repository's own `.godot/`; every write happened inside `.now/tabs-validation/project`/`project-462`, both gitignored. No commit was made.
 
@@ -3659,7 +3659,7 @@ None. Both required fixes resolved entirely inside `gst_document_recovery.gd` an
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only).
 - `addons/goshade_turbo/ui/gst_main_panel.gd` was read in full (`_recover_document`, `load_recovery_records`, decision 10) but not edited: both required S1 fixes resolved entirely inside `gst_document_recovery.gd`, and `_recover_document`'s existing success-gated assignment was already correct once its own input (`write_result["ok"]`) became trustworthy.
 - No file outside the plan's phase 7 Files list was edited. `sandbox/**` was not touched. No git worktree was created. No recovery record or stage file was ever written into the real repository's own `.godot/`; every write happened inside `.now/tabs-validation/project`/`project-462`, both gitignored. No commit was made.
 
@@ -3696,7 +3696,7 @@ None. The required fix resolved entirely inside `gst_document_recovery.gd` and `
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `tests/gst_editor_document_recovery_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only).
 - `addons/goshade_turbo/ui/gst_main_panel.gd` was read in full (`_recover_document`, `load_recovery_records`) but not edited: the required S1 fix resolved entirely inside `gst_document_recovery.gd`, and `_recover_document`'s existing success-gated assignment was already correct once its own input (`write_result["ok"]`) became trustworthy.
 - No file outside the plan's phase 7 Files list was edited. `sandbox/**` was not touched. No git worktree was created. No recovery record or stage file was ever written into the real repository's own `.godot/`; every write happened inside `.now/tabs-validation/project`/`project-462`, both gitignored. No commit was made.
 
@@ -3754,7 +3754,7 @@ None. Both fix-now notes, and the one additional directory-presence defect this 
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd` (`_forget_recovery_record` only), `tests/gst_editor_document_recovery_smoke.gd`, `docs/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_document_recovery.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd` (`_forget_recovery_record` only), `tests/gst_editor_document_recovery_smoke.gd`, `docs/dev/EDITOR_SMOKE.md` (this section), `NOW.md` (Active-thread next-action line only).
 - No file outside the plan's phase 7 Files list was edited. `sandbox/**` was not touched. No git worktree was created. No recovery record or stage file was ever written into the real repository's own `.godot/`; every write happened inside `.now/tabs-validation/project`/`project-462`, both gitignored. No commit was made.
 
 ## Shader tabs phase 8: verify complete lifecycle across supported versions (2026-09-14)
@@ -3812,7 +3812,7 @@ Each row is its own serial process, isolated `APPDATA`/`LOCALAPPDATA` per versio
 - **`tabs_native` on `4.6.2`/`4.7`, `pass=28 fail=2`, real and reproducible.** Two failing checks, byte-identical output across repeated full-process runs (`4.6.2`: original + 2 retries; `4.7`: original + 1 retry), all four Ctrl+Z/Ctrl+Shift+Z attempts exhausted (`attempts=5`), never passing once on either version -- not a timing flake:
   - `tabs_native_popup_focused_shortcut_recognized_and_finished FAIL attempts=5 owns_focus=true actions=25->25 position=24->24 restored=true popup_visible=true color=(0.5, 0.5, 0.5, 1.0)`: a real Ctrl+Z delivered to the native color popup's own focused hex `LineEdit` (`gst_inspector_column.gd:507` `_on_color_popup_window_input`, gated on `event.is_action_pressed(&"ui_undo")`/`&"ui_redo"`, per that function's own comment fired on the popup's own `Window.window_input` before any Control inside it) never committed the pending edit or closed the popup on `4.6.2`/`4.7`; on `4.4` the identical mechanism passes every time (`tabs_native`'s own `4.4` row above, `31/0`).
   - `tabs_native_host_scene_isolation FAIL host_history=1 gst_unaffected=true host_undone=false host_unaffected_by_redo=false`: the immediately-following check (`gst_editor_native_undo_smoke.gd:1007`) drives a real Ctrl+Z with focus left in the real host scene and finds the host scene's own action was never undone. Not independently isolated from the check above: the prior check's own stuck-open popup (`popup_visible=true`, never closed) is a plausible carrier of stale keyboard-input routing into this one, but that causal link is not proven, only plausible -- recorded as unverified rather than asserted.
-  - **This is a version-specific production defect, not a test defect.** `gst_inspector_column.gd:507-518` (`_on_color_popup_window_input`) and its consumer `gst_main_panel.gd:2524-2563` (`_handle_undo_redo_shortcut`/`_owns_undo_focus`) are the cited locations. Root cause not narrowed further within this pass's scope (phase 8 is verification-only; no production file was touched to investigate). **Owning phase: phase 2** (native property routing and keyboard-shortcut scoping, `docs/SHADER_TABS_reviewed-plan.md` Cross-cutting "Public APIs, signals, and callbacks"). Per this phase's own instructions, the affected check must be re-run on `4.6.2`/`4.7` once a fix lands in phase 2 and receives its own review.
+  - **This is a version-specific production defect, not a test defect.** `gst_inspector_column.gd:507-518` (`_on_color_popup_window_input`) and its consumer `gst_main_panel.gd:2524-2563` (`_handle_undo_redo_shortcut`/`_owns_undo_focus`) are the cited locations. Root cause not narrowed further within this pass's scope (phase 8 is verification-only; no production file was touched to investigate). **Owning phase: phase 2** (native property routing and keyboard-shortcut scoping, `docs/dev/SHADER_TABS_reviewed-plan.md` Cross-cutting "Public APIs, signals, and callbacks"). Per this phase's own instructions, the affected check must be re-run on `4.6.2`/`4.7` once a fix lands in phase 2 and receives its own review.
 - **`tabs_close` on `4.4`, first attempt `pass=10 fail=3`, not reproducible.** Two immediate re-runs (same isolated project, same `APPDATA`, no code change) both passed `13/0` clean. `4.6.2`/`4.7` passed `13/0` on their first and only run each. Treated as a timing-sensitive false negative in this environment, matching the same class of flake this file has already documented and worked around elsewhere (e.g. "Shader tabs phase 6 review round 1 fix-now" `tabs_close` diagnostics); not a code defect.
 - **`ui_labels` on all three versions, first attempt `pass=41 fail=1` (`ui_labels_palette_color_undo_redo FAIL`), not reproducible.** Every retry on every version passed `42/0` clean (`4.4`: 2 retries; `4.6.2`/`4.7`: 1 retry each), all with the identical failing-then-passing pattern. This matches this file's own prior documented finding for the same check family ("Shader tabs phase 2 review round 4 fixes," `rgb_popup_undo_redo`: "a genuine pre-existing condition... Godot's own `EditorPropertyColor`/`ColorPicker` internals... re-applying the popup's originally-typed value some frames after `history.undo()`"), not a new defect and not touched by this phase.
 - **`ui_picker`/`ui_complete` on `4.4`, `.now/tabs-validation/p8-4.4-matrix-summary.txt` initially recorded blank result cells.** Re-inspecting the underlying `.stdout.log` files (not the summary file) directly shows both ran and passed clean (`ui_picker` `45/0`, `ui_complete` `29/0`) with empty stderr -- the blank cells were a capture/formatting artifact in the inherited matrix-summary file, not a test failure. Corrected in the table above by reading the source logs.
@@ -3839,7 +3839,7 @@ No existing selector diffs raw file bytes across a tab switch and a reopen (exis
 
 No session metadata (active-document id, tab order, selection, history position) reached the `.tres` or `.gdshader` on disk on any version: every post-navigation and post-reopen byte comparison matched the original save exactly.
 
-### Native color popup at confirmed shutdown (`docs/CURRENTNESS_AUDIT.md:61`)
+### Native color popup at confirmed shutdown (`docs/dev/CURRENTNESS_AUDIT.md:61`)
 
 Per this phase's own instruction: observed, not fixed. A second one-off scripted probe (`p8_color_popup_quit_probe.gd`, same verification-scratch convention as above) opened an untitled document, added a `color/palette` layer, opened its native RGB popup, typed a pending hex value into the popup's own hex `LineEdit` (`5566ee`) **without** committing it (no Enter, no focus release, no `popup.hide()`), then drove the real Scene > Quit menu item, the real confirmation dialog, and a real click on "Save and Quit," letting the process exit on its own. The written recovery record was then read directly off disk before the next run.
 
@@ -3849,7 +3849,7 @@ Per this phase's own instruction: observed, not fixed. A second one-off scripted
 
 **Observation:** in every version, on this interaction pattern (one untitled document, one popup, no other pending edits), the pending native color popup edit reached the recovery record -- the void-callback ordering concern named in the ledger did not cause data loss here. Only one interaction pattern was probed (a single document; no concurrent Save/Save As/rebind racing the popup); the ledger line is ticked as observed, not closed as proven-safe for every combination. No production file was touched.
 
-### `tabs_recovery`: both stage exit codes, per version (`docs/CURRENTNESS_AUDIT.md:63`, `:58`)
+### `tabs_recovery`: both stage exit codes, per version (`docs/dev/CURRENTNESS_AUDIT.md:63`, `:58`)
 
 Each stage run as its own serial process, isolated `APPDATA`/`LOCALAPPDATA`, with the recovery directory and stage marker file confirmed absent before stage 1 (a genuinely fresh two-stage run, not a re-run against leftover state):
 
@@ -3865,7 +3865,7 @@ Certificate-store diagnostic (`Failed to read the root certificate store`) reche
 
 | Previous expectation | Reviewed navigation replacement | Retained non-replacement checks | Phase that changed it |
 |---|---|---|---|
-| A single shared shader stack/history; opening a different stack replaced the current document's content in place, and that replacement was itself one undo-able action (undo restored the prior stack). Phase 1's own `tabs_proof` blockers section names this the "replacement undo route." | New/Open/Reopen Shader/Recipes create and activate an independent `GSTDocument`, each with its own `UndoRedo`; switching between already-open documents is tab navigation and registers no stack action at all (`tabs_documents`/`tabs_ui`'s own `navigation creates no stack action` exit criterion). | Two independent `UndoRedo` histories' own structural/property undo-redo mechanics -- gesture grouping, forced-finish ordering before rebind/save/undo/redo, native color popup live preview and final-emission finalization, host-scene isolation -- were unaffected by retiring the single-shared-history "replacement" framing and carried forward unchanged. | Phase `3` (`GSTDocument`, per-document `UndoRedo` ownership, replacing `docs/DESIGN.md` decision `20`'s shared-manager contract) with phase `4` continuing it into stable-ID tab activation and phase `2`'s native-boundary mechanics (gesture capture/finish, forced-finish ordering, color popup finalization) carried through unchanged. |
+| A single shared shader stack/history; opening a different stack replaced the current document's content in place, and that replacement was itself one undo-able action (undo restored the prior stack). Phase 1's own `tabs_proof` blockers section names this the "replacement undo route." | New/Open/Reopen Shader/Recipes create and activate an independent `GSTDocument`, each with its own `UndoRedo`; switching between already-open documents is tab navigation and registers no stack action at all (`tabs_documents`/`tabs_ui`'s own `navigation creates no stack action` exit criterion). | Two independent `UndoRedo` histories' own structural/property undo-redo mechanics -- gesture grouping, forced-finish ordering before rebind/save/undo/redo, native color popup live preview and final-emission finalization, host-scene isolation -- were unaffected by retiring the single-shared-history "replacement" framing and carried forward unchanged. | Phase `3` (`GSTDocument`, per-document `UndoRedo` ownership, replacing `docs/dev/DESIGN.md` decision `20`'s shared-manager contract) with phase `4` continuing it into stable-ID tab activation and phase `2`'s native-boundary mechanics (gesture capture/finish, forced-finish ordering, color popup finalization) carried through unchanged. |
 | A closed/replaced document's pending file-dialog or picker response could still land somewhere (the single-document model had no "stale target" to distinguish). | Every delayed Save As/Export/picker response is resolved against its own captured stable document/request id; a closed or replaced target is rejected without touching whatever now occupies that tab. | The underlying dialog/picker mechanics (file filters, overwrite confirmation, canonical-path collision detection) were unaffected. | Phase `5` (document-bound file operations), extended by phase `6` (closed-document stale-response rejection). |
 
 ### Blockers / open decisions
@@ -3873,12 +3873,12 @@ Certificate-store diagnostic (`Failed to read the root certificate store`) reche
 - **Both production defects on `4.6.2`/`4.7` are now fixed and closed.** The native color popup's keyboard Ctrl+Z/Ctrl+Shift+Z boundary (`addons/goshade_turbo/ui/gst_inspector_column.gd`, `_on_color_popup_window_input` plus `_on_color_popup_field_gui_input`) was fixed first, independently proven correct by instrumented delivery directly to the popup's own focused field, and confirmed by the test-delivery follow-up ("Shader tabs phase 8: tabs_native popup-delivery test fix" below). That follow-up's own delivery fix then surfaced a second, distinct, deferred-commit-after-redo defect on `4.6.2`/`4.7` only, whose actual root cause (confirmed by instrumented diagnosis to differ from this bullet's own original hypothesis about `_force_close_color_popups`/`_await_row_inactive`'s `10`-frame poll) and production fix are recorded in "Shader tabs phase 8: phase 2 defect fix 2 (deferred color no-op commit after redo)" below. `tabs_native` now reads `31/0` on `4.4`, `4.6.2`, and `4.7`, reproduced twice each.
 - No `150%`-scale profile exists for `4.6.2`/`4.7` (see "Version matrix" above); normal-scale coverage on both is clean. Flagged as an open verification gap, not fabricated.
 - No screenshot captures the native RGB popup in its open state on any version (see "Screenshots" above); its presence/geometry is proven by passing assertions instead of a photograph.
-- Both `docs/EDITOR_UI_DESIGN_reviewed.md:35` and `docs/SHADER_TABS_reviewed.md:25` (decision `10` wording) are left untouched per this phase's own instruction; `docs/CURRENTNESS_AUDIT.md` now cites the evidence each will need at its own doc-fix pass.
+- Both `docs/dev/EDITOR_UI_DESIGN_reviewed.md:35` and `docs/dev/SHADER_TABS_reviewed.md:25` (decision `10` wording) are left untouched per this phase's own instruction; `docs/dev/CURRENTNESS_AUDIT.md` now cites the evidence each will need at its own doc-fix pass.
 
 ### Scope
 
-- Files modified this pass: `tests/gst_editor_tabs_host_smoke.gd.uid` (new, generated by Godot's own `--import`, copied from the isolated `4.4` project), `docs/EDITOR_SMOKE.md` (this section), `docs/CURRENTNESS_AUDIT.md` (four ledger lines resolved with evidence; two design-doc flags left open per instruction, one annotated with a forward citation only), `NOW.md` (Active-thread next-action line only).
-- No production file (`addons/goshade_turbo/**`) was touched. No file outside phase 8's own Files list, `NOW.md`'s bookkeeping lines, `docs/CURRENTNESS_AUDIT.md`'s ticks, and `tests/gst_editor_tabs_host_smoke.gd`'s `.uid` was edited in the real repository.
+- Files modified this pass: `tests/gst_editor_tabs_host_smoke.gd.uid` (new, generated by Godot's own `--import`, copied from the isolated `4.4` project), `docs/dev/EDITOR_SMOKE.md` (this section), `docs/dev/CURRENTNESS_AUDIT.md` (four ledger lines resolved with evidence; two design-doc flags left open per instruction, one annotated with a forward citation only), `NOW.md` (Active-thread next-action line only).
+- No production file (`addons/goshade_turbo/**`) was touched. No file outside phase 8's own Files list, `NOW.md`'s bookkeeping lines, `docs/dev/CURRENTNESS_AUDIT.md`'s ticks, and `tests/gst_editor_tabs_host_smoke.gd`'s `.uid` was edited in the real repository.
 - Two ad-hoc scripted probes (`p8_color_popup_quit_probe.gd`, `p8_serialization_stability_probe.gd`) and their one-line dispatch cases were written **only** into each isolated project's own copy of `tests/` and `tests/gst_editor_smoke.gd` under `.now/tabs-validation/` (gitignored verification scratch, matching this file's own established "isolated project copies... are verification scratch, not repo source" precedent) -- never into the real repository. Confirmed by `grep` immediately after every run that the real repo's own `tests/gst_editor_smoke.gd` carries neither dispatch case.
 - `sandbox/**` was not touched. `sandbox/screenshots/glow.png.import` showed no `git status` change after this pass's own `--import`/render runs (no restoration needed). No git worktree was created. No commit was made.
 
@@ -3921,7 +3921,7 @@ The `ui_labels` first-attempt failure on both `4.4` and `4.6.2` reproduces this 
 
 - **Not closed.** The phase 8 matrix note above is updated to describe the fix and its cause precisely, not to claim the defect resolved, because the two `4.6.2`/`4.7` checks still read `FAIL` for the reason above.
 - **Open decision for the user/reviewer:** authorize a follow-up, test-only change to `tests/gst_editor_native_undo_smoke.gd`'s `_check_popup_focused_shortcut` (deliver its synthetic Ctrl+Z/Ctrl+Shift+Z to the popup's own currently-focused field's viewport instead of the root viewport, matching how a real OS keystroke is actually routed to whichever window holds real focus) so this specific check can observe the fix. This was not applied here: the cited defect locations for this fix pass were the two production files only.
-- Scope: files modified this pass -- `addons/goshade_turbo/ui/gst_inspector_column.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `docs/EDITOR_SMOKE.md` (this section and the updated blocker bullet above). No other file in the real repository was touched. No commit was made.
+- Scope: files modified this pass -- `addons/goshade_turbo/ui/gst_inspector_column.gd`, `addons/goshade_turbo/ui/gst_main_panel.gd`, `docs/dev/EDITOR_SMOKE.md` (this section and the updated blocker bullet above). No other file in the real repository was touched. No commit was made.
 - **Update:** the open decision above was authorized and applied; see "Shader tabs phase 8: tabs_native popup-delivery test fix" below for the follow-up pass's own result -- still not closed, for a newly surfaced, distinct reason.
 
 ## Shader tabs phase 8: tabs_native popup-delivery test fix (2026-09-14)
@@ -3978,7 +3978,7 @@ Command shape unchanged from above.
 
 ### Scope
 
-- Files modified this pass: `tests/gst_editor_native_undo_smoke.gd` (the change above), `docs/EDITOR_SMOKE.md` (this section and the phase 8 matrix/blocker-bullet updates above).
+- Files modified this pass: `tests/gst_editor_native_undo_smoke.gd` (the change above), `docs/dev/EDITOR_SMOKE.md` (this section and the phase 8 matrix/blocker-bullet updates above).
 - No production file (`addons/goshade_turbo/**`) was touched. No `sandbox/**` touch. No git worktree. No commit.
 - Isolated project copies under `.now/tabs-validation/` received the same test-file sync as verification scratch, matching this file's own established precedent; the real repository's own `tests/` tree outside `gst_editor_native_undo_smoke.gd` was not touched.
 
@@ -4035,7 +4035,7 @@ Both `tabs_native` checks that were failing on `4.6.2`/`4.7` now read `PASS` in 
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd`, `docs/EDITOR_SMOKE.md` (this section).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd`, `docs/dev/EDITOR_SMOKE.md` (this section).
 - `addons/goshade_turbo/ui/gst_main_panel.gd` was read, confirmed to need no change for this defect, and left untouched by this pass (its only diff against the last commit is the prior pass's own doc-comment update).
 - No other production file was touched. No `sandbox/**` touch. No git worktree. No commit.
 - Diagnostic `print()` instrumentation was added only to `.now/tabs-validation/project-462`'s own copies of the two production files and of `tests/gst_editor_native_undo_smoke.gd` (never the real repository), confirmed removed (via `diff` against the real repository's own files, and via `grep -n "DIAG\|print("` against the real repository's own two production files finding no matches beyond an unrelated `recovery_fingerprint` name collision) before every run counted as evidence above.
@@ -4064,10 +4064,10 @@ Fix pass against review round 1's FAIL verdict (`.gantry/review-round.json`). Ap
   - `tabs_ui` at 150%: `4.6.2` exit 0 `pass=18 fail=0`; `4.7` exit 0 `pass=18 fail=0`.
   - `ui_labels` with `GST_UI_SCREENSHOT_PATH` at 150%: `4.6.2` exit 0 `pass=49 fail=0`; `4.7` exit 0 `pass=49 fail=0` (43 baseline plus fix 9's 1 new check plus this fix's 5 screenshot checks).
 - **Fix 12 (correct stale documentation to match the final implementation). Applied.**
-  - `docs/EDITOR_SMOKE.md:3890`'s own children-timing finding is accurate and unchanged (it is what fix 3 above actually implements); the "### Fix" narrative immediately following it, which described the previous, still-broken implementer pass's connection code, is superseded by fix 3's own description above -- not rewritten in place, per this file's own "historical evidence remains historical" convention. Read fix 3's own bullet above as the current, accurate status for that mechanism.
-  - `docs/EDITOR_SMOKE.md:3997`'s "Dictionary-boxed flag... not a bare captured bool" claim did not match the code actually shipped in that pass, which used a bare `var settled: bool`. That entire mechanism (signal, boxed-or-bare flag, timeout) is removed by fix 7 above; the claim is moot rather than corrected in place, again per the no-rewrite-history convention -- fix 7's own bullet above is the current status.
-  - `tests/gst_editor_tabs_host_smoke.gd`'s own header doc comment quoted plan text ("Add this as a new selector if none of the existing ones covers it end to end; name it tabs_host") that does not exist anywhere in `docs/SHADER_TABS_reviewed-plan.md` (confirmed by `grep`, no match). Replaced with the real phase 8 Verification bullet this selector actually implements ("Test a small host game scene on all versions: document-owned structural/native edits, scene switch, Save As, alternating focused Undo/Redo including native popups, and scene Undo outside GoShade").
-  - `docs/CURRENTNESS_AUDIT.md`: un-ticked the two certificate-store lines (previously `[x]`, "0 occurrences"). The round-1 reviewer's own `4.7` `tabs_native` run emitted `ERROR: Failed to read the root certificate store`, reproducing the original diagnostic on that reviewer's own machine profile even though every run in the orchestrator's own environment (this pass included, 0 occurrences across all `tabs_recovery`/`tabs_native` runs below) does not show it. Recorded as environment-dependent, not resolved outright.
+  - `docs/dev/EDITOR_SMOKE.md:3890`'s own children-timing finding is accurate and unchanged (it is what fix 3 above actually implements); the "### Fix" narrative immediately following it, which described the previous, still-broken implementer pass's connection code, is superseded by fix 3's own description above -- not rewritten in place, per this file's own "historical evidence remains historical" convention. Read fix 3's own bullet above as the current, accurate status for that mechanism.
+  - `docs/dev/EDITOR_SMOKE.md:3997`'s "Dictionary-boxed flag... not a bare captured bool" claim did not match the code actually shipped in that pass, which used a bare `var settled: bool`. That entire mechanism (signal, boxed-or-bare flag, timeout) is removed by fix 7 above; the claim is moot rather than corrected in place, again per the no-rewrite-history convention -- fix 7's own bullet above is the current status.
+  - `tests/gst_editor_tabs_host_smoke.gd`'s own header doc comment quoted plan text ("Add this as a new selector if none of the existing ones covers it end to end; name it tabs_host") that does not exist anywhere in `docs/dev/SHADER_TABS_reviewed-plan.md` (confirmed by `grep`, no match). Replaced with the real phase 8 Verification bullet this selector actually implements ("Test a small host game scene on all versions: document-owned structural/native edits, scene switch, Save As, alternating focused Undo/Redo including native popups, and scene Undo outside GoShade").
+  - `docs/dev/CURRENTNESS_AUDIT.md`: un-ticked the two certificate-store lines (previously `[x]`, "0 occurrences"). The round-1 reviewer's own `4.7` `tabs_native` run emitted `ERROR: Failed to read the root certificate store`, reproducing the original diagnostic on that reviewer's own machine profile even though every run in the orchestrator's own environment (this pass included, 0 occurrences across all `tabs_recovery`/`tabs_native` runs below) does not show it. Recorded as environment-dependent, not resolved outright.
 - **Fix 13 (rerun the full phase 8 matrix; record clean verification only). Applied.** See "Version matrix, phase 8 review round 1" below, which replaces the phase 8 matrix table above as the current status (again, not rewritten in place). The unit wrapper's 20 pre-existing failures are recorded as a known, plan-external baseline, not a phase 8 pass: `res://tests/test_codegen_generator.gd`'s own "generative/clock compiles alone with default params" failure traces to `SHADER ERROR: Too many arguments for "clock(float)" call. Expected at most 1 but received 2.` (a real shader-compile error in the shipped `generative/clock` manifest entry, unrelated to any phase 8 file), identical on `4.4`, `4.6.2`, and `4.7`.
 
 ### Version matrix, phase 8 review round 1
@@ -4108,13 +4108,13 @@ All stderr across every row above held only this file's own already-documented d
 
 - `tabs_close` on `4.4`'s `pass=10 fail=3` result (phase 8's own matrix) could not be reproduced across 7 fresh runs this pass; no code change was made for it specifically (see fix 9 above). Corrected per review round 5: the original run's own `.now/tabs-validation/p8-4.4-tabs_close.stdout.log` did record which 3 failed -- `dirty_named_close_discard FAIL dirty_before=true dialog_shown=true closed=false dialog_hidden=false history_freed=false disk_unchanged=true`, `undo_cannot_reopen_closed_document FAIL closed=false documents_after_close=2 still_closed=false count_after_undo=2`, and `dirty_close_cancel_preserves_document FAIL dirty_before=true dialog_shown=false still_open=true still_dirty=true dialog_hidden=true tab_present=true layers_unchanged=true` -- giving the next recurrence a target.
 - The certificate-store diagnostic remains environment-dependent (fix 12): resolved in the orchestrator's own environment, still reproduces on the round-1 reviewer's own machine. Not treated as closed.
-- `docs/EDITOR_UI_DESIGN_reviewed.md:35` and `docs/SHADER_TABS_reviewed.md:25` (decision 10 wording) remain untouched, per this phase's own instruction (design-doc wording is a separate sign-off pass, not this fix pass's scope).
+- `docs/dev/EDITOR_UI_DESIGN_reviewed.md:35` and `docs/dev/SHADER_TABS_reviewed.md:25` (decision 10 wording) remain untouched, per this phase's own instruction (design-doc wording is a separate sign-off pass, not this fix pass's scope).
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (fixes 3, 6, 7), `tests/gst_editor_native_undo_smoke.gd` (fixes 3, 4, 6), `tests/gst_editor_tabs_host_smoke.gd` (fix 5, and fix 12's own quote correction), `tests/gst_editor_ui_labels_smoke.gd` (fixes 9, 11), `tests/gst_editor_document_recovery_smoke.gd` (fix 10), `docs/CURRENTNESS_AUDIT.md` (fix 12, two certificate-store ticks), `docs/EDITOR_SMOKE.md` (this section).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (fixes 3, 6, 7), `tests/gst_editor_native_undo_smoke.gd` (fixes 3, 4, 6), `tests/gst_editor_tabs_host_smoke.gd` (fix 5, and fix 12's own quote correction), `tests/gst_editor_ui_labels_smoke.gd` (fixes 9, 11), `tests/gst_editor_document_recovery_smoke.gd` (fix 10), `docs/dev/CURRENTNESS_AUDIT.md` (fix 12, two certificate-store ticks), `docs/dev/EDITOR_SMOKE.md` (this section).
 - `addons/goshade_turbo/ui/gst_main_panel.gd` was read in full and confirmed to need no change for any of fixes 3-13; not touched this pass.
-- No file outside phase 8's own amended Files list was touched. `sandbox/**` not touched. No git worktree. No commit. `NOW.md` and `docs/SHADER_TABS_reviewed-plan.md`'s own Status line were left untouched this pass, per the orchestrator's own instruction (fix 1) and because judging round 2's own verdict belongs to the reviewer, not this fix pass.
+- No file outside phase 8's own amended Files list was touched. `sandbox/**` not touched. No git worktree. No commit. `NOW.md` and `docs/dev/SHADER_TABS_reviewed-plan.md`'s own Status line were left untouched this pass, per the orchestrator's own instruction (fix 1) and because judging round 2's own verdict belongs to the reviewer, not this fix pass.
 - `.now/tabs-validation/appdata-4.6.2-scaled150` and `appdata-4.7-scaled150` (new isolated verification profiles, gitignored scratch, matching this file's own established `appdata-4.4-scaled150` precedent) were added under `.now/tabs-validation/`, never the real repository.
 
 ## Shader tabs phase 8 review round 2 fixes (2026-09-14)
@@ -4194,10 +4194,10 @@ Stderr across every row above held only this file's own already-documented delib
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (fix 1, fix 4), `tests/gst_editor_native_undo_smoke.gd` (fix 2), `tests/gst_editor_tabs_host_smoke.gd` (fix 4), `docs/EDITOR_SMOKE.md` (this section).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (fix 1, fix 4), `tests/gst_editor_native_undo_smoke.gd` (fix 2), `tests/gst_editor_tabs_host_smoke.gd` (fix 4), `docs/dev/EDITOR_SMOKE.md` (this section).
 - `addons/goshade_turbo/ui/gst_main_panel.gd` was read in full; no change needed for fixes 1-4.
 - `tests/gst_editor_ui_labels_smoke.gd` was read and run against repeatedly; no test change was needed once fix 1's production change was in place (the reviewer's reported failure never reproduced naturally in this environment either before or after the fix).
-- No file outside phase 8's own amended Files list was touched. `sandbox/**` not touched. No git worktree. No commit. `NOW.md` and `docs/SHADER_TABS_reviewed-plan.md`'s own Status line were left untouched this pass, per the orchestrator's own instruction (fixes 5-6 already applied) and because judging this round's own verdict belongs to the reviewer.
+- No file outside phase 8's own amended Files list was touched. `sandbox/**` not touched. No git worktree. No commit. `NOW.md` and `docs/dev/SHADER_TABS_reviewed-plan.md`'s own Status line were left untouched this pass, per the orchestrator's own instruction (fixes 5-6 already applied) and because judging this round's own verdict belongs to the reviewer.
 - Temporary `print()` instrumentation and one temporary causality-test edit used during diagnosis were made only in `.now/tabs-validation/project`'s own isolated copy of `gst_inspector_column.gd` and `gst_editor_ui_labels_smoke.gd`, never the real repository, and were overwritten with the clean fixed files before the version matrix above ran.
 
 ## Shader tabs phase 8 review round 3 fixes (2026-09-14)
@@ -4241,7 +4241,7 @@ Reran `tabs_native` 3 consecutive fresh processes on `4.4`, `4.6.2`, and `4.7` a
 
 ### Fix 5: correct the round 2 evidence table
 
-The "Version matrix, phase 8 review round 2" table above records `ui_labels` as `43/0` on all three versions (its own row, originally at `docs/EDITOR_SMOKE.md:4154`) and `tabs_native` as `39/0` on `4.6.2` (`:4155`) with no caveat. Per this project's own "historical evidence remains historical" convention, that table is not rewritten in place; this note supersedes it for those two claims:
+The "Version matrix, phase 8 review round 2" table above records `ui_labels` as `43/0` on all three versions (its own row, originally at `docs/dev/EDITOR_SMOKE.md:4154`) and `tabs_native` as `39/0` on `4.6.2` (`:4155`) with no caveat. Per this project's own "historical evidence remains historical" convention, that table is not rewritten in place; this note supersedes it for those two claims:
 
 - The `ui_labels` `43/0` claim did not disclose that the underlying check (`_check_native_palette_color`'s undo section) contained a 5-attempt retry loop at the time: a run that failed on its first `history.undo()` and only succeeded after an internal `redo()`/`undo()` retry still reported the check as a clean `PASS` with no visible indication a retry occurred, because that pass's own version of the check did not record `undo_attempts` in a way review round 3 could see was masking a real, deterministic first-attempt failure. The table's `43/0` result is accurate for what it measured (final pass/fail count) but is not evidence the underlying mechanism worked in one attempt.
 - The `tabs_native` `39/0` claim on `4.6.2` is accurate for the runs actually made that pass, but this file's own subsequent "Shader tabs phase 8: tabs_native popup-delivery test fix" and "phase 2 defect fix 2" sections (both earlier in this file, predating round 2) already document that this exact selector had previously shown real run-to-run instability on `4.6.2`/`4.7` before those fixes landed; the round 2 table's own clean `39/0` reflects the state after those fixes, not an absence of ever-observed instability in this selector's history.
@@ -4275,10 +4275,10 @@ All commands run from Git Bash on Windows 11, isolated absolute Windows `APPDATA
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (fix 1), `tests/gst_editor_ui_labels_smoke.gd` (fix 2), `tests/gst_editor_native_undo_smoke.gd` (fix 3), `docs/EDITOR_SMOKE.md` (this section).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (fix 1), `tests/gst_editor_ui_labels_smoke.gd` (fix 2), `tests/gst_editor_native_undo_smoke.gd` (fix 3), `docs/dev/EDITOR_SMOKE.md` (this section).
 - `addons/goshade_turbo/ui/gst_main_panel.gd` was read; no change needed for fixes 1-3.
 - `addons/goshade_turbo/ui/gst_undo.gd` was read only, for diagnostic instrumentation in isolated project copies during root-cause work; never modified in the real repository (confirmed by `diff` against the real repository's own copy after every instrumented run).
-- No file outside phase 8's own amended Files list was touched. `sandbox/**` not touched. No git worktree. No commit. `NOW.md` and `docs/SHADER_TABS_reviewed-plan.md`'s own Status line were left untouched this pass, per the orchestrator's own instruction and because judging this round's own verdict belongs to the reviewer.
+- No file outside phase 8's own amended Files list was touched. `sandbox/**` not touched. No git worktree. No commit. `NOW.md` and `docs/dev/SHADER_TABS_reviewed-plan.md`'s own Status line were left untouched this pass, per the orchestrator's own instruction and because judging this round's own verdict belongs to the reviewer.
 - Temporary `print()` instrumentation (in `_on_bound_property_changed`, `_begin_native_interaction`, `_on_color_live_changed`, `_finish_color_popup`, `_commit_row`, and `GSTUndo.commit_property_change`'s do/undo bound methods) and temporary injection/diagnostic edits to the test's own undo section were made only in `.now/tabs-validation/project`'s, `project-462`'s, and `project-47`'s own isolated copies, never the real repository, and were overwritten with the clean fixed files (confirmed byte-identical by `diff` against the real repository) before every run counted as evidence above.
 
 ## Shader tabs phase 8 review round 4 fixes (2026-09-14)
@@ -4333,7 +4333,7 @@ All instrumentation (the `print()` calls above, in `gst_inspector_column.gd` and
 
 ### Fix 3: correct round 3's residual-rate and environment-dependent characterization (superseding note, not an in-place rewrite)
 
-Per this project's own "historical evidence remains historical" convention (already used for round 3's own fix 5 correcting round 2's claims), "Shader tabs phase 8 review round 3 fixes"'s own "Residual, disclosed" paragraph (`docs/EDITOR_SMOKE.md:4221` in that section, and the `ui_labels` row of round 3's version matrix) is not rewritten in place. This note supersedes both for the residual-rate and "environment/timing-dependent" claims:
+Per this project's own "historical evidence remains historical" convention (already used for round 3's own fix 5 correcting round 2's claims), "Shader tabs phase 8 review round 3 fixes"'s own "Residual, disclosed" paragraph (`docs/dev/EDITOR_SMOKE.md:4221` in that section, and the `ui_labels` row of round 3's version matrix) is not rewritten in place. This note supersedes both for the residual-rate and "environment/timing-dependent" claims:
 
 - The residual was **not** "not reproducible in this environment, environment/timing-dependent" at "roughly 7%." It reproduces on the first `ui_labels` run after any other selector that leaves a scene recorded open (confirmed with `tabs_host` and, per round 3's own instrumentation notes, `tabs_native`) in the same isolated project, and does not reproduce on a `ui_labels` run with no such preceding selector in the same session. This pass's own measurement: 3 sequence-conditioned cycles (`tabs_host` then fresh `ui_labels`) on each of `4.6.2` and `4.7`, all 6 first-post-sequence `ui_labels` runs `43/0` clean after the fix below (pre-fix, this exact sequence reproduced the failure on the first attempt tried on `4.6.2`, `1/1`). Round 3's own ~7% figure was computed over runs that mostly did not control for this precondition, undercounting the rate within the triggering sequence and overcounting it as a background rate across all runs.
 - The root cause is not engine/timing noise external to this project's own code: it is `_refresh_row`'s pre-fix ordering (see fix 1 above), which any reentrant `EditorPropertyColor.update_property()` echo can expose regardless of what leaves a scene open. The scene-open precondition changed how *reliably* the reviewer's own reproduction recipe triggered the underlying engine-internal echo in this environment; it is not established as the only trigger, and no claim is made here that the ordering fix addresses only the scene-restore case -- the fix corrects the ordering defect unconditionally, independent of any scene state.
@@ -4366,9 +4366,9 @@ Stderr across every row above held only this file's own already-documented delib
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (fixes 1 and 4, both in `_refresh_row`), `tests/gst_editor_ui_labels_smoke.gd` (fix 2), `docs/EDITOR_SMOKE.md` (this section).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (fixes 1 and 4, both in `_refresh_row`), `tests/gst_editor_ui_labels_smoke.gd` (fix 2), `docs/dev/EDITOR_SMOKE.md` (this section).
 - `addons/goshade_turbo/ui/gst_undo.gd` and `addons/goshade_turbo/ui/gst_main_panel.gd` were read; no change needed.
-- No file outside phase 8's own amended Files list was touched. `sandbox/**` not touched. No git worktree. No commit. No write into the real repository's `.godot/`. `NOW.md`, `ROADMAP.md`, `docs/CURRENTNESS_AUDIT.md`, and this plan's Status line were left untouched this pass, per the orchestrator's own instruction and because judging this round's own verdict belongs to the reviewer.
+- No file outside phase 8's own amended Files list was touched. `sandbox/**` not touched. No git worktree. No commit. No write into the real repository's `.godot/`. `NOW.md`, `ROADMAP.md`, `docs/dev/CURRENTNESS_AUDIT.md`, and this plan's Status line were left untouched this pass, per the orchestrator's own instruction and because judging this round's own verdict belongs to the reviewer.
 - Temporary `print()` instrumentation (`_on_bound_property_changed`, `_on_color_live_changed`, `_refresh_row`, `_begin_native_interaction`, `_commit_row`, `GSTUndo`'s do/undo bound methods and `_notify_property`) and a temporary 30-frame diagnostic poll in the test's own undo section were made and removed only in `.now/tabs-validation/project-462`'s isolated copy, never the real repository; confirmed byte-identical to the real repository by `diff` before every run counted as evidence above.
 
 ### Blockers / open decisions
@@ -4384,11 +4384,11 @@ Fix-now pass against review round 5's PASS-WITH-NOTES verdict (7 fix-now notes).
 
 - **Note 1 (close the final-tree matrix gap). Applied.** `tabs_documents`, `tabs_files`, `tabs_ui`, `tabs_close`, `ui_layout`, `ui_actions`, `ui_picker`, `ui_complete`, and both `tabs_recovery` stages run fresh on `4.6.2` and `4.7`; `ui_complete` also run fresh on `4.4`. `tabs_native` and `ui_labels` (the latter run immediately after a fresh `tabs_host`, one cycle, matching round 4's own sequence-conditioned precedent) rerun on `4.6.2` and `4.7`; `tabs_native`, `ui_labels`, and `tabs_host` rerun standalone on `4.4` (single cycle, matching the reviewer's own Verify line for that version). `run_render_checks.gd` and `run_recipe_motion_checks.gd` rerun on Compatibility and Forward+ on all three versions. See "Version matrix, final phase 8 tree, review round 5" below for every result; every row is clean (exit `0`, no unresolved failures). Material-sync reachability: this pass's only behavioral (non-comment) production change is note 4's added `_find_color_button(entry["editor"] as Node) != null` scoping condition on the stale-echo guard in `_on_bound_property_changed`; that condition only narrows when `_commit_row` (and therefore `GSTUndo.commit_property_change`'s own material-sync call) is skipped for a stray repeat, it adds no new call site. `run_render_checks.gd`/`run_recipe_motion_checks.gd` never load `GSTInspectorColumn` or the editor UI at all (both run headless against the shader library directly), so neither script's own code path can reach this change regardless of renderer or version; they were rerun anyway per this note's own instruction, and both are clean on every version/renderer.
 - **Note 2 (correct the stale `changing`-boundary docstring). Applied.** `gst_inspector_column.gd:393-398`'s docstring above `_on_bound_property_changed` now states the color-popup row's real boundary (`about_to_popup`/`popup_closed`) instead of the superseded `changing`-flag boundary, and names the inactive `changing=true` drop at `:425-430` (post-edit line numbers, the `if changing:` block's `_find_color_button` check) as where that stray echo is discarded.
-- **Note 3 (record which `tabs_close` checks failed). Applied.** `docs/EDITOR_SMOKE.md:4102`'s bullet now names the three failing checks and fields from `.now/tabs-validation/p8-4.4-tabs_close.stdout.log`: `dirty_named_close_discard FAIL dirty_before=true dialog_shown=true closed=false dialog_hidden=false history_freed=false disk_unchanged=true`, `undo_cannot_reopen_closed_document FAIL closed=false documents_after_close=2 still_closed=false count_after_undo=2`, `dirty_close_cancel_preserves_document FAIL dirty_before=true dialog_shown=false still_open=true still_dirty=true dialog_hidden=true tab_present=true layers_unchanged=true`.
+- **Note 3 (record which `tabs_close` checks failed). Applied.** `docs/dev/EDITOR_SMOKE.md:4102`'s bullet now names the three failing checks and fields from `.now/tabs-validation/p8-4.4-tabs_close.stdout.log`: `dirty_named_close_discard FAIL dirty_before=true dialog_shown=true closed=false dialog_hidden=false history_freed=false disk_unchanged=true`, `undo_cannot_reopen_closed_document FAIL closed=false documents_after_close=2 still_closed=false count_after_undo=2`, `dirty_close_cancel_preserves_document FAIL dirty_before=true dialog_shown=false still_open=true still_dirty=true dialog_hidden=true tab_present=true layers_unchanged=true`.
 - **Note 4 (scope the stale-echo guard to color-popup rows). Applied.** `gst_inspector_column.gd`'s `_on_bound_property_changed`, the `changing=false` stale-echo guard now reads `if _find_color_button(entry["editor"] as Node) != null and state.has("last_committed_final") and ...`, matching the sibling guard's own scoping at the `changing=true` branch above it. The false justification ("a genuine new edit that happens to match is never silently discarded") is removed; the replacement comment states only the guard's actual scope and the control it is observed against.
 - **Note 5 (trim the two narrative comment blocks). Applied.** `gst_inspector_column.gd`'s `_on_bound_property_changed` `if changing:` block comment and `_refresh_row`'s header docstring are both reduced to the contract statement the code follows, cutting the round 3/4 diagnosis narration (frame traces, "confirmed by direct injection," reproduction counts) that belongs to this file's own history sections, not the source comment.
 - **Note 6 (correct `_push_popup_key`'s docstring). Applied.** `tests/gst_editor_native_undo_smoke.gd`'s docstring above `_push_popup_key` now names both callers (`_check_popup_focused_shortcut` and `_check_color_popup_subunit_pending_forced_finish`) instead of claiming the first is the only one.
-- **Note 7 (un-tick the `gst_main_panel.gd:1462` line). Applied, un-ticked.** `docs/CURRENTNESS_AUDIT.md`'s line is now `[ ]`; the entry keeps its original evidence and adds that this round's own production edits (the stray-echo scoping and comment trims above) touch neither `_save_external_data()` nor the recovery-write race, so the previously-disclosed gap (only one interaction pattern probed) is unchanged and still open.
+- **Note 7 (un-tick the `gst_main_panel.gd:1462` line). Applied, un-ticked.** `docs/dev/CURRENTNESS_AUDIT.md`'s line is now `[ ]`; the entry keeps its original evidence and adds that this round's own production edits (the stray-echo scoping and comment trims above) touch neither `_save_external_data()` nor the recovery-write race, so the previously-disclosed gap (only one interaction pattern probed) is unchanged and still open.
 
 ### Version matrix, final phase 8 tree, review round 5
 
@@ -4422,14 +4422,14 @@ All commands run from Git Bash on Windows 11, isolated absolute Windows `APPDATA
 
 ### Scope
 
-- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (notes 2, 4, 5), `tests/gst_editor_native_undo_smoke.gd` (note 6), `docs/EDITOR_SMOKE.md` (note 3 and this section), `docs/CURRENTNESS_AUDIT.md` (note 7).
+- Files modified this pass: `addons/goshade_turbo/ui/gst_inspector_column.gd` (notes 2, 4, 5), `tests/gst_editor_native_undo_smoke.gd` (note 6), `docs/dev/EDITOR_SMOKE.md` (note 3 and this section), `docs/dev/CURRENTNESS_AUDIT.md` (note 7).
 - `addons/goshade_turbo/ui/gst_main_panel.gd` was read for note 7's own diagnosis; not modified this pass.
 - No file outside phase 8's own amended Files list was touched. `sandbox/**` not touched (confirmed clean by `git status --porcelain -- sandbox/`). No git worktree. No commit. No write into the real repository's `.godot/`. `NOW.md`, `ROADMAP.md`, and this plan's Status line were left untouched this pass; judging this round's own verdict belongs to the reviewer.
 
 ### Blockers / open decisions
 
-- `tabs_close` on `4.4`'s round-1 `pass=10 fail=3` non-reproduction (see the corrected bullet at `docs/EDITOR_SMOKE.md:4102` above) remains open; out of this fix-now pass's scope (note 1 named `4.6.2`/`4.7` for this selector, not `4.4`).
-- `docs/CURRENTNESS_AUDIT.md`'s `gst_main_panel.gd:1462` gap (note 7) remains open pending a broader probe (multiple documents, mixed pending edits) that no note in this pass required.
+- `tabs_close` on `4.4`'s round-1 `pass=10 fail=3` non-reproduction (see the corrected bullet at `docs/dev/EDITOR_SMOKE.md:4102` above) remains open; out of this fix-now pass's scope (note 1 named `4.6.2`/`4.7` for this selector, not `4.4`).
+- `docs/dev/CURRENTNESS_AUDIT.md`'s `gst_main_panel.gd:1462` gap (note 7) remains open pending a broader probe (multiple documents, mixed pending edits) that no note in this pass required.
 
 ## Quick fixes 2026-09-14
 
@@ -4450,7 +4450,7 @@ Trimmed every doc comment from round-by-round narrative ("fix-now round N", "rev
 
 ### Item 2: `cellular_edges` drops `width`, returns raw `F2 - F1`
 
-`code` now reads `float cellular_edges(vec2 p) { ... return f2 - f1; }` (the `width` param, its `hint_range`/label/description entry, and the `smoothstep`/`max(width, ...)` remap are gone). `description` and `source_math` rewritten to describe the raw field (near 0 at the boundary, increasing toward the cell center; downstream `smoothstep`/`band` sets the width) instead of the removed bright-boundary remap; checked against `docs/CURRENTNESS_AUDIT.md:54`'s prior description-fix note so the description stays true to the new output.
+`code` now reads `float cellular_edges(vec2 p) { ... return f2 - f1; }` (the `width` param, its `hint_range`/label/description entry, and the `smoothstep`/`max(width, ...)` remap are gone). `description` and `source_math` rewritten to describe the raw field (near 0 at the boundary, increasing toward the cell center; downstream `smoothstep`/`band` sets the width) instead of the removed bright-boundary remap; checked against `docs/dev/CURRENTNESS_AUDIT.md:54`'s prior description-fix note so the description stays true to the new output.
 
 - `godot --headless --path . -s res://tests/run_codegen_tests.gd` (4.4, real repo root): `GST tests: 21 file(s), 145 test method(s), 20 failure(s)`, exit `1` -- identical to the documented `20`-failure baseline; no failure names `cellular_edges` or `width`.
 - `godot --path . --rendering-driver opengl3 --rendering-method gl_compatibility -s res://tests/run_render_checks.gd`: `run_render_checks: PASS, 81 stack(s) checked`, exit `0`; `RENDER res://sandbox/stacks/ref_generative_cellular_edges.tres PASS [] has_TIME=false`.
@@ -4466,7 +4466,7 @@ New `addons/goshade_turbo/library/generative/cell_borders.tres`. Exact Euclidean
 ### Scope
 
 - Files modified: `addons/goshade_turbo/ui/gst_document_recovery.gd` (item 1), `addons/goshade_turbo/library/generative/cellular_edges.tres` and `sandbox/screenshots/ref_generative_cellular_edges.png` (item 2, the latter an orchestrator-named exception to the `sandbox/**` restriction), `addons/goshade_turbo/library/generative/cell_borders.tres` (item 3, new file), `NOW.md` (ticking cleared items), this section.
-- `docs/CURRENTNESS_AUDIT.md` not touched (orchestrator-reserved this pass).
+- `docs/dev/CURRENTNESS_AUDIT.md` not touched (orchestrator-reserved this pass).
 - Item 4 (`mouse`) not implemented; see "Blockers / open decisions" below.
 
 ### Blockers / open decisions
@@ -4514,13 +4514,13 @@ Every pass/fail count above matches this file's own established baseline for tha
 
 ### Docs check
 
-`docs/EDITOR_UI_DESIGN_reviewed.md` decision `27` ("keep Save and Export directly accessible... Mutating toolbar actions follow picker modality") was checked against this pass's changes: it states which toolbar actions must stay directly accessible vs. move into the File menu, not their left-to-right order or the tab's visual shape, so nothing in this pass contradicts it and no line needed a superseded note. No other decision line in that file states the prior toolbar order or tab shape. `docs/SHADER_TABS_reviewed.md`'s own mockup (`[Pearl x] [Opal* x] [Untitled 1 x] [+]` / `File Save Recipes Randomize <gap> Export`) is now stale against this pass's layout, but that file is outside this quick-fix batch's own edit scope; flagged here rather than edited.
+`docs/dev/EDITOR_UI_DESIGN_reviewed.md` decision `27` ("keep Save and Export directly accessible... Mutating toolbar actions follow picker modality") was checked against this pass's changes: it states which toolbar actions must stay directly accessible vs. move into the File menu, not their left-to-right order or the tab's visual shape, so nothing in this pass contradicts it and no line needed a superseded note. No other decision line in that file states the prior toolbar order or tab shape. `docs/dev/SHADER_TABS_reviewed.md`'s own mockup (`[Pearl x] [Opal* x] [Untitled 1 x] [+]` / `File Save Recipes Randomize <gap> Export`) is now stale against this pass's layout, but that file is outside this quick-fix batch's own edit scope; flagged here rather than edited.
 
 ### Scope
 
 - Files modified: `addons/goshade_turbo/ui/gst_main_panel.gd`, `addons/goshade_turbo/ui/gst_main_panel.tscn`, `tests/gst_editor_tabs_smoke.gd`, this section.
 - `tests/gst_editor_ui_layout_smoke.gd`, `tests/gst_editor_ui_actions_smoke.gd`, `tests/gst_editor_ui_complete_smoke.gd`, `tests/gst_editor_document_close_smoke.gd`, `tests/gst_editor_smoke.gd`, `tests/gst_editor_tabs_host_smoke.gd`: read in full, run for verification, not edited -- none assumes the tab row's or toolbar's prior node structure in a way this pass's changes break.
-- `docs/EDITOR_UI_DESIGN_reviewed.md`: read, checked against decision `27`, not edited (see "Docs check" above).
+- `docs/dev/EDITOR_UI_DESIGN_reviewed.md`: read, checked against decision `27`, not edited (see "Docs check" above).
 - `NOW.md`: not edited. This request was handed to the implementer directly (quick-fix batch, no plan) rather than through a queued `/claudhd:quick` item; NOW.md's own Quick fixes list already reads all-cleared and unrelated to this change, and no other NOW.md line names the prior tab/toolbar layout.
 - No file outside this pass's own sentinel list was touched. `sandbox/**` not touched. No git worktree. No commit. No write into the real repository's `.godot/`.
 
@@ -4584,7 +4584,7 @@ Every count above matches this file's own established baseline for that selector
 
 ### Docs check
 
-`docs/SHADER_TABS_reviewed.md`'s own mockup (`[Pearl x] [Opal* x] [Untitled 1 x] [+]`) already carried a stale-flag from the prior "Tab row and toolbar layout 2026-09-15" pass for the per-tab-wrapper shape; this pass's own change (native `TabBar`) makes that mockup accurate again in spirit (one tab shape, name and `x` together) even though it predates this exact implementation -- no new staleness introduced, and the file is outside this pass's own edit scope regardless. `docs/EDITOR_UI_DESIGN_reviewed.md` decision `27` (toolbar action placement) is unaffected: this pass changes the tab strip's own control class, not the toolbar. No other doc names the tab row's prior `Button`-row node structure (`ShaderTabsScroll`, per-tab wrapper `HBoxContainer`) in a way this pass's `.tscn` change breaks; `gst_main_panel.gd`'s own doc comments referencing that structure (`_refresh_tabs()`, `close_document()`, the `_active_document` field, `activate_document()`) were updated in place as part of this pass.
+`docs/dev/SHADER_TABS_reviewed.md`'s own mockup (`[Pearl x] [Opal* x] [Untitled 1 x] [+]`) already carried a stale-flag from the prior "Tab row and toolbar layout 2026-09-15" pass for the per-tab-wrapper shape; this pass's own change (native `TabBar`) makes that mockup accurate again in spirit (one tab shape, name and `x` together) even though it predates this exact implementation -- no new staleness introduced, and the file is outside this pass's own edit scope regardless. `docs/dev/EDITOR_UI_DESIGN_reviewed.md` decision `27` (toolbar action placement) is unaffected: this pass changes the tab strip's own control class, not the toolbar. No other doc names the tab row's prior `Button`-row node structure (`ShaderTabsScroll`, per-tab wrapper `HBoxContainer`) in a way this pass's `.tscn` change breaks; `gst_main_panel.gd`'s own doc comments referencing that structure (`_refresh_tabs()`, `close_document()`, the `_active_document` field, `activate_document()`) were updated in place as part of this pass.
 
 ### Scope
 
@@ -4642,13 +4642,13 @@ Every count above matches this file's own established baseline for that selector
 
 ### Docs check
 
-`docs/SHADER_TABS_reviewed.md`'s own mockup already carries a stale-flag from the "Tab row and toolbar layout 2026-09-15" pass for the tab shape; this pass's own change (tab-content-width sizing, `+` pinned under overflow) does not change that mockup's own accuracy either way -- no new staleness introduced, and the file is outside this pass's own edit scope regardless. `docs/EDITOR_UI_DESIGN_reviewed.md` decision `27` (toolbar action placement) is unaffected: this pass changes `%FileMenu`'s own drawn style and `%ShaderTabs`'s own sizing, not which actions live in the toolbar vs. the File menu. No other doc names the tab row's prior EXPAND-flag sizing or `%FileMenu`'s prior stylebox state in a way this pass's changes break.
+`docs/dev/SHADER_TABS_reviewed.md`'s own mockup already carries a stale-flag from the "Tab row and toolbar layout 2026-09-15" pass for the tab shape; this pass's own change (tab-content-width sizing, `+` pinned under overflow) does not change that mockup's own accuracy either way -- no new staleness introduced, and the file is outside this pass's own edit scope regardless. `docs/dev/EDITOR_UI_DESIGN_reviewed.md` decision `27` (toolbar action placement) is unaffected: this pass changes `%FileMenu`'s own drawn style and `%ShaderTabs`'s own sizing, not which actions live in the toolbar vs. the File menu. No other doc names the tab row's prior EXPAND-flag sizing or `%FileMenu`'s prior stylebox state in a way this pass's changes break.
 
 ### Scope
 
 - Files modified: `addons/goshade_turbo/ui/gst_main_panel.gd`, `addons/goshade_turbo/ui/gst_main_panel.tscn`, `tests/gst_editor_tabs_smoke.gd`, `tests/gst_editor_ui_layout_smoke.gd`, this section.
 - `tests/gst_editor_document_close_smoke.gd`, `tests/gst_editor_tabs_host_smoke.gd`, `tests/gst_editor_ui_actions_smoke.gd`, `tests/gst_editor_ui_complete_smoke.gd`: read; not edited (none references `%FileMenu`'s own styling or `%ShaderTabs`'s own sizing flags in a way this pass's changes break). Run for verification on both `4.4` and `4.6.2` (`tabs_close`, `tabs_host`, `ui_actions`, `ui_complete` -- see the Verification table above).
-- `docs/SHADER_TABS_reviewed.md`, `docs/EDITOR_UI_DESIGN_reviewed.md`: read, checked against this pass's own changes, not edited (see "Docs check" above).
+- `docs/dev/SHADER_TABS_reviewed.md`, `docs/dev/EDITOR_UI_DESIGN_reviewed.md`: read, checked against this pass's own changes, not edited (see "Docs check" above).
 - `NOW.md`: not edited. This request was handed to the implementer directly (user-requested UI follow-up, no plan, no queued `/claudhd:quick` item); NOW.md's own Quick fixes list already reads all-cleared and unrelated to this change.
 
 ## Native + button 2026-09-15
@@ -4699,7 +4699,7 @@ Roadmap item "Fix the 20 pre-existing `tests/run_codegen_tests.gd` unit failures
 
 ### Cause 1: `generative/clock` compile failure
 
-`SHADER ERROR: Too many arguments for "clock(float)" call. Expected at most 1 but received 2.` `addons/goshade_turbo/library/generative/clock.tres` (unmodified this pass) already declares `coord = false` and `inputs = []` correctly: it is a pure time source, "Ignores position" per its own `source_math` field, structurally a zero-input operator (same shape as `fieldops/ratchet` and `fieldops/ease`), filed under the `generative/` taxonomy folder for organizational reasons only (`docs/DESIGN.md` decision 15). Production code already honors `coord = false`: `GSTStackOps.add_layer`'s `is_generator` flag is caller-supplied, and every UI call site (`addons/goshade_turbo/ui/gst_undo.gd:91,419,470`) passes the manifest's own `entry.coord`. The bug was in the test harness only: `tests/test_codegen_generator.gd`'s `test_every_generative_manifest_compiles_alone_with_default_params` hardcoded `GSTStackOps.add_layer(stack, id, GSTLayer.Kind.FIELD, true)` for every id under the `generative/` prefix, forcing a coord block (and the coord-transformed `clock(coord0, l0_clock_speed)` call, two arguments) onto an entry whose own data says it takes none. Fixed at `tests/test_codegen_generator.gd:139-145`: reads `lib.get_entry(id).coord` per entry instead of assuming `true`, matching the pattern the sdf-generator loop directly below it already used to separate sdf generators from sdf operators sharing one id prefix.
+`SHADER ERROR: Too many arguments for "clock(float)" call. Expected at most 1 but received 2.` `addons/goshade_turbo/library/generative/clock.tres` (unmodified this pass) already declares `coord = false` and `inputs = []` correctly: it is a pure time source, "Ignores position" per its own `source_math` field, structurally a zero-input operator (same shape as `fieldops/ratchet` and `fieldops/ease`), filed under the `generative/` taxonomy folder for organizational reasons only (`docs/dev/DESIGN.md` decision 15). Production code already honors `coord = false`: `GSTStackOps.add_layer`'s `is_generator` flag is caller-supplied, and every UI call site (`addons/goshade_turbo/ui/gst_undo.gd:91,419,470`) passes the manifest's own `entry.coord`. The bug was in the test harness only: `tests/test_codegen_generator.gd`'s `test_every_generative_manifest_compiles_alone_with_default_params` hardcoded `GSTStackOps.add_layer(stack, id, GSTLayer.Kind.FIELD, true)` for every id under the `generative/` prefix, forcing a coord block (and the coord-transformed `clock(coord0, l0_clock_speed)` call, two arguments) onto an entry whose own data says it takes none. Fixed at `tests/test_codegen_generator.gd:139-145`: reads `lib.get_entry(id).coord` per entry instead of assuming `true`, matching the pattern the sdf-generator loop directly below it already used to separate sdf generators from sdf operators sharing one id prefix.
 
 ### Cause 2: 17 inputs with empty editor `description`
 
@@ -4771,7 +4771,7 @@ Every `no_offset_buttons_below_overflow` failure was `closed_back_down=false` al
 
 ### Docs check
 
-No standing doc (`docs/DESIGN.md`, `docs/PLAN.md`, `CLAUDE.md`) names `_apply_tab_bar_width`'s own internals or the offset-arrows behavior; nothing there needs updating.
+No standing doc (`docs/dev/DESIGN.md`, `docs/dev/PLAN.md`, `CLAUDE.md`) names `_apply_tab_bar_width`'s own internals or the offset-arrows behavior; nothing there needs updating.
 
 ### Blockers
 
@@ -4825,7 +4825,7 @@ delete path per OS (`%APPDATA%\Godot\app_userdata\GoShade
 Turbo\.recovery_mode_lock` on Windows and the Linux/macOS equivalents), and
 that an isolated `APPDATA`/`LOCALAPPDATA` avoids it entirely.
 
-`docs/RUNTIME_VERIFICATION_QUEUE.md`: added Active check 4, "Recovery Mode
+`docs/dev/RUNTIME_VERIFICATION_QUEUE.md`: added Active check 4, "Recovery Mode
 prompt after test runs," closes on the user confirming no prompt next
 session.
 

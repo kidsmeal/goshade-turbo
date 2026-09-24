@@ -40,7 +40,7 @@ GoShade:      [Pearl x] [Opal* x] [Untitled 1 x] +      (native TabBar, x inside
 - `ui/gst_main_panel.gd`: document ownership, file entry points, history, tab activation, save/close lifecycle.
 - `ui/gst_undo.gd`, `gst_inspector_column.gd`, `gst_inspector_plugin.gd`: document-owned `UndoRedo` history for structural and native property edits; standalone native `EditorProperty` creation/routing; obsolete embedded-inspector registration removed or adapted.
 - `ui/gst_preview.gd`: pause inactive rendering while retaining state.
-- `docs/EDITOR_UI_DESIGN_reviewed.md` decisions `7` and `30`: `docs/DESIGN.md` decision `20` supersedes the shared-manager mechanism, embedded inspector routing, and replacement undo for new-document navigation. Navigation and viewing state remain outside history. Compound edits remain one action. Native controls and original data keys, ranges, labels, and tooltips remain unchanged.
+- `docs/dev/EDITOR_UI_DESIGN_reviewed.md` decisions `7` and `30`: `docs/dev/DESIGN.md` decision `20` supersedes the shared-manager mechanism, embedded inspector routing, and replacement undo for new-document navigation. Navigation and viewing state remain outside history. Compound edits remain one action. Native controls and original data keys, ranges, labels, and tooltips remain unchanged.
 - No stack schema migration or shader-library change.
 
 ## Edge cases and verification

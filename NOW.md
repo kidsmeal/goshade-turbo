@@ -21,7 +21,7 @@ Last touched: 2026-09-23
 
 Next physical action:
 
-- [ ] grill the open forks in docs/V0_2_DESIGN.md via /claudhd:design, then run the design reviewer
+- [ ] grill the open forks in docs/dev/V0_2_DESIGN.md via /claudhd:design, then run the design reviewer
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
@@ -48,13 +48,13 @@ New idea mid-task: `/claudhd:idea <text>` records it in IDEAS.md so you can keep
 ## Loose ends
 
 - Astra reviewer measurement (user decision 2026-09-09): `.gantry/models.json` routes design-reviewer and phase-reviewer to codex `gpt-6-astra`; implementer and planner stay native. Protocol: record the Codex weekly allowance percentage before the next plan's first review and after its last, and sum reviewer tokens from `~/.codex/sessions` for the same window. Decide the ChatGPT tier on that delta.
-- Release checklist: one item open, `docs/DESIGN.md` line 155 (user tuning pass). All other items ticked with evidence.
-- Picker text slicing: resolved 2026-09-16 as upstream godotengine/godot#83975 (editor render area shrinks on Windows 11 hybrid NVIDIA laptops, black bar at the bottom). Not a plugin defect. Details in `docs/EDITOR_SMOKE.md` "Intermittent picker text slicing".
+- Release checklist: one item open, `docs/dev/DESIGN.md` line 155 (user tuning pass). All other items ticked with evidence.
+- Picker text slicing: resolved 2026-09-16 as upstream godotengine/godot#83975 (editor render area shrinks on Windows 11 hybrid NVIDIA laptops, black bar at the bottom). Not a plugin defect. Details in `docs/dev/EDITOR_SMOKE.md` "Intermittent picker text slicing".
 - `sandbox/stacks/clouds.tres` (moved from repo root in `017b936`) is now picked up by `tests/run_render_checks.gd`; next GPU render run reports 79 stacks, not 78.
 - ClauDHD enforcement opted in 2026-09-09 (`.now/enabled`): the commit-boundary reconcile and, from plugin 1.0.11 after a restart, the post-commit verify now run here. Any plan may be granted `thread.js commit-policy auto <plan>` to commit phases without asking; push stays manual.
-- `docs/CURRENTNESS_AUDIT.md` and `docs/RUNTIME_VERIFICATION_QUEUE.md` still carry `<DATE>` template placeholders; the audit's deferred-notes list is real, the rest is scaffold.
-- `docs/CURRENTNESS_AUDIT.md` deferred note: `tests/run_render_checks.gd` cannot run in the GPU-less reviewer sandbox. Clears when a GPU reviewer exists.
-- Logo (2026-09-11, off-thread): `sandbox/logo/` renders the README wordmark through the tool's own export. Font is `ZenDots` (OFL, `sandbox/logo/fonts/`; `BrunoAceSC` kept as the alternate); pipeline is `export_logo.gd` (stack .tres to .gdshader), `build_logo_scene.gd -- --font <key>`, `run_logo_check.gd` (GPU, writes `goshade_turbo_logo.png`). Tune the stack in the panel from `logo_stack.tres`, re-export, re-render.
+- `docs/dev/CURRENTNESS_AUDIT.md` and `docs/dev/RUNTIME_VERIFICATION_QUEUE.md` still carry `<DATE>` template placeholders; the audit's deferred-notes list is real, the rest is scaffold.
+- `docs/dev/CURRENTNESS_AUDIT.md` deferred note: `tests/run_render_checks.gd` cannot run in the GPU-less reviewer sandbox. Clears when a GPU reviewer exists.
+- Logo (2026-09-11, off-thread): `sandbox/logo/` renders the README wordmark through the tool's own export. Font is `ZenDots` (OFL, `sandbox/logo/fonts/`); pipeline is `export_logo.gd` (stack .tres to .gdshader), `build_logo_scene.gd`, `run_logo_check.gd` (GPU, writes `goshade_turbo_logo.png`). Tune the stack in the panel from `logo_stack.tres`, re-export, re-render.
 
 ## Leaving this file when you stop
 

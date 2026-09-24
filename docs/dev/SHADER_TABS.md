@@ -40,7 +40,7 @@ GoShade:      [Pearl x] [Opal* x] [Untitled 1 x] [+]
 - `ui/gst_main_panel.gd`: document ownership, file entry points, history, tab activation, save/close lifecycle.
 - `ui/gst_undo.gd`, `gst_inspector_column.gd`, `gst_inspector_plugin.gd`: ownership-aware native and structural undo, without custom slider widgets.
 - `ui/gst_preview.gd`: pause inactive rendering while retaining state.
-- `docs/EDITOR_UI_DESIGN_reviewed.md` decision `7`: new-document navigation no longer replaces the active stack as one undo action.
+- `docs/dev/EDITOR_UI_DESIGN_reviewed.md` decision `7`: new-document navigation no longer replaces the active stack as one undo action.
 - No stack schema migration or shader-library change.
 
 ## Edge cases and verification

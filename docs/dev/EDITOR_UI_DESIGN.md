@@ -2,7 +2,7 @@
 
 Status: design resolved through the user interview. Implementation pending.
 
-Source: `C:/Users/atk67/Documents/goshade-turbo/docs/DESIGN.md`.
+Source: `C:/Users/atk67/Documents/goshade-turbo/docs/dev/DESIGN.md`.
 
 User-reported problems: long vertical menus and an undersized preview. User requirement: someone who has never used a shader can choose an effect, change it through clearly named controls, and export it.
 
@@ -122,7 +122,7 @@ Picker open:
 
 ## Verification and implementation checks
 
-Verified by reading the current UI code and `C:/Users/atk67/Documents/goshade-turbo/docs/EDITOR_SMOKE.md`:
+Verified by reading the current UI code and `C:/Users/atk67/Documents/goshade-turbo/docs/dev/EDITOR_SMOKE.md`:
 
 - The current UI has separate stack, inspector, and preview columns; the preview has no explicit minimum size in its scene.
 - Current function search matches function names only. Input rows do not show conversion tags.

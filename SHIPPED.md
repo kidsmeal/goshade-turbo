@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-23
+- v0.2 design: add dependency marks in the stack list (decision 35) `f82a9d0`
 - add LICENSE and README inside the addon folder `050705c`
 - sandbox: stop tracking render-check screenshots `d01c967`
 - logo: add Godot import file for the GT icon `49e5671`

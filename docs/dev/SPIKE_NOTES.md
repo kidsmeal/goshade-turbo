@@ -1,6 +1,6 @@
 # Phase 1 API spike results
 
-Run 2026-09-07 against `Godot_v4.6.2-stable_win64.exe`. Source: `docs/PLAN.md`, Phase 1 spike.
+Run 2026-09-07 against `Godot_v4.6.2-stable_win64.exe`. Source: `docs/dev/PLAN.md`, Phase 1 spike.
 
 ## Fix-pass update (2026-09-07): items (a)-(c) driven programmatically
 
@@ -27,7 +27,7 @@ stdout for this run. B9 is closed; no blocker remains.
 ## Fix-pass 3 update (2026-09-07): item (c) re-run with `TextureRect`
 
 Required fix 1 on the phase 1 review (round 3) found that the fix-pass 2 run
-of item (c) used a `ColorRect`, not the `TextureRect` `docs/PLAN.md:74`
+of item (c) used a `ColorRect`, not the `TextureRect` `docs/dev/PLAN.md:74`
 requires. `plugin.gd` was again temporarily rewritten to run only item (c)
 from `_enter_tree`, launched with `godot --editor --path .` from PowerShell,
 and self-quit via `get_tree().quit()` after printing the result to stdout.
@@ -42,7 +42,7 @@ Status: PASS. Verified headless.
 
 Method: a throwaway `-s` script built a `Shader` with `shader_type canvas_item;`, a `group_uniforms L03_fbm;` line, two `uniform` declarations under it (`l3_fbm_octaves`, `l3_fbm_gain`), a minimal `fragment()`, then called `get_shader_uniform_list()`.
 
-Result: `uniform_count=2`, exit 0. Confirms the B3-resolution token (`group_uniforms L<position>_<function>;`, e.g. `L03_fbm`) compiles on 4.6.2, consistent with the planner's earlier verification (`docs/PLAN.md`, Verified engine facts).
+Result: `uniform_count=2`, exit 0. Confirms the B3-resolution token (`group_uniforms L<position>_<function>;`, e.g. `L03_fbm`) compiles on 4.6.2, consistent with the planner's earlier verification (`docs/dev/PLAN.md`, Verified engine facts).
 
 Script used (not committed, throwaway):
 
@@ -94,7 +94,7 @@ property immediately and the object's undo history recorded an undo step.
 
 Status: PASS. Verified in a real editor session (see "Fix-pass 3 update" above).
 Re-run for fix-pass 3; the fix-pass 2 run used a `ColorRect`, which did not
-match `docs/PLAN.md:74`'s requirement of a `TextureRect`.
+match `docs/dev/PLAN.md:74`'s requirement of a `TextureRect`.
 
 Method: `Control` dock added via `add_control_to_dock(DOCK_SLOT_RIGHT_UL, ...)`
 holding a `SubViewport` (`render_target_update_mode = UPDATE_ALWAYS`, size

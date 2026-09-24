@@ -2,7 +2,7 @@
 
 Status: reviewed
 
-Source: `C:/Users/atk67/Documents/goshade-turbo/docs/DESIGN.md`.
+Source: `C:/Users/atk67/Documents/goshade-turbo/docs/dev/DESIGN.md`.
 
 User-reported problems: long vertical menus and an undersized preview. User requirement: someone who has never used a shader can choose an effect, change it through clearly named controls, and export it.
 
@@ -32,9 +32,9 @@ Numbered in interview order. Owner is the user unless marked as an implementatio
 
 5. Conversion visibility: show a persistent conversion label both beside a connected input and beside any existing-layer or add-new candidate that requires conversion. Use `field -> color: grayscale` and `color -> field: luminance`. Styling is neutral. Labels remain visible without hovering. The retained conversion contract applies to manifest inputs and the field-kind warp inputs; slot filtering must include opposite-kind candidates that codegen can convert. Beat: silent conversion or tooltip-only explanations.
 
-6. Error locations: refused edits display their reason beside the initiating control and register no undo action. A control-local refusal clears only when that control completes a valid edit, its destination is removed, or the active stack is replaced. Codegen errors appear above the preview and remain until a later codegen succeeds for the active stack. A successful control edit does not clear an unrelated codegen error, and a successful codegen does not clear an unrelated control refusal. When retaining a previous successful render from the same active stack, label it Showing last successful preview. Beat: one shared message label whose meaning and lifetime depend on the last action. Superseded 2026-09-15 for file-operation messages: shader tabs phase 5 keeps Open/Save/Export/Recipes/Preview messages per document and re-shows them on tab activation (`docs/SHADER_TABS_reviewed.md` decision 8).
+6. Error locations: refused edits display their reason beside the initiating control and register no undo action. A control-local refusal clears only when that control completes a valid edit, its destination is removed, or the active stack is replaced. Codegen errors appear above the preview and remain until a later codegen succeeds for the active stack. A successful control edit does not clear an unrelated codegen error, and a successful codegen does not clear an unrelated control refusal. When retaining a previous successful render from the same active stack, label it Showing last successful preview. Beat: one shared message label whose meaning and lifetime depend on the last action. Superseded 2026-09-15 for file-operation messages: shader tabs phase 5 keeps Open/Save/Export/Recipes/Preview messages per document and re-shows them on tab activation (`docs/dev/SHADER_TABS_reviewed.md` decision 8).
 
-7. Undo scope: stack edits remain in `EditorUndoRedoManager`, including stack replacement and recipe loading. Layer selection, individual-layer preview, preview image/preset, picker state, start-surface state, and panel resizing stay outside undo history. Compound add operations record layer creation, initialized inputs, destination wiring, and any required output assignment as one action. Beat: requiring undo presses to traverse navigation and viewing changes before reverting an edit. Superseded 2026-09-15: shader tabs phase 2 moved every stack action onto a per-document `UndoRedo` owned by `GSTDocument` (`docs/SHADER_TABS_reviewed.md` decisions 7 and 12); the rest of this decision (what stays outside undo, compound add) still holds.
+7. Undo scope: stack edits remain in `EditorUndoRedoManager`, including stack replacement and recipe loading. Layer selection, individual-layer preview, preview image/preset, picker state, start-surface state, and panel resizing stay outside undo history. Compound add operations record layer creation, initialized inputs, destination wiring, and any required output assignment as one action. Beat: requiring undo presses to traverse navigation and viewing changes before reverting an edit. Superseded 2026-09-15: shader tabs phase 2 moved every stack action onto a per-document `UndoRedo` owned by `GSTDocument` (`docs/dev/SHADER_TABS_reviewed.md` decisions 7 and 12); the rest of this decision (what stays outside undo, compound add) still holds.
 
 8. Main allocation: default to `60%` editing and `40%` preview, with a draggable divider. These percentages apply to the available plugin panel after Godot's surrounding UI is accounted for. Both sides receive measured minimum widths; the narrow-layout rule activates before either side falls below its minimum. Beat: the proposed equal split and a preview receiving only the width left over from editing controls.
 
@@ -131,7 +131,7 @@ Picker open:
 
 ## Verification and implementation checks
 
-Verified by reading the current UI, model, codegen, and smoke-test code, plus `C:/Users/atk67/Documents/goshade-turbo/docs/EDITOR_SMOKE.md`:
+Verified by reading the current UI, model, codegen, and smoke-test code, plus `C:/Users/atk67/Documents/goshade-turbo/docs/dev/EDITOR_SMOKE.md`:
 
 - The current UI has separate stack, inspector, and preview columns; the preview has no explicit minimum size in its scene.
 - The current main-screen root is a vertical child with minimum size `959x181`; its two built-in sibling screens use horizontal expand/fill size flags while the plugin root does not. The layout implementation must give the root matching expansion flags before measuring split allocations.

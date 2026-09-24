@@ -1,6 +1,6 @@
 # GoShade Turbo v0.2: design
 
-Status: decision board drafted 2026-09-16 from the v0.1 gap audit, user approved every recommendation the same day. Not yet grilled through `/claudhd:design`; not yet reviewed. Decision 34 added 2026-09-21 (stack shape locked, VisualShader trial evidence). Decision 35 added 2026-09-22 (dependency marks in the stack list). Extends `docs/DESIGN.md`. Decision numbers continue from 22. Every v0.1 decision stays in force unless a decision below names it.
+Status: decision board drafted 2026-09-16 from the v0.1 gap audit, user approved every recommendation the same day. Not yet grilled through `/claudhd:design`; not yet reviewed. Decision 34 added 2026-09-21 (stack shape locked, VisualShader trial evidence). Decision 35 added 2026-09-22 (dependency marks in the stack list). Extends `docs/dev/DESIGN.md`. Decision numbers continue from 22. Every v0.1 decision stays in force unless a decision below names it.
 
 Roadmap item: `ROADMAP.md` Next, "GoShade Turbo v0.2". Done when the release checklist below is all ticked.
 

@@ -10,14 +10,14 @@ Every item in Next/Later/Shipped/Non-goals carries a stable, generated `r-MMDD-N
 
 The intent the active thread is currently serving (usually one, sometimes none). NOW.md holds the actual step-by-step; this is just the roadmap's pointer at what is live - it echoes whichever item below is active (same id, no id of its own), or says nothing is in flight.
 
-- GoShade Turbo v0.2 (design mode, grilling `docs/V0_2_DESIGN.md`) `r-0916-1`
+- GoShade Turbo v0.2 (design mode, grilling `docs/dev/V0_2_DESIGN.md`) `r-0916-1`
 
 ## Next
 
 Committed and ordered, on-deck after Now. Each is a real intent you mean to build, not a someday-maybe. Carry a one-line "done" so it is ready to activate when its turn comes, not re-litigated.
 
-- [x] Fix the 20 pre-existing `tests/run_codegen_tests.gd` unit failures (`generative/clock` shader compile error plus library-index counts); overruled out of shader tabs phase 8 review round 1 as plan-external baseline - done: `GST tests: 21 file(s), 145 test method(s), 0 failure(s)` on 4.4, 4.6.2, 4.7 (2026-09-15); `run_render_checks: PASS, 81 stack(s) checked` on 4.4 Compatibility; see `docs/EDITOR_SMOKE.md` "Unit failures fixed 2026-09-15" `r-0914-1`
-- [ ] GoShade Turbo v0.2 - one schema bump carrying layer ops (duplicate, rename, bypass), texture param plus `source/image`, param links (base plus amount, decisions 29 and 30), `custom` layer with save-as-library-entry, user recipes folder - done: `docs/V0_2_DESIGN.md` release checklist all ticked `r-0916-1`
+- [x] Fix the 20 pre-existing `tests/run_codegen_tests.gd` unit failures (`generative/clock` shader compile error plus library-index counts); overruled out of shader tabs phase 8 review round 1 as plan-external baseline - done: `GST tests: 21 file(s), 145 test method(s), 0 failure(s)` on 4.4, 4.6.2, 4.7 (2026-09-15); `run_render_checks: PASS, 81 stack(s) checked` on 4.4 Compatibility; see `docs/dev/EDITOR_SMOKE.md` "Unit failures fixed 2026-09-15" `r-0914-1`
+- [ ] GoShade Turbo v0.2 - one schema bump carrying layer ops (duplicate, rename, bypass), texture param plus `source/image`, param links (base plus amount, decisions 29 and 30), `custom` layer with save-as-library-entry, user recipes folder - done: `docs/dev/V0_2_DESIGN.md` release checklist all ticked `r-0916-1`
 
 ## Later
 
@@ -29,7 +29,7 @@ Committed but not soon. Things you know you will do, just not next. Promote to N
 
 Delivered, newest first. Move an intent here when its work lands, with a one-line note of what shipped.
 
-- GoShade Turbo v0.1 - release checklist in `docs/DESIGN.md` all ticked 2026-09-20; tag v0.1.0 at 85c2762, GitHub release with goshade_turbo-0.1.0.zip `r-0907-1`
+- GoShade Turbo v0.1 - release checklist in `docs/dev/DESIGN.md` all ticked 2026-09-20; tag v0.1.0 at 85c2762, GitHub release with goshade_turbo-0.1.0.zip `r-0907-1`
 - (most recent shipped intent) `r-0907-3`
 
 ## Non-goals (decided, not "later")
@@ -37,4 +37,4 @@ Delivered, newest first. Move an intent here when its work lands, with a one-lin
 Directions you have deliberately chosen not to take, each with the one-line why, so they stop coming back as ideas.
 
 - (a deliberately-killed direction) - why: (one line) `r-0907-4`
-- Free-form node graph (forward references, arbitrary wiring, inline expression node, canvas editor) - why: converges on Godot VisualShader with a worse skin and loses the stack's canonical order, one-line header, valid-by-construction slots and randomize; owner VisualShader trial 2026-09-21 recorded in `docs/V0_2_DESIGN.md` decision 34 `r-0921-1`
+- Free-form node graph (forward references, arbitrary wiring, inline expression node, canvas editor) - why: converges on Godot VisualShader with a worse skin and loses the stack's canonical order, one-line header, valid-by-construction slots and randomize; owner VisualShader trial 2026-09-21 recorded in `docs/dev/V0_2_DESIGN.md` decision 34 `r-0921-1`
