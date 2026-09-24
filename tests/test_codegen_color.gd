@@ -62,9 +62,12 @@ func test_source_entries_have_empty_code_and_emit_no_stray_comments() -> void:
 		stack.output_color = layer.id
 		var code: String = GSTCodegen.generate(stack, lib)
 		var body_lines: PackedStringArray = code.split("\n")
-		# Lines 0-1 are the header block (license notice, stack header), both
-		# "//" comments (_header_lines). No other line may carry a "//" comment.
-		for i: int in range(2, body_lines.size()):
+		# Everything through the "// stack:" line is the header block
+		# (_header_lines), all "//" comments. No later line may carry one.
+		var header_end: int = 0
+		while header_end < body_lines.size() and not body_lines[header_end].begins_with(GSTHeader.HEADER_PREFIX):
+			header_end += 1
+		for i: int in range(header_end + 1, body_lines.size()):
 			var trimmed: String = body_lines[i].strip_edges()
 			assert_false(trimmed.begins_with("//"), "%s: no stray '//' comment outside the header block (line %d: %s)" % [source_id, i, trimmed])
 

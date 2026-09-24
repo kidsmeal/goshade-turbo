@@ -105,10 +105,9 @@ func test_no_warp_axes_emits_neither_warp_term_nor_warp_strength_uniform() -> vo
 
 	var code: String = GSTCodegen.generate(stack, lib)
 
-	# Lines 0-1 are the header block (license notice, stack header); the stack
-	# header always serializes the coord block's "warp_strength" JSON key, so
-	# the substring check is scoped to everything after the header block.
-	var body: String = "\n".join(code.split("\n").slice(2))
+	# The stack header always serializes the coord block's "warp_strength"
+	# JSON key, so the substring check is scoped to the body after it.
+	var body: String = GSTOverwriteCheck.find_header_line(code)["body"]
 	assert_false(body.contains("warp_strength"), "no warp axis is set, so no warp_strength uniform or term is emitted")
 	assert_true(GSTShaderCompile.compiles(code), "a generator with no warp axes still compiles")
 

@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-24
+- drop design-doc ids from user-facing refusal messages `90d59dd`
 - README: describe input dropdowns as they behave `3d8d792`
 - move ClauDHD state files to docs/dev `a771428`
 - README: put metaball_portal back in the gallery `db4cf09`
