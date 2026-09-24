@@ -56,7 +56,10 @@ func open_choices(heading: String, rows: Array[Dictionary], has_tabs: bool = fal
 	set_refusal("")
 	set_choices(rows)
 	show()
-	_search.call_deferred("grab_focus")
+	# On a device with an on-screen keyboard, focusing the search field raises
+	# the keyboard over the list; there the user taps the search field to type.
+	if not DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD):
+		_search.call_deferred("grab_focus")
 
 
 ## Replaces the owner's eligible rows while preserving query and tab state.
