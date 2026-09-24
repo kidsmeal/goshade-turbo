@@ -51,6 +51,8 @@ func run(plugin: EditorPlugin) -> void:
 	var library: GSTLibrary = panel.get_library()
 	var history: UndoRedo = panel.get_watched_history()
 	var start_history_count: int = history.get_history_count()
+	var fire_loaded: Dictionary = GSTStackIO.load("res://addons/goshade_turbo/recipes/fire.tres", library)
+	var fire_layers: int = (fire_loaded["stack"] as GSTStack).layers.size() if fire_loaded["ok"] else -1
 	var recipe_names: Array[String] = _recipe_names()
 	var cards_ok: bool = not recipe_names.is_empty()
 	for recipe_name: String in recipe_names:
@@ -75,7 +77,7 @@ func run(plugin: EditorPlugin) -> void:
 			await _frames(6)
 			history = panel.get_watched_history()
 			var entry_image: Image = panel.get_preview().get_viewport_image()
-			_check("entry_recipe", not panel.is_start_screen_visible() and panel.get_stack().layers.size() == 5 and history.get_history_count() == 0 and GSTShaderCompile.compiles(panel.get_shader_material().shader.code) and _image_is_nonuniform(entry_image), "start=%s layers=%d history=%d compile=%s nonuniform=%s" % [panel.is_start_screen_visible(), panel.get_stack().layers.size(), history.get_history_count(), GSTShaderCompile.compiles(panel.get_shader_material().shader.code), _image_is_nonuniform(entry_image)])
+			_check("entry_recipe", not panel.is_start_screen_visible() and panel.get_stack().layers.size() == fire_layers and history.get_history_count() == 0 and GSTShaderCompile.compiles(panel.get_shader_material().shader.code) and _image_is_nonuniform(entry_image), "start=%s layers=%d history=%d compile=%s nonuniform=%s" % [panel.is_start_screen_visible(), panel.get_stack().layers.size(), history.get_history_count(), GSTShaderCompile.compiles(panel.get_shader_material().shader.code), _image_is_nonuniform(entry_image)])
 		"empty":
 			panel.get_create_empty_button().pressed.emit()
 			await _frames(3)
@@ -94,7 +96,7 @@ func run(plugin: EditorPlugin) -> void:
 			panel._open_dialog.file_selected.emit(entry_stack_path)
 			await _frames(6)
 			history = panel.get_watched_history()
-			_check("entry_open", entry_saved["ok"] and dialog_visible and not panel.is_start_screen_visible() and panel.get_stack().layers.size() == 5 and panel.get_current_path() == entry_stack_path and history.get_history_count() == 0 and GSTShaderCompile.compiles(panel.get_shader_material().shader.code), "saved=%s dialog=%s start=%s layers=%d path='%s' history=%d" % [entry_saved["ok"], dialog_visible, panel.is_start_screen_visible(), panel.get_stack().layers.size(), panel.get_current_path(), history.get_history_count()])
+			_check("entry_open", entry_saved["ok"] and dialog_visible and not panel.is_start_screen_visible() and panel.get_stack().layers.size() == fire_layers and panel.get_current_path() == entry_stack_path and history.get_history_count() == 0 and GSTShaderCompile.compiles(panel.get_shader_material().shader.code), "saved=%s dialog=%s start=%s layers=%d path='%s' history=%d" % [entry_saved["ok"], dialog_visible, panel.is_start_screen_visible(), panel.get_stack().layers.size(), panel.get_current_path(), history.get_history_count()])
 		_:
 			_check("entry_variant", false, "GST_UI_COMPLETE_ENTRY must be recipe, empty, or open; got '%s'" % entry_variant)
 			_cleanup([entry_stack_path])
@@ -143,7 +145,7 @@ func run(plugin: EditorPlugin) -> void:
 	history = panel.get_watched_history()
 	var recipe_stack: GSTStack = panel.get_stack()
 	var first_image: Image = panel.get_preview().get_viewport_image()
-	var recipe_rendered: bool = recipe_stack.layers.size() == 5 and not panel.is_start_screen_visible() and not panel.is_picker_open() and panel.get_shader_material().shader != null and GSTShaderCompile.compiles(panel.get_shader_material().shader.code) and _image_is_nonuniform(first_image)
+	var recipe_rendered: bool = recipe_stack.layers.size() == fire_layers and not panel.is_start_screen_visible() and not panel.is_picker_open() and panel.get_shader_material().shader != null and GSTShaderCompile.compiles(panel.get_shader_material().shader.code) and _image_is_nonuniform(first_image)
 	_check("recipe_first_render", recipe_rendered and doc_recipe != doc_before_recipe and history.get_history_count() == 0, "layers=%d new_document=%s history=%d compile=%s nonuniform=%s" % [recipe_stack.layers.size(), doc_recipe != doc_before_recipe, history.get_history_count(), panel.get_shader_material().shader != null and GSTShaderCompile.compiles(panel.get_shader_material().shader.code), _image_is_nonuniform(first_image)])
 	panel.activate_document(doc_before_recipe)
 	await _frames(4)
@@ -152,7 +154,7 @@ func run(plugin: EditorPlugin) -> void:
 	await _frames(5)
 	history = panel.get_watched_history()
 	recipe_stack = panel.get_stack()
-	_check("recipe_redo", recipe_stack.layers.size() == 5 and panel.get_codegen_message_label().text.is_empty() and not panel.get_randomize_button().disabled, "layers=%d codegen='%s' randomize_disabled=%s" % [recipe_stack.layers.size(), panel.get_codegen_message_label().text, panel.get_randomize_button().disabled])
+	_check("recipe_redo", recipe_stack.layers.size() == fire_layers and panel.get_codegen_message_label().text.is_empty() and not panel.get_randomize_button().disabled, "layers=%d codegen='%s' randomize_disabled=%s" % [recipe_stack.layers.size(), panel.get_codegen_message_label().text, panel.get_randomize_button().disabled])
 
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
 	inspector.set_section_states({})
@@ -299,7 +301,7 @@ func run(plugin: EditorPlugin) -> void:
 	history.undo()
 	await _frames(5)
 	recipe_stack = panel.get_stack()
-	_check("broken_installation_undo", recipe_stack.layers.size() == 5 and panel.get_codegen_message_label().text.is_empty() and not panel.is_start_screen_visible() and GSTShaderCompile.compiles(panel.get_shader_material().shader.code), "layers=%d error='%s' start=%s" % [recipe_stack.layers.size(), panel.get_codegen_message_label().text, panel.is_start_screen_visible()])
+	_check("broken_installation_undo", recipe_stack.layers.size() == fire_layers and panel.get_codegen_message_label().text.is_empty() and not panel.is_start_screen_visible() and GSTShaderCompile.compiles(panel.get_shader_material().shader.code), "layers=%d error='%s' start=%s" % [recipe_stack.layers.size(), panel.get_codegen_message_label().text, panel.is_start_screen_visible()])
 
 	var stack_path: String = "user://gst_ui_complete_stack.tres"
 	var export_path: String = "user://gst_ui_complete_shader.gdshader"
@@ -354,7 +356,7 @@ func run(plugin: EditorPlugin) -> void:
 	panel._open_dialog.hide()
 	panel._open_dialog.file_selected.emit(stack_path)
 	await _frames(5)
-	_check("open_saved_stack", saved_open_dialog_visible and panel.get_stack().layers.size() == 5 and panel.get_current_path() == stack_path and GSTShaderCompile.compiles(panel.get_shader_material().shader.code) and not panel.is_start_screen_visible(), "dialog=%s layers=%d path='%s' compile=%s start=%s" % [saved_open_dialog_visible, panel.get_stack().layers.size(), panel.get_current_path(), GSTShaderCompile.compiles(panel.get_shader_material().shader.code), panel.is_start_screen_visible()])
+	_check("open_saved_stack", saved_open_dialog_visible and panel.get_stack().layers.size() == fire_layers and panel.get_current_path() == stack_path and GSTShaderCompile.compiles(panel.get_shader_material().shader.code) and not panel.is_start_screen_visible(), "dialog=%s layers=%d path='%s' compile=%s start=%s" % [saved_open_dialog_visible, panel.get_stack().layers.size(), panel.get_current_path(), GSTShaderCompile.compiles(panel.get_shader_material().shader.code), panel.is_start_screen_visible()])
 
 	fbm = _find_layer(panel.get_stack(), "generative/fbm")
 	panel.get_stack_list().select_layer(fbm.id)
