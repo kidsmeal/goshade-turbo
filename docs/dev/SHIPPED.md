@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-24
+- fix ui_complete smoke fire layer count to match the recipe `2b16aec`
 - GoShade Turbo 0.1.4
 - sandbox: remove stale copies of the bundled recipes `47e936f`
 - docs: note Android editor support `497ff59`
