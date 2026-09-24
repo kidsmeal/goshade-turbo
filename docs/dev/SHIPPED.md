@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-24
+- move ClauDHD state files to docs/dev `a771428`
 - README: put metaball_portal back in the gallery `db4cf09`
 - README: show the portal shader on a GPUParticles2D vortex `fd45f13`
 - add a vortex portal gif and its frame recorder `4b77f2b`

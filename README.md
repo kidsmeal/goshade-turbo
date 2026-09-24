@@ -29,7 +29,7 @@ Some of the 13 bundled recipes, rendered by the plugin on its default preview sp
 ## What it does
 - Starts an effect from an empty stack or from one of 13 bundled recipes. Every layer stays editable.
 - Builds an effect as an ordered list of layers. Each layer is one function: a noise, a shape, a gradient, a blend, a filter.
-- Connects layers through dropdowns. An input lists only the layers below it that produce the right type, so every stack compiles.
+- Connects layers through dropdowns. An input lists the layers below it; field and color mismatches convert automatically.
 - Updates a live preview on a sprite, a text label or a full rect while you drag sliders.
 - Randomize rerolls every layer's sliders within their ranges, for exploring variations of a recipe.
 - Exports one `.gdshader`. A one-line header comment carries the whole stack, so opening the file restores the layers.
