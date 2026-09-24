@@ -9,12 +9,18 @@ extends Control
 
 const SHADER_DIR: String = "res://sandbox/mobile/shaders"
 const SPRITE: Texture2D = preload("res://addons/goshade_turbo/assets/preview_default.png")
-const ShaderList = preload("res://sandbox/mobile/shader_list.gd")
+const SHADER_LIST_PATH: String = "res://sandbox/mobile/shader_list.gd"
 const TILE: int = 128
 const SETTLE_FRAMES: int = 6
 
 
 func _ready() -> void:
+	# shader_list.gd is generated and gitignored; a preload would fail to parse
+	# in a fresh clone.
+	if not ResourceLoader.exists(SHADER_LIST_PATH):
+		print("MOBILE SUMMARY FAIL run build_mobile_shaders.gd first")
+		return
+	var stems: Array = load(SHADER_LIST_PATH).STEMS
 	var background: ColorRect = ColorRect.new()
 	background.color = Color(0.11, 0.11, 0.13)
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -29,7 +35,7 @@ func _ready() -> void:
 	])
 	var passed: int = 0
 	var failed: PackedStringArray = PackedStringArray()
-	for stem: String in ShaderList.STEMS:
+	for stem: String in stems:
 		var viewport: SubViewport = SubViewport.new()
 		viewport.size = Vector2i(TILE, TILE)
 		viewport.transparent_bg = true
@@ -69,4 +75,4 @@ func _ready() -> void:
 		else:
 			failed.append(stem)
 			print("MOBILE %s FAIL %s" % [stem, reasons])
-	print("MOBILE SUMMARY %s %d/%d failed=%s" % ["PASS" if failed.is_empty() else "FAIL", passed, ShaderList.STEMS.size(), failed])
+	print("MOBILE SUMMARY %s %d/%d failed=%s" % ["PASS" if failed.is_empty() else "FAIL", passed, stems.size(), failed])
