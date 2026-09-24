@@ -26,7 +26,7 @@ Godot editor plugin for 2D shaders on sprites, UI and any other `CanvasItem`, bu
 Some of the 13 bundled recipes, rendered by the plugin on its default preview sprite at `TIME = 2.0`. Each one opens as an editable stack.
 
 ## What it does
-- Opens any of 13 bundled recipes as a starting point, with every layer editable.
+- Starts an effect from an empty stack or from one of 13 bundled recipes. Every layer stays editable.
 - Builds an effect as an ordered list of layers. Each layer is one function: a noise, a shape, a gradient, a blend, a filter.
 - Connects layers through dropdowns. An input lists only the layers below it that produce the right type, so every stack compiles.
 - Updates a live preview on a sprite, a text label or a full rect while you drag sliders.

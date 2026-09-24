@@ -3,7 +3,7 @@
 Godot editor plugin for 2D shaders on sprites, UI and any other `CanvasItem`, built without a node graph or shader code. Stack layers in a list, tune sliders against a live preview, export a plain `.gdshader`.
 
 ## What it does
-- Opens any of 13 bundled recipes from `recipes/` as a starting point, with every layer editable.
+- Starts an effect from an empty stack or from one of 13 bundled recipes in `recipes/`. Every layer stays editable.
 - Builds an effect as an ordered list of layers. Each layer is one function: a noise, a shape, a gradient, a blend, a filter.
 - Connects layers through dropdowns. An input lists only the layers below it that produce the right type, so every stack compiles.
 - Updates a live preview on a sprite, a text label or a full rect while you drag sliders.
