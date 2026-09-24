@@ -5,6 +5,8 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-24
+- GoShade Turbo 0.1.2
+- README: cut the AI-use line to what was AI-written `8e4e6fd`
 - credit the four handwritten library entries to kidsmeal `c1ee595`
 - README: disclose AI authorship of code, tests and docs `0a0bf5b`
 - ROADMAP: record v0.1.1 as the first published release `f180086`
