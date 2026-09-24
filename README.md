@@ -11,27 +11,19 @@ Godot editor plugin for 2D shaders on sprites, UI and any other `CanvasItem`, bu
 
 <table>
 <tr>
-<td align="center"><img src="docs/media/recipes/fire.png" width="150" alt="fire recipe: orange and yellow flames filling the tile"><br><code>fire</code></td>
-<td align="center"><img src="docs/media/recipes/flame.png" width="150" alt="flame recipe: a single red-to-yellow flame tongue"><br><code>flame</code></td>
-<td align="center"><img src="docs/media/recipes/water.png" width="150" alt="water recipe: pale blue warped caustic pattern"><br><code>water</code></td>
-<td align="center"><img src="docs/media/recipes/metaball_portal.png" width="150" alt="metaball_portal recipe: blue and red swirl with star specks"><br><code>metaball_portal</code></td>
-<td align="center"><img src="docs/media/recipes/glow.png" width="150" alt="glow recipe: soft yellow glow centered over the sprite"><br><code>glow</code></td>
+<td align="center"><img src="docs/media/recipes/flame.png" width="170" alt="flame recipe: a single red-to-yellow flame tongue"><br><code>flame</code></td>
+<td align="center"><img src="docs/media/recipes/glow.png" width="170" alt="glow recipe: soft yellow glow centered over the sprite"><br><code>glow</code></td>
+<td align="center"><img src="docs/media/recipes/dissolve.png" width="170" alt="dissolve recipe: sprite shapes eaten away by noise"><br><code>dissolve</code></td>
+<td align="center"><img src="docs/media/recipes/hologram.png" width="170" alt="hologram recipe: sprite tinted with horizontal scanlines"><br><code>hologram</code></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/media/recipes/dissolve.png" width="150" alt="dissolve recipe: sprite shapes eaten away by noise"><br><code>dissolve</code></td>
-<td align="center"><img src="docs/media/recipes/hologram.png" width="150" alt="hologram recipe: sprite tinted with horizontal scanlines"><br><code>hologram</code></td>
-<td align="center"><img src="docs/media/recipes/outline.png" width="150" alt="outline recipe: sprite shapes with a dark outline"><br><code>outline</code></td>
-<td align="center"><img src="docs/media/recipes/sprite_holographic.png" width="150" alt="sprite_holographic recipe: rainbow diagonal bands across the sprite"><br><code>sprite_holographic</code></td>
-<td align="center"><img src="docs/media/recipes/sprite_foil.png" width="150" alt="sprite_foil recipe: faint foil sheen over the sprite"><br><code>sprite_foil</code></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/media/recipes/sprite_opal.png" width="150" alt="sprite_opal recipe: pink, green and blue opal color shift"><br><code>sprite_opal</code></td>
-<td align="center"><img src="docs/media/recipes/sprite_pearl.png" width="150" alt="sprite_pearl recipe: soft pale pearl sheen"><br><code>sprite_pearl</code></td>
-<td align="center"><img src="docs/media/recipes/sprite_oil_slick.png" width="150" alt="sprite_oil_slick recipe: dark iridescent oil film"><br><code>sprite_oil_slick</code></td>
+<td align="center"><img src="docs/media/recipes/outline.png" width="170" alt="outline recipe: sprite shapes with a dark outline"><br><code>outline</code></td>
+<td align="center"><img src="docs/media/recipes/sprite_holographic.png" width="170" alt="sprite_holographic recipe: rainbow diagonal bands across the sprite"><br><code>sprite_holographic</code></td>
+<td align="center"><img src="docs/media/recipes/sprite_oil_slick.png" width="170" alt="sprite_oil_slick recipe: dark iridescent oil film"><br><code>sprite_oil_slick</code></td>
 </tr>
 </table>
 
-Bundled recipes, rendered by the plugin on its default preview sprite at `TIME = 2.0`. Each one opens as an editable stack.
+Some of the 13 bundled recipes, rendered by the plugin on its default preview sprite at `TIME = 2.0`. Each one opens as an editable stack.
 
 ## What it does
 - Opens any of 13 bundled recipes as a starting point, with every layer editable.
