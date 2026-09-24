@@ -9,8 +9,12 @@ concurrency:
   group: mirror
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   mirror:
+    if: github.repository == 'kidsmeal/goshade-turbo'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
