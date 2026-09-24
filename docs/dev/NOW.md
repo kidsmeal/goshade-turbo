@@ -47,7 +47,6 @@ New idea mid-task: `/claudhd:idea <text>` records it in IDEAS.md so you can keep
 
 ## Loose ends
 
-- Astra reviewer measurement (user decision 2026-09-09): `.gantry/models.json` routes design-reviewer and phase-reviewer to codex `gpt-6-astra`; implementer and planner stay native. Protocol: record the Codex weekly allowance percentage before the next plan's first review and after its last, and sum reviewer tokens from `~/.codex/sessions` for the same window. Decide the ChatGPT tier on that delta.
 - Release checklist: one item open, `docs/dev/DESIGN.md` line 155 (user tuning pass). All other items ticked with evidence.
 - Picker text slicing: resolved 2026-09-16 as upstream godotengine/godot#83975 (editor render area shrinks on Windows 11 hybrid NVIDIA laptops, black bar at the bottom). Not a plugin defect. Details in `docs/dev/EDITOR_SMOKE.md` "Intermittent picker text slicing".
 - `sandbox/stacks/clouds.tres` (moved from repo root in `017b936`) is now picked up by `tests/run_render_checks.gd`; next GPU render run reports 79 stacks, not 78.

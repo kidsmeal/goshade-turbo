@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "paths": {
+    "state": "docs/dev",
+    "audit": "docs/dev",
+    "design": "docs/dev"
+  }
+}

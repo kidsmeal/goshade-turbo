@@ -2,7 +2,7 @@
 
 Source design: `docs/dev/SHADER_TABS_reviewed.md`.
 
-Conventions read: user-provided `AGENTS.md` instructions, `docs/dev/DESIGN.md`, `docs/dev/EDITOR_UI_DESIGN_reviewed.md`, `NOW.md`, and relevant evidence in `docs/dev/EDITOR_SMOKE.md`. No repository convention/style/index/architecture file was found. Implementation conventions are inferred from the existing typed GDScript, `GST` classes, `GSTStackIO` result dictionaries, native editor controls, and editor-smoke dispatch.
+Conventions read: user-provided `AGENTS.md` instructions, `docs/dev/DESIGN.md`, `docs/dev/EDITOR_UI_DESIGN_reviewed.md`, `docs/dev/NOW.md`, and relevant evidence in `docs/dev/EDITOR_SMOKE.md`. No repository convention/style/index/architecture file was found. Implementation conventions are inferred from the existing typed GDScript, `GST` classes, `GSTStackIO` result dictionaries, native editor controls, and editor-smoke dispatch.
 
 ## Summary
 
@@ -40,7 +40,7 @@ Verified integration points: `plugin.gd` injects the shared editor manager; `GST
 - Expected-error fixtures must identify the exact expected diagnostic. Unexpected script/engine errors fail verification even with exit `0`.
 - The documented Godot `4.4.0` first-import progress-dialog diagnostic is a separate engine limitation; do not label that import error-free.
 - Preserve the user's `weird1.tres`, `weird2.tres`, existing `glow.png.import` changes, and running editor. Use isolated test project/settings/recovery paths and stop only owned processes.
-- Verified prior unit baseline is `145` methods. `NOW.md` expects `79` rendered stacks after the Clouds move; that count remains unverified until run. Record actual discovered counts without dropping cases.
+- Verified prior unit baseline is `145` methods. `docs/dev/NOW.md` expects `79` rendered stacks after the Clouds move; that count remains unverified until run. Record actual discovered counts without dropping cases.
 
 ## Phase 1: Prove the minimum-version editor mechanisms
 
@@ -116,7 +116,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 - `tests/gst_editor_ui_complete_smoke.gd`.
 - `tests/gst_editor_native_undo_smoke.gd` (new).
 - `docs/dev/EDITOR_SMOKE.md`.
-- `NOW.md` (ClauDHD build bookkeeping only: the Active thread next-action lines; no phase content).
+- `docs/dev/NOW.md` (ClauDHD build bookkeeping only: the Active thread next-action lines; no phase content).
 - `tests/gst_editor_native_undo_smoke.gd.uid` (Godot-generated companion for the new test script).
 - `addons/goshade_turbo/model/gst_layer.gd` (param-key presence/erase accessors needed by absent-key undo restoration; added at review round 1).
 
@@ -166,7 +166,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 - `tests/gst_editor_ui_complete_smoke.gd`.
 - `tests/gst_editor_ui_labels_smoke.gd`.
 - `docs/dev/EDITOR_SMOKE.md`.
-- `NOW.md` (ClauDHD build bookkeeping only: the Active thread next-action lines; no phase content).
+- `docs/dev/NOW.md` (ClauDHD build bookkeeping only: the Active thread next-action lines; no phase content).
 
 **Implementation:**
 
@@ -357,7 +357,7 @@ Round-1 review verdict `FAIL` with six required fixes (`.gantry/review-round.jso
 - `docs/dev/EDITOR_SMOKE.md`.
 - `tests/gst_editor_tabs_host_smoke.gd` (new, selector `tabs_host`) and its generated `.uid`.
 - `addons/goshade_turbo/ui/gst_inspector_column.gd` and `addons/goshade_turbo/ui/gst_main_panel.gd` (phase 2 defects returned by this phase's matrix, fixed here and reviewed against phase 2's contract).
-- `NOW.md` (ClauDHD bookkeeping: the Active thread next-action lines and the Quick fixes lane, which captures chores mid-thread by design), `ROADMAP.md` (the unit-failure intent recorded by the user's fix 8 overrule), `docs/dev/CURRENTNESS_AUDIT.md` (ledger ticks), and this plan's Status line.
+- `docs/dev/NOW.md` (ClauDHD bookkeeping: the Active thread next-action lines and the Quick fixes lane, which captures chores mid-thread by design), `docs/dev/ROADMAP.md` (the unit-failure intent recorded by the user's fix 8 overrule), `docs/dev/CURRENTNESS_AUDIT.md` (ledger ticks), and this plan's Status line.
 - Selector `tabs_proof` (phase 1's mechanism proof, `tests/gst_editor_document_proof.gd`) is superseded verification: phases 2 to 7 replaced each proved mechanism with production code and its own selector, so phase 8's "all new tab selectors" means `tabs_native`, `tabs_documents`, `tabs_ui`, `tabs_files`, `tabs_close`, `tabs_host`, and `tabs_recovery`; `tabs_proof` is exempt.
 
 **Verification:**

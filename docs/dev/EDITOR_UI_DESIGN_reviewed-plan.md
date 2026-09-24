@@ -2,7 +2,7 @@
 
 Source design: `docs/dev/EDITOR_UI_DESIGN_reviewed.md` (`Status: reviewed`).
 
-Conventions read: user-provided `AGENTS.md` instructions, `docs/dev/DESIGN.md`, `docs/dev/PLAN.md`, `docs/dev/EDITOR_SMOKE.md`, `NOW.md`, and `ROADMAP.md`. No repository convention/style/index/architecture files were found. Current code confirms typed GDScript, tabs, double-quoted strings, `snake_case` members/files, `GST`-prefixed class names, `UPPER_SNAKE_CASE` constants, and `@tool` editor scripts. Historical statements in `docs/dev/PLAN.md` about missing code/binaries are superseded by the current tree and final version matrix.
+Conventions read: user-provided `AGENTS.md` instructions, `docs/dev/DESIGN.md`, `docs/dev/PLAN.md`, `docs/dev/EDITOR_SMOKE.md`, `docs/dev/NOW.md`, and `docs/dev/ROADMAP.md`. No repository convention/style/index/architecture files were found. Current code confirms typed GDScript, tabs, double-quoted strings, `snake_case` members/files, `GST`-prefixed class names, `UPPER_SNAKE_CASE` constants, and `@tool` editor scripts. Historical statements in `docs/dev/PLAN.md` about missing code/binaries are superseded by the current tree and final version matrix.
 
 ## Summary
 
@@ -45,7 +45,7 @@ godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd
 - `tests/run_render_checks.gd`, `tests/gst_render_assert.gd`, `tests/gst_shader_compile.gd` (existing render entrypoint/helpers; preserve their checks).
 - Existing discovered suite: `tests/test_codegen_color.gd`, `tests/test_codegen_fieldop.gd`, `tests/test_codegen_generator.gd`, `tests/test_combinations.gd`, `tests/test_coord_space.gd`, `tests/test_filter_input_refusal.gd`, `tests/test_header_roundtrip.gd`, `tests/test_include_walk.gd`, `tests/test_layer_identity.gd`, `tests/test_library_index.gd`, `tests/test_material_sync.gd`, `tests/test_output_block.gd`, `tests/test_overwrite_check.gd`, `tests/test_randomize_range.gd`, `tests/test_recipe_roundtrip.gd`, `tests/test_slot_conversion.gd`, `tests/test_solo_output.gd`, `tests/test_stack_io.gd`, `tests/test_stack_ops.gd`, `tests/test_time_emission.gd`, `tests/test_uniform_names.gd` (run unchanged unless a phase explicitly changes the tested contract).
 - `docs/dev/EDITOR_UI_DESIGN_reviewed-plan.md`, `docs/dev/EDITOR_SMOKE.md`, `docs/dev/RUNTIME_VERIFICATION_QUEUE.md` (phase status and measured evidence, owned by orchestrator).
-- `NOW.md`, `.now/state.json`, `.now/active-thread.json`, `.now/review-log.jsonl`, `.now/last-session.md`, `.now/branches/main.md`, `.now/branches/main.head`, `SHIPPED.md`, `ROADMAP.md` (orchestrator state; use the existing state workflow and current branch equivalents).
+- `docs/dev/NOW.md`, `.now/state.json`, `.now/active-thread.json`, `.now/review-log.jsonl`, `.now/last-session.md`, `.now/branches/main.md`, `.now/branches/main.head`, `docs/dev/SHIPPED.md`, `docs/dev/ROADMAP.md` (orchestrator state; use the existing state workflow and current branch equivalents).
 - Corresponding `.gd.uid` sidecars for scripts created or changed in the phase; asset `.import` sidecars only if intentionally needed.
 - `project.godot` only to restore incidental editor `config/features` churn to the minimum `4.4`; no feature or renderer change is planned.
 
