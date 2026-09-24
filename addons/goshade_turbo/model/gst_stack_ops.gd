@@ -215,7 +215,7 @@ static func validate_slot_assignment(stack: GSTStack, layer_id: StringName, slot
 		if entry.samples_source:
 			return {
 				"ok": false,
-				"reason": "slot %s on layer %s samples a source and cannot be cleared directly (decision 21, B6)" % [slot_name, String(layer_id)],
+				"reason": "slot %s on layer %s samples a source and cannot be cleared directly" % [slot_name, String(layer_id)],
 			}
 		return {"ok": true, "reason": ""}
 
@@ -234,7 +234,7 @@ static func validate_slot_assignment(stack: GSTStack, layer_id: StringName, slot
 		if target_layer.entry != "source/texture" and target_layer.entry != "source/screen":
 			return {
 				"ok": false,
-				"reason": "slot %s on layer %s requires a texture or screen source layer; layer %s (%s) is not a source (decision 21, B6)" % [slot_name, String(layer_id), String(target_id), target_layer.entry],
+				"reason": "slot %s on layer %s requires a texture or screen source layer; layer %s (%s) is not a source" % [slot_name, String(layer_id), String(target_id), target_layer.entry],
 			}
 	return {"ok": true, "reason": ""}
 

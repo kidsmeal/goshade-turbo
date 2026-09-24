@@ -1888,7 +1888,7 @@ func _reopen_shader_path_for(message_doc: GSTDocument, path: String) -> void:
 	if opened == null:
 		return
 	if result["body_differs"]:
-		_set_operation_message_for(opened, "Reopen Shader", "%s reopened: its body differs from a fresh codegen of the header (hand edits detected, decision 8)" % path)
+		_set_operation_message_for(opened, "Reopen Shader", "%s reopened: its body differs from a fresh codegen of the header (hand edits detected)" % path)
 	else:
 		_set_operation_message_for(opened, "Reopen Shader", "")
 

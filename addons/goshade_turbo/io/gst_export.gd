@@ -60,13 +60,13 @@ static func reopen(path: String, library: GSTLibrary) -> Dictionary:
 
 	var found: Dictionary = GSTOverwriteCheck.find_header_line(text)
 	if not found["found"]:
-		return {"ok": false, "stack": null, "reason": "%s has no '// stack:' header (B8)" % path, "body_differs": false}
+		return {"ok": false, "stack": null, "reason": "%s has no '// stack:' header" % path, "body_differs": false}
 
 	var parsed: Dictionary = GSTHeader.parse(found["line"], library)
 	if not parsed["ok"]:
 		return {
 			"ok": false, "stack": null,
-			"reason": "%s header refused: %s (B8)" % [path, parsed["reason"]],
+			"reason": "%s header refused: %s" % [path, parsed["reason"]],
 			"body_differs": false,
 		}
 
