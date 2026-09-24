@@ -4,6 +4,9 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
+### 2026-09-24
+- ci: remove the gitlab mirror workflow `4740dc0`
+
 ### 2026-09-23
 - README: rewrite for users new to shaders `c94dd36`
 - plugin.cfg: match the description to the README intro `be14990`
