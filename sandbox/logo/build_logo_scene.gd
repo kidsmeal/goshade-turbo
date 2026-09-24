@@ -1,7 +1,7 @@
 extends SceneTree
 
 ## Writes sandbox/logo/logo.tscn from scratch:
-## `godot --headless --path . -s res://sandbox/logo/build_logo_scene.gd [-- --font brunoace] [--icon]`
+## `godot --headless --path . -s res://sandbox/logo/build_logo_scene.gd [-- --icon]`
 ## Default font is zendots.
 ## Text SubViewport (square, transparent): two stacked Labels in the chosen
 ## font with a FontVariation shear. Out SubViewport (square, transparent):
@@ -20,7 +20,6 @@ const SCENE_OUT: String = "res://sandbox/logo/logo.tscn"
 const ICON_SCENE_OUT: String = "res://sandbox/logo/logo_icon.tscn"
 const SHADER: String = "res://sandbox/logo/logo.gdshader"
 const FONTS: Dictionary = {
-	"brunoace": "res://sandbox/logo/fonts/BrunoAceSC-Regular.ttf",
 	"zendots": "res://sandbox/logo/fonts/ZenDots-Regular.ttf",
 }
 const SIZE: int = 2048
