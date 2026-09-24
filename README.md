@@ -20,6 +20,7 @@ Godot editor plugin for 2D shaders on sprites, UI and any other `CanvasItem`, bu
 <td align="center"><img src="docs/media/recipes/outline.png" width="170" alt="outline recipe: sprite shapes with a dark outline"><br><code>outline</code></td>
 <td align="center"><img src="docs/media/recipes/sprite_holographic.png" width="170" alt="sprite_holographic recipe: rainbow diagonal bands across the sprite"><br><code>sprite_holographic</code></td>
 <td align="center"><img src="docs/media/recipes/sprite_oil_slick.png" width="170" alt="sprite_oil_slick recipe: dark iridescent oil film"><br><code>sprite_oil_slick</code></td>
+<td align="center"><img src="docs/media/recipes/metaball_portal.png" width="170" alt="metaball_portal recipe: blue and red swirl with star specks"><br><code>metaball_portal</code></td>
 </tr>
 </table>
 
@@ -79,7 +80,7 @@ Build from empty:
 4. In Final output, set Output color to the gradient_map layer and Transparency to Opaque.
 5. Export.
 
-An exported shader works on any `CanvasItem`, including a `Sprite2D` that displays a `SubViewport`. Below, a `GPUParticles2D` vortex renders soft white particles into a `SubViewport` (left). A stack adapted from the `metaball_portal` recipe merges them into one shape with a colored rim (right). Scene and stack: `sandbox/vortex/`.
+An exported shader works on any `CanvasItem`, including a `Sprite2D` that displays a `SubViewport`. Below, a `GPUParticles2D` vortex renders soft white particles into a `SubViewport` (left). A stack adapted from the `metaball_portal` recipe (last tile in the gallery above) merges them into one shape with a colored rim (right). Scene and stack: `sandbox/vortex/`.
 
 ![Left: soft white GPUParticles2D blobs orbiting. Right: the same particles through the portal shader, merged into a black shape with a red and blue rim and white specks](docs/media/vortex_portal.gif)
 

@@ -5,6 +5,8 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-24
+- README: show the portal shader on a GPUParticles2D vortex `fd45f13`
+- add a vortex portal gif and its frame recorder `4b77f2b`
 - add the stack expressiveness test as a design rule `ad739e6`
 - GoShade Turbo 0.1.2
 - README: cut the AI-use line to what was AI-written `8e4e6fd`
