@@ -62,7 +62,13 @@ const RECIPES_DIR: String = "res://addons/goshade_turbo/recipes"
 const LAYOUT_METADATA_SECTION: String = "goshade_turbo/layout"
 const DEFAULT_MAIN_RATIO: float = 0.6
 const DEFAULT_INNER_RATIO: float = 0.42
+## Pixel sizes below are at editor scale 1.0 and are multiplied by
+## EditorInterface.get_editor_scale() where applied; the Android editor runs
+## near 2.5, where unscaled sizes clip tab titles and shrink the preview.
 const PREVIEW_IMAGE_MINIMUM: Vector2 = Vector2(220.0, 180.0)
+const SHADER_TAB_MAX_WIDTH: float = 160.0
+const RECIPE_BUTTON_HEIGHT: float = 48.0
+const ERROR_SCROLL_MIN_HEIGHT: float = 64.0
 const FILE_NEW: int = 0
 const FILE_OPEN: int = 1
 const FILE_SAVE_AS: int = 2
@@ -158,7 +164,10 @@ var _syncing_preview_controls: bool = false
 func _ready() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_preview.custom_minimum_size = PREVIEW_IMAGE_MINIMUM
+	var editor_scale: float = EditorInterface.get_editor_scale()
+	_preview.custom_minimum_size = PREVIEW_IMAGE_MINIMUM * editor_scale
+	_shader_tabs.max_tab_width = int(SHADER_TAB_MAX_WIDTH * editor_scale)
+	_error_scroll.custom_minimum_size.y = ERROR_SCROLL_MIN_HEIGHT * editor_scale
 	_tab_breakpoint = _measure_tab_breakpoint()
 	_main_split.dragged.connect(_on_main_split_dragged)
 	_main_split.resized.connect(_on_editing_area_resized)
@@ -400,7 +409,7 @@ func _build_start_screen() -> void:
 		button.text = recipe_name.replace("_", " ").capitalize()
 		button.tooltip_text = "Open %s as an editable stack." % button.text
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.custom_minimum_size.y = 48.0
+		button.custom_minimum_size.y = RECIPE_BUTTON_HEIGHT * EditorInterface.get_editor_scale()
 		button.clip_text = true
 		button.pressed.connect(open_recipe.bind(recipe_name))
 		_recipe_grid.add_child(button)
