@@ -27,7 +27,7 @@ Committed but not soon. Things you know you will do, just not next. Promote to N
 
 Delivered, newest first. Move an intent here when its work lands, with a one-line note of what shipped.
 
-- GoShade Turbo v0.1 - release checklist in `docs/dev/DESIGN.md` all ticked 2026-09-20; tag v0.1.0 at 85c2762, GitHub release with goshade_turbo-0.1.0.zip `r-0907-1`
+- GoShade Turbo v0.1 - release checklist in `docs/dev/DESIGN.md` all ticked 2026-09-20; tag v0.1.0 at 85c2762 (draft, never published); first published release v0.1.1 at 3dc4f29 with goshade_turbo-0.1.1.zip, 2026-09-24 `r-0907-1`
 
 ## Non-goals (decided, not "later")
 
