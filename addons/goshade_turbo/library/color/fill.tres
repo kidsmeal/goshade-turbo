@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "color/fill"
 function = "fill"
-description = "flat fill: a single tunable color, no generator and no inputs (decision 14)"
+description = "flat fill: a single tunable color, no generator and no inputs"
 source_math = "identity function, no external formula."
 source_code_url = ""
 source_code_license = ""

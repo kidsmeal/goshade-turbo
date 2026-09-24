@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "color/add"
 function = "color_add"
-description = "clamped additive blend of two colors, opacity via t (function is color_add, distinct from fieldops/add's add, decision 14: opacity is the layer's t slider)"
+description = "clamped additive blend of two colors, opacity via the t slider"
 source_math = "additive blend, clamped sum, standard construction."
 source_code_url = ""
 source_code_license = ""

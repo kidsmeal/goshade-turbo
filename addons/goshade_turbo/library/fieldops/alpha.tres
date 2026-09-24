@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "fieldops/alpha"
 function = "alpha"
-description = "reads a color's own alpha channel as a field (decision 12: the color-to-field conversion is luminance, so alpha needs its own reachable entry)"
+description = "reads a color's own alpha channel as a field; color inputs to field slots otherwise convert by luminance"
 source_math = "trivial vec4 alpha-channel read, no external source."
 source_code_url = ""
 source_code_license = ""

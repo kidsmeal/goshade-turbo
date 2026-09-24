@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "color/multiply"
 function = "color_multiply"
-description = "multiply blend of two colors, opacity via t (function is color_multiply, distinct from fieldops/multiply's multiply, decision 14: opacity is the layer's t slider)"
+description = "multiply blend of two colors, opacity via the t slider"
 source_math = "multiply blend mode, W3C Compositing and Blending Level 1."
 source_code_url = ""
 source_code_license = ""

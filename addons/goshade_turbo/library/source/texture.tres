@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "source/texture"
 function = "gst_source_texture"
-description = "reads the node's own TEXTURE at the stack's coordinate space (decision 10)"
+description = "reads the node's own TEXTURE at the stack's coordinate space"
 source_math = "Godot 4 canvas_item shader built-in: TEXTURE sampler2D (Godot shading language reference, canvas_item built-ins)."
 source_code_url = ""
 source_code_license = ""

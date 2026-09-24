@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "filter/pixelate"
 function = "pixelate"
-description = "snaps the source to a cell grid, inline filter body template (decision 21, B6, docs/PLAN.md Blocker B10)"
+description = "snaps a texture or screen source to a cell grid"
 source_math = "grid snapping / spatial quantization, standard pixelation construction."
 source_code_url = ""
 source_code_license = ""

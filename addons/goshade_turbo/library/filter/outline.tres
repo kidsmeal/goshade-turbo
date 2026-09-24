@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "filter/outline"
 function = "outline"
-description = "alpha-edge outline mask, inline filter body template (decision 21, B6, docs/PLAN.md Blocker B10)"
+description = "alpha-edge outline mask of a texture or screen source"
 source_math = "alpha edge detection via 4-neighbor max difference, standard sprite outline technique."
 source_code_url = ""
 source_code_license = ""

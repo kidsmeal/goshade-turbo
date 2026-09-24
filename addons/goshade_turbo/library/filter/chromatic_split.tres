@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "filter/chromatic_split"
 function = "chromatic_split"
-description = "splits RGB channels by opposing offsets, inline filter body template (decision 21, B6, docs/PLAN.md Blocker B10)"
+description = "splits RGB channels of a texture or screen source by opposing offsets"
 source_math = "RGB channel split by opposing horizontal offsets, standard chromatic aberration construction."
 source_code_url = ""
 source_code_license = ""

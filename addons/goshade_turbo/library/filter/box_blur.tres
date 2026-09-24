@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "filter/box_blur"
 function = "box_blur"
-description = "3x3 box blur, inline filter body template (decision 21, B6, docs/PLAN.md Blocker B10)"
+description = "3x3 box blur of a texture or screen source"
 source_math = "3x3 box filter, unweighted mean, standard convolution kernel."
 source_code_url = ""
 source_code_license = ""

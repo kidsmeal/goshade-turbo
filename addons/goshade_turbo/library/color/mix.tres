@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "color/mix"
 function = "color_mix"
-description = "linear blend of two colors by a field mask (function is color_mix, distinct from fieldops/mix's gst_mix; decision 14: a mask is mix(a, b, mask))"
+description = "linear blend of two colors by a field mask"
 source_math = "linear interpolation, standard GLSL builtin construction."
 source_code_url = ""
 source_code_license = ""

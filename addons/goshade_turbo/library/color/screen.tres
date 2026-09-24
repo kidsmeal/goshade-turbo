@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "color/screen"
 function = "blend_screen"
-description = "screen blend of two colors, opacity via t (function is blend_screen, not screen, to keep the name clear of source/screen, decision 14: opacity is the layer's t slider)"
+description = "screen blend of two colors, opacity via the t slider"
 source_math = "screen blend mode, W3C Compositing and Blending Level 1."
 source_code_url = ""
 source_code_license = ""

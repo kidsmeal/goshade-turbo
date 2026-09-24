@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "color/soft_light"
 function = "blend_soft_light"
-description = "soft light blend of two colors, opacity via t (decision 14: opacity is the layer's t slider)"
+description = "soft light blend of two colors, opacity via the t slider"
 source_math = "soft-light blend mode, W3C Compositing and Blending Level 1, section \"Soft Light\"."
 source_code_url = ""
 source_code_license = ""
