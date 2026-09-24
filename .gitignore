@@ -18,3 +18,9 @@ text_editor_themes/
 
 # Render output of tests/run_render_checks.gd -- --write-screenshots
 sandbox/screenshots/
+
+# Device check output (sandbox/mobile/build_mobile_shaders.gd) and local export preset
+sandbox/mobile/shaders/
+sandbox/mobile/shader_list.gd
+sandbox/mobile/shader_list.gd.uid
+export_presets.cfg

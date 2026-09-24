@@ -39,3 +39,31 @@ godot --path . --rendering-driver opengl3 -s res://tests/run_recipe_motion_check
 ```
 
 `godot` is whatever resolves to a Godot 4.4+ binary on your system.
+
+Render and motion checks on the Mobile and Forward+ renderers (Vulkan):
+
+```bash
+godot --path . --rendering-method mobile -s res://tests/run_render_checks.gd
+```
+
+```bash
+godot --path . --rendering-method forward_plus -s res://tests/run_render_checks.gd
+```
+
+## Device check (Android)
+
+Renders every exported recipe and reference shader on a phone and logs one
+`MOBILE <name> PASS|FAIL` line each, then `MOBILE SUMMARY`.
+
+1. Build the shaders:
+
+```bash
+godot --headless --path . -s res://sandbox/mobile/build_mobile_shaders.gd
+```
+
+2. For the export only, set in `project.godot` (revert after): `run/main_scene="res://sandbox/mobile/mobile_check.tscn"` under `[application]`, and `textures/vram_compression/import_etc2_astc=true` under `[rendering]`. Add `renderer/rendering_method.mobile="gl_compatibility"` to test the Compatibility renderer. The Android export ignores `override.cfg` for these, and release templates refuse a scene path on the command line.
+3. Export an Android debug APK (needs Android export templates, `export/android/java_sdk_path` in Editor Settings, and an `export_presets.cfg` Android preset, gitignored), install it, and read the log:
+
+```bash
+adb logcat -s godot
+```
