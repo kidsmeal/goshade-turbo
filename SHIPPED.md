@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-24
+- addon README: match the root README wording `3fd47e6`
 - ci: remove the gitlab mirror workflow `4740dc0`
 
 ### 2026-09-23
