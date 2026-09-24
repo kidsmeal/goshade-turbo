@@ -5,6 +5,7 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-24
+- docs: note Android editor support `497ff59`
 - sandbox/mobile: load the generated shader list at runtime `17f7e72`
 - GoShade Turbo 0.1.3
 - add an Android device check for exported shaders `ec51434`
