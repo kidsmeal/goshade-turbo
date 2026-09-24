@@ -3,52 +3,109 @@
 </p>
 <p align="center">
   <img src="https://img.shields.io/badge/Godot-4.4%2B-478cbf?logo=godotengine&logoColor=white" alt="Godot 4.4+">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue" alt="Version 0.1.0">
+  <img src="https://img.shields.io/github/v/release/kidsmeal/goshade-turbo" alt="Latest release">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT">
 </p>
 
-Godot editor plugin that composes `canvas_item` shaders from a typed layer library. Stack layers, tune them with sliders, preview live, export a `.gdshader`.
+Godot editor plugin for 2D shaders on sprites, UI and any other `CanvasItem`, built without a node graph or shader code. Stack layers in a list, tune sliders against a live preview, export a plain `.gdshader`.
+
+<table>
+<tr>
+<td align="center"><img src="docs/media/recipes/fire.png" width="150" alt="fire recipe: orange and yellow flames filling the tile"><br><code>fire</code></td>
+<td align="center"><img src="docs/media/recipes/flame.png" width="150" alt="flame recipe: a single red-to-yellow flame tongue"><br><code>flame</code></td>
+<td align="center"><img src="docs/media/recipes/water.png" width="150" alt="water recipe: pale blue warped caustic pattern"><br><code>water</code></td>
+<td align="center"><img src="docs/media/recipes/metaball_portal.png" width="150" alt="metaball_portal recipe: blue and red swirl with star specks"><br><code>metaball_portal</code></td>
+<td align="center"><img src="docs/media/recipes/glow.png" width="150" alt="glow recipe: soft yellow glow centered over the sprite"><br><code>glow</code></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/media/recipes/dissolve.png" width="150" alt="dissolve recipe: sprite shapes eaten away by noise"><br><code>dissolve</code></td>
+<td align="center"><img src="docs/media/recipes/hologram.png" width="150" alt="hologram recipe: sprite tinted with horizontal scanlines"><br><code>hologram</code></td>
+<td align="center"><img src="docs/media/recipes/outline.png" width="150" alt="outline recipe: sprite shapes with a dark outline"><br><code>outline</code></td>
+<td align="center"><img src="docs/media/recipes/sprite_holographic.png" width="150" alt="sprite_holographic recipe: rainbow diagonal bands across the sprite"><br><code>sprite_holographic</code></td>
+<td align="center"><img src="docs/media/recipes/sprite_foil.png" width="150" alt="sprite_foil recipe: faint foil sheen over the sprite"><br><code>sprite_foil</code></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/media/recipes/sprite_opal.png" width="150" alt="sprite_opal recipe: pink, green and blue opal color shift"><br><code>sprite_opal</code></td>
+<td align="center"><img src="docs/media/recipes/sprite_pearl.png" width="150" alt="sprite_pearl recipe: soft pale pearl sheen"><br><code>sprite_pearl</code></td>
+<td align="center"><img src="docs/media/recipes/sprite_oil_slick.png" width="150" alt="sprite_oil_slick recipe: dark iridescent oil film"><br><code>sprite_oil_slick</code></td>
+</tr>
+</table>
+
+Bundled recipes, rendered by the plugin on its default preview sprite at `TIME = 2.0`. Each one opens as an editable stack.
 
 ## What it does
-- Adds a main screen tab: stack list, selected layer properties, live preview.
-- Picks layers from 61 functions across generative, sdf, fieldops, color, source, filter.
-- Exports a `.gdshader` with a `// stack: <json>` header; opening it rebuilds the stack.
-- Loads `.tres` recipes from `addons/goshade_turbo/recipes/` as a starting stack.
-- Routes every stack and slider edit through editor undo.
+- Opens any of 13 bundled recipes as a starting point, with every layer editable.
+- Builds an effect as an ordered list of layers. Each layer is one function: a noise, a shape, a gradient, a blend, a filter.
+- Connects layers through dropdowns. An input lists only the layers below it that produce the right type, so every stack compiles.
+- Updates a live preview on a sprite, a text label or a full rect while you drag sliders.
+- Randomize rerolls every layer's sliders within their ranges, for exploring variations of a recipe.
+- Exports one `.gdshader`. A one-line header comment carries the whole stack, so opening the file restores the layers.
+- Routes every edit through the editor's undo history.
+
+## Compared to VisualShader
+| | VisualShader | GoShade Turbo |
+|---|---|---|
+| Layout | node graph, free placement | ordered list of layers |
+| Connecting | drag wires between ports | pick an input from a dropdown |
+| Starting point | empty graph | 13 recipes |
+| Building blocks | engine nodes | 61 functions, one slider per parameter |
+| Output | `VisualShader` resource | plain `.gdshader` text file |
+| Shader types | `canvas_item`, `spatial`, `particles`, `sky`, `fog` | `canvas_item` only |
 
 ## Requirements
 - Godot `>= 4.4`. Tested on `4.4`, `4.6`, `4.7`.
-- `godot` on `PATH` for the test commands.
 
 ## Install
+1. Download `goshade_turbo-<version>.zip` from https://github.com/kidsmeal/goshade-turbo/releases.
+2. Unzip it into the project root. The zip root is `addons/goshade_turbo/`.
+3. Project Settings > Plugins > GoShade Turbo > Enable.
+
+From a clone:
 ```bash
 cp -r addons/goshade_turbo <project>/addons/
 ```
-Project Settings > Plugins > GoShade Turbo > Enable.
 
 ## Usage
-Build a shader:
-1. Open the GoShade Turbo tab next to 2D, 3D and Script. Pick Create Empty Stack.
-2. Add a generator, `generative/fbm`. Set coord scale to `4`.
-3. Add `color/gradient_map`. Set its field slot to the fbm layer and pick two colors.
-4. In the output block pick the gradient_map layer as color, alpha `none`.
-5. Export. Assign the `.gdshader` to any `CanvasItem` material.
+![Tuning the flame recipe: dragging the corner radius slider while the preview updates](docs/media/tune_flame.gif)
 
-![Tuning the flame recipe: dragging the mask corner radius while the preview updates](docs/media/tune_flame.gif)
+Every layer outputs one of two types:
+- `field`: one number per pixel, usually `0` to `1`. Noise, gradients and shapes are fields. Fields drive masks, blends and transparency.
+- `color`: an RGBA color per pixel. Fills, color ramps, blends and the sprite's own texture are colors.
 
-Recipes lists 13 starting stacks: fire, flame, water, dissolve, glow, hologram, metaball_portal, outline, sprite_foil, sprite_holographic, sprite_oil_slick, sprite_opal, sprite_pearl. Open one, change sliders, export.
+Layers that draw a pattern (noise, gradients, shapes) have a Position and movement group: scale, position, rotation, movement speed, and two distortion inputs that take another field.
 
-Panel, picker, coordinate spaces, export header: `docs/USAGE.md`. Design: `docs/DESIGN.md`.
+Start from a recipe:
+1. Open the GoShade Turbo tab next to 2D, 3D and Script.
+2. Recipes > pick one, e.g. `sprite_holographic`.
+3. Select a layer in Layers and drag its sliders in Layer settings. Press Randomize to reroll every slider.
+4. Export. Assign the `.gdshader` to a `ShaderMaterial` on any `CanvasItem`.
+
+Build from empty:
+1. Pick Create Empty Stack.
+2. Add `generative/fbm` (fractal noise). Set its scale to `4`.
+3. Add `color/gradient_map`. In Inputs, set its field to the fbm layer. Pick two colors.
+4. In Final output, set Output color to the gradient_map layer and Transparency to Opaque.
+5. Export.
+
+Panel, picker, coordinate spaces, export header: `docs/USAGE.md`. Writing a new library entry, step by step: `docs/TUTORIAL_CELL_BORDERS.md`.
+
+## Library
+61 functions in six folders:
+- `generative`: noise, gradients, stripes, checker, voronoi and cell patterns, clock.
+- `sdf`: shapes as distance fields (circle, box, star, polygon, ring, line) and ways to combine them.
+- `fieldops`: math on fields (remap, smoothstep, invert, ease, min, max, mix).
+- `color`: fill, gradient map, palette, blend modes, hue, saturation, posterize.
+- `source`: the node's own texture, or the screen behind it.
+- `filter`: blur, pixelate, dither, outline, chromatic split of a source.
+
+Kind signatures and math sources for each: `docs/LIBRARY.md`.
 
 ## Tests
 Commands, setup, and GPU requirements: `docs/TESTING.md`.
-
-## Library
-61 functions with kind signatures and math sources: `docs/LIBRARY.md`.
 
 ## Attribution
 - Logo: Zen Dots, SIL Open Font License 1.1, `sandbox/logo/fonts/`. Rendered through the plugin's export, `sandbox/logo/`.
 - `generative/hash`: David Hoskins hash12, MIT. Every other function cites its source in `docs/LIBRARY.md`.
 
 ## License
-MIT. See `LICENSE`.
+MIT. See `LICENSE`. Design and build history: `docs/dev/`.
