@@ -5,6 +5,16 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
 ### 2026-09-23
+- README: rewrite for users new to shaders `c94dd36`
+- plugin.cfg: match the description to the README intro `be14990`
+- add recipe gallery renders and their render script `a215fc5`
+- ci: limit the gitlab mirror to this repo and a read-only token `5b13dea`
+- ci: run codegen tests on Godot 4.4.1, 4.6.2, 4.7 `310cf4b`
+- logo: remove the unused Bruno Ace SC font `ee980d0`
+- plugin: skip the editor smoke hook when tests/ is absent `d200549`
+- library: drop design-doc references from picker descriptions `a96f875`
+- ROADMAP: remove ClauDHD template placeholder items `7740809`
+- docs: move process docs to docs/dev `d553ac3`
 - v0.2 design: add dependency marks in the stack list (decision 35) `f82a9d0`
 - add LICENSE and README inside the addon folder `050705c`
 - sandbox: stop tracking render-check screenshots `d01c967`
