@@ -46,7 +46,7 @@ Some of the 13 bundled recipes, rendered by the plugin on its default preview sp
 | Shader types | `canvas_item`, `spatial`, `particles`, `sky`, `fog` | `canvas_item` only |
 
 ## Requirements
-- Godot `>= 4.4`. Tested on `4.4`, `4.6`, `4.7`.
+- Godot `>= 4.4`. Tested on `4.4`, `4.6`, `4.7`, and the Godot Android editor `4.7.2` on a phone.
 
 ## Install
 1. Download `goshade_turbo-<version>.zip` from https://github.com/kidsmeal/goshade-turbo/releases.

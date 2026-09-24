@@ -59,3 +59,11 @@ The plugin and the preview set the `gst_rect_size` uniform from the node's
 rect size. An exported shader defaults it to `vec2(1.0)`. Set
 `gst_rect_size` to the node's rect size on any node that gets a `local`
 space shader, or it renders as if the node were 1x1.
+
+## Android editor
+
+The plugin runs in the Godot Android editor (tested on 4.7.2, phone
+landscape). The editor's distraction-free button gives the panel the full
+screen width. Undo and redo come from the editor's touch actions panel.
+The picker does not raise the on-screen keyboard until you tap its search
+field.
