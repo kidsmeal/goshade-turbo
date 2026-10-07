@@ -9,19 +9,19 @@ _Committed, so it follows your branch: `git checkout` swaps this cursor to that 
 This file is generated (design section 4): the facts below (Mode, Position, from, Counts, Last touched) render from `.now/state.json`, never hand-typed. The Active thread's two lines are the one piece of human prose, prompted at boundaries and persisted as state fields too - so it survives a regeneration without ever being parsed back out of this file.
 
 Mode: design
-Position: designing (no doc yet)
-from: r-0916-1
+Position: designing docs/dev/V0_2_DESIGN.md
+from: (unplanned work)
 Counts: queue 0 · quick fixes 0 · ideas untriaged 5
 
-Last touched: 2026-09-24
+Last touched: 2026-10-07
 
 ## Active thread (only one)
 
-**GoShade Turbo v0.2: one schema bump, layer ops, texture param and source/image, param links (base plus amount), custom layer, user recipes**
+**GoShade Turbo v0.2: one schema bump, layer ops, texture param and source/image, param links (base plus amount), user recipes**
 
 Next physical action:
 
-- [ ] grill the open forks in docs/dev/V0_2_DESIGN.md via /claudhd:design, then run the design reviewer
+- [ ] resolve the 4 open markers in docs/dev/V0_2_DESIGN_reviewed.md, then /claudhd:plan
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 
