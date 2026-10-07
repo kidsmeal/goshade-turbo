@@ -25,4 +25,9 @@ Stable rules a worker reads before a ticket. Rules and references only. Status, 
 - `PLAN.md B<n>`: blocker resolution `B<n>` in `docs/dev/PLAN.md`.
 - `PLAN.md cross-cutting`: the Cross-cutting concerns section of `docs/dev/PLAN.md`.
 - A 7-char hex value is a commit hash.
-- A later source overrides an earlier one where they differ: `SHADER_TABS` over `EDITOR_UI` over `DESIGN.md`.
+
+## Recorded supersedes
+- `EDITOR_UI` supersedes the output placement in `DESIGN.md d12` and the picker and solo presentation in `DESIGN.md d13`. (`docs/dev/EDITOR_UI_DESIGN_reviewed.md:17`)
+- `DESIGN.md d20` (revised 2026-09-09) supersedes the shared-manager undo, embedded inspector routing and replacement undo in `EDITOR_UI d7` and `d30`. (`docs/dev/SHADER_TABS_reviewed.md:43`)
+- `SHADER_TABS d8` supersedes the file-operation message lifetime in `EDITOR_UI d6`. (`docs/dev/EDITOR_UI_DESIGN_reviewed.md:35`)
+- A `*_reviewed.md` design supersedes its draft. (`docs/dev/CURRENTNESS_AUDIT.md` Likely Shipped)

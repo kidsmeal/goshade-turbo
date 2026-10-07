@@ -35,7 +35,6 @@
 - `README.md`: showcase and shortest paths. (`74c1e7d`, `c94dd36`)
 - User docs in `docs/`: `USAGE.md`, `TESTING.md`, `LIBRARY.md`, `TUTORIAL_<topic>.md`. (`74c1e7d`)
 - Design, plans, audits and ClauDHD state in `docs/dev/`. (`d553ac3`, `a771428`)
-- Stable rules in `docs/canon/`.
 - A `*_reviewed.md` design supersedes its draft. (`docs/dev/CURRENTNESS_AUDIT.md` Likely Shipped)
 - `docs/dev/EDITOR_SMOKE.md` is append-only; later sections supersede earlier ones. (`docs/dev/CURRENTNESS_AUDIT.md` Likely Shipped)
 - The addon `README.md` matches the root README wording. (`3fd47e6`)
