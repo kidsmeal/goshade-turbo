@@ -13,8 +13,8 @@ Source: `docs/dev/V0_2_DESIGN_reviewed.md`. Extends `docs/dev/DESIGN.md`; every 
 
 Locked decisions, numbered as in `docs/dev/V0_2_DESIGN_reviewed.md`.
 
-- 23 Schema bump, once: `GSTLayer` gains `label`, `enabled`, `param_links`; `SCHEMA_VERSION` in `addons/goshade_turbo/io/gst_header.gd` goes from 1 to 2.
-- 23 Reopen accepts schema 1 (every new field at its default) and schema 2. v0.1 refuses schema 2 with its existing unknown-schema message.
+- 23 Schema bump, once: `GSTLayer` gains `label`, `enabled`, `param_links`; `SCHEMA_VERSION` in `addons/goshade_turbo/io/gst_header.gd` increments by one.
+- 23 Reopen accepts the current and the new schema value; the current value opens with every new field at its default. v0.1 refuses the new value with its existing unknown-schema message.
 - 23 v0.2 codegen of a schema 1 stack equals v0.1 codegen byte for byte, so `GSTOverwriteCheck` does not flag an unedited v0.1 export.
 - 23 A stack `.tres` carries no schema field (`addons/goshade_turbo/model/gst_stack.gd`). v0.1 dropping unknown properties on load: unverified.
 - 24 Duplicate: new id from `next_id`; deep copy of `entry`, `params`, `coord`, `slots`, `enabled`, `param_links`; inserted directly above the original; one undo record.
@@ -35,7 +35,7 @@ Locked decisions, numbered as in `docs/dev/V0_2_DESIGN_reviewed.md`.
 - 28 Entry source/image: kind `color`, `coord: true`, one texture param `image`. (new)
 - 28 `GSTCodegen._layer_body_lines` routes it to `_source_body_lines` before the generator branch; body is the coord block lines then `vec4 l<id> = texture(l<id>_<function>_image, coord<id>);`.
 - 28 It is an allowed filter input (decision 21): `GST_SAMPLE` maps to `l<src>_<function>_image`, `GST_UV` maps to `coord<src>`.
-- 28 One source predicate covering source/texture, source/screen and source/image replaces the two-id checks in `GSTStackOps._is_source_layer`, `GSTStackOps.validate_slot_assignment`, `GSTCodegen._filter_body_lines` and `_choice_rows` in `addons/goshade_turbo/ui/gst_main_panel.gd`. (new)
+- 28 A new shared source predicate covering source/texture, source/screen and source/image replaces the two-id checks in `GSTStackOps._is_source_layer`, `GSTStackOps.validate_slot_assignment`, `GSTCodegen._filter_body_lines` and `_choice_rows` in `addons/goshade_turbo/ui/gst_main_panel.gd`.
 - 29 Param links: `param_links: Dictionary`, param name to `{target: layer_id, amount: float}`.
 - 29 Linkable params: `type: float` and `type: int`, filter `GST_PARAM` params included. `color`, `vec3`, `texture` do not link.
 - 29 Target must sit below the layer; a `color` target converts via `luma` (decision 2).
@@ -107,6 +107,7 @@ Open, owner decision (`[NEEDS USER DECISION]` markers in the source doc, not loc
 - `addons/goshade_turbo/io/gst_stack_io.gd`
 - `addons/goshade_turbo/io/gst_overwrite_check.gd`
 - `addons/goshade_turbo/codegen/gst_codegen.gd`
+- `addons/goshade_turbo/codegen/gst_uniform_names.gd` (`group_uniforms` name rule, decision 25)
 - `addons/goshade_turbo/ui/gst_main_panel.gd`
 - `addons/goshade_turbo/ui/gst_main_panel.tscn`
 - `addons/goshade_turbo/ui/gst_stack_list.gd`
@@ -119,6 +120,7 @@ Open, owner decision (`[NEEDS USER DECISION]` markers in the source doc, not loc
 - `addons/goshade_turbo/library/source/image.tres` (new)
 - `addons/goshade_turbo/assets/preview_default.png` (second image candidate for the source/image reference stack; reuse or add one asset, decided at planning)
 - `sandbox/stacks/ref_source_image.tres` (new)
+- `sandbox/stacks/ref_param_link.tres` (new)
 - `tests/test_header_roundtrip.gd`
 - `tests/test_stack_io.gd`
 - `tests/test_stack_ops.gd`
