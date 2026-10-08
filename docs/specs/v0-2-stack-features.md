@@ -16,7 +16,7 @@ Locked decisions, numbered as in `docs/dev/V0_2_DESIGN_reviewed.md`.
 - 23 Schema bump, once: `GSTLayer` gains `label`, `enabled`, `param_links`; `SCHEMA_VERSION` in `addons/goshade_turbo/io/gst_header.gd` increments by one.
 - 23 Reopen accepts the current and the new schema value; the current value opens with every new field at its default. v0.1 refuses the new value with its existing unknown-schema message.
 - 23 v0.2 codegen of a schema 1 stack equals v0.1 codegen byte for byte, so `GSTOverwriteCheck` does not flag an unedited v0.1 export.
-- 23 A stack `.tres` carries no schema field (`addons/goshade_turbo/model/gst_stack.gd`). v0.1 dropping unknown properties on load: unverified.
+- 23 A stack resource file carries no schema field (`addons/goshade_turbo/model/gst_stack.gd`). v0.1 dropping unknown properties on load: unverified.
 - 24 Duplicate: new id from `next_id`; deep copy of `entry`, `params`, `coord`, `slots`, `enabled`, `param_links`; inserted directly above the original; one undo record.
 - 24 Duplicate label: original label, or its function name when empty, suffixed ` copy`. Texture params share the original `Texture2D`.
 - 25 Rename: `label: String`, default empty. Row shows label then function name; function name stays visible in every row.
@@ -29,8 +29,8 @@ Locked decisions, numbered as in `docs/dev/V0_2_DESIGN_reviewed.md`.
 - 26 A bypassed row carries the suffix `  bypassed`. Uniforms of a bypassed layer are still emitted.
 - 27 Manifest `params` accept `type: texture`; export line `uniform sampler2D l<id>_<function>_<param> : source_color, filter_linear, repeat_enable;`, no `hint_range`.
 - 27 Inspector uses the native `Texture2D` editor via `EditorInspector.instantiate_property_editor`; `GSTLayer._get_property_list` exposes it as `TYPE_OBJECT` with `PROPERTY_HINT_RESOURCE_TYPE` `Texture2D`.
-- 27 Preview sets the `Texture2D` with `set_shader_parameter`. Stack `.tres` stores an `ExtResource`; header json stores the resource path string.
-- 27 A missing texture file on reopen (header or `.tres`) leaves the uniform unset, reports the path in the document message label, and still opens the stack.
+- 27 Preview sets the `Texture2D` with `set_shader_parameter`. The stack resource file stores an `ExtResource`; header json stores the resource path string.
+- 27 A missing texture file on reopen (header or stack resource file) leaves the uniform unset, reports the path in the document message label, and still opens the stack.
 - 27 Randomize (decision 16) skips `texture` params.
 - 28 Entry source/image: kind `color`, `coord: true`, one texture param `image`. (new)
 - 28 `GSTCodegen._layer_body_lines` routes it to `_source_body_lines` before the generator branch; body is the coord block lines then `vec4 l<id> = texture(l<id>_<function>_image, coord<id>);`.
@@ -69,7 +69,7 @@ Open, owner decision (`[NEEDS USER DECISION]` markers in the source doc, not loc
 
 ## Behavior
 
-- Schema 1 headers and `.tres` files open with `label` empty, `enabled` true, `param_links` empty.
+- Schema 1 headers and stack resource files open with `label` empty, `enabled` true, `param_links` empty.
 - Header serializes new fields only when non-default; a stack using no v0.2 field differs from its v0.1 header only in `schema`.
 - `_layer_body_lines` branches on `enabled` before kind dispatch.
 - `_param_uniform_line` emits the texture line with no default and no range.
@@ -83,13 +83,13 @@ Open, owner decision (`[NEEDS USER DECISION]` markers in the source doc, not loc
 
 ## Acceptance
 
-- Schema 1 headers and `.tres` files from v0.1 reopen with every new field at its default.
+- Schema 1 headers and stack resource files from v0.1 reopen with every new field at its default.
 - Unedited v0.1 exports reopen without the hand-edit warning; a schema 1 stack regenerates a byte-identical body.
 - Headless codegen tests: bypass per kind, bypass refused on every layer with no inputs, linked float and int, amount 0 renders the same pixels as unlinked, texture uniform, source/image under every filter.
 - Combination test: every field entry linked into every linkable param of every entry compiles.
 - Headless tests: deleting a link target clears the link and reports it; reordering a link target above its linker is refused; a `color` target emits `luma`.
 - Headless tests: duplicate copies every decision 24 field; `group_uniforms` uses the sanitized label, and the function name when the label sanitizes to empty.
-- A missing texture file on header reopen and on `.tres` reopen opens the stack and reports the path.
+- A missing texture file on header reopen and on stack resource file reopen opens the stack and reports the path.
 - User recipes list after bundled ones; Save as Recipe writes the file, asks before overwriting, opens nothing; a user recipe named like a bundled one opens the user file.
 - Standalone `EditorPropertyResource` load, drag-drop and clear outside an `EditorInspector` verified on Godot `4.4` before texture param work.
 - Rendered checks on the new reference stacks pass `tests/gst_render_assert.gd`.
