@@ -24,13 +24,13 @@ Locked decisions, numbered as in `docs/dev/V0_2_DESIGN_reviewed.md`.
 - 25 Uniform names stay id-based (decision 7).
 - 26 Bypass: `enabled: bool`, default true.
 - 26 A bypassed operator emits `l<id> = <first input of the same kind>`, converted via decision 2 when no same-kind input exists; an unwired input passes `GSTCodegen.FALLBACK_FIELD_CONSTANT` or `GSTCodegen.FALLBACK_COLOR_CONSTANT`.
-- 26 A bypassed filter emits its source sampled unchanged at the filter's `GST_UV` mapping.
+- 26 A bypassed filter emits its source sampled unchanged at the filter's `GST_UV` mapping: `UV`, `SCREEN_UV`, or `coord<src>` for a source/image source (decision 28).
 - 26 Generators, sources and every layer with no inputs refuse bypass, reason shown beside the toggle. Includes operators color/fill and generative/clock.
 - 26 A bypassed row carries the suffix `  bypassed`. Uniforms of a bypassed layer are still emitted.
 - 27 Manifest `params` accept `type: texture`; export line `uniform sampler2D l<id>_<function>_<param> : source_color, filter_linear, repeat_enable;`, no `hint_range`.
 - 27 Inspector uses the native `Texture2D` editor via `EditorInspector.instantiate_property_editor`; `GSTLayer._get_property_list` exposes it as `TYPE_OBJECT` with `PROPERTY_HINT_RESOURCE_TYPE` `Texture2D`.
 - 27 Preview sets the `Texture2D` with `set_shader_parameter`. The stack resource file stores an `ExtResource`; header json stores the resource path string.
-- 27 A missing texture file on reopen (header or stack resource file) leaves the uniform unset, reports the path in the document message label, and still opens the stack.
+- 27 A missing texture file on reopen (header or stack resource file) leaves the uniform unset, reports the path in the document message label, and still opens the stack. `GSTStackIO.load` on a missing `ExtResource`: unverified.
 - 27 Randomize (decision 16) skips `texture` params.
 - 28 Entry source/image: kind `color`, `coord: true`, one texture param `image`. (new)
 - 28 `GSTCodegen._layer_body_lines` routes it to `_source_body_lines` before the generator branch; body is the coord block lines then `vec4 l<id> = texture(l<id>_<function>_image, coord<id>);`.
@@ -66,6 +66,7 @@ Open, owner decision (`[NEEDS USER DECISION]` markers in the source doc, not loc
 - Built-in textures without a `resource_path`. Recommendation: refuse on assign with the reason beside the control.
 - Unset `sampler2D` hint. Recommendation: `hint_default_transparent`.
 - Linked param emit form. Recommendation: keep the param uniform as the base and add an amount uniform, matching decision 26's reason for keeping uniforms.
+  - `_layer_uniform_lines` skips linked params only if the literal form is chosen.
 
 ## Behavior
 
