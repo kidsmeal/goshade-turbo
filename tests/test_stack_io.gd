@@ -195,6 +195,106 @@ func test_v0_2_fields_save_only_when_non_default_and_round_trip() -> void:
 	DirAccess.remove_absolute(path)
 
 
+## An imported project texture used as the source/image `image` value.
+const TEXTURE_PATH: String = "res://addons/goshade_turbo/assets/preview_default.png"
+## A texture path that names no file.
+const MISSING_TEXTURE_PATH: String = "res://gst_test_missing_texture.png"
+
+
+func test_texture_param_saves_as_ext_resource_and_loads_back() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var image: GSTLayer = GSTStackOps.add_layer(stack, "source/image", GSTLayer.Kind.COLOR, true)
+	image.params["image"] = load(TEXTURE_PATH) as Texture2D
+	stack.output_color = image.id
+	var path: String = "user://gst_test_stack_io_texture.tres"
+
+	var save_result: Dictionary = GSTStackIO.save(stack, path)
+	assert_true(save_result["ok"], "save succeeds: %s" % save_result["reason"])
+	var text: String = FileAccess.get_file_as_string(path)
+	assert_true(text.contains("[ext_resource type=\"Texture2D\"") and text.contains(TEXTURE_PATH), "the stack resource file stores the texture as an ExtResource")
+
+	var load_result: Dictionary = GSTStackIO.load(path, lib)
+	assert_true(load_result["ok"], "load succeeds: %s" % load_result["reason"])
+	assert_true((load_result.get("missing_textures", [""]) as Array).is_empty(), "no texture is reported missing")
+	if load_result["ok"]:
+		var loaded: GSTLayer = (load_result["stack"] as GSTStack).layers[0]
+		var value: Variant = loaded.params.get("image")
+		assert_true(value is Texture2D, "the texture param loads as a Texture2D")
+		if value is Texture2D:
+			assert_eq((value as Texture2D).resource_path, TEXTURE_PATH, "the loaded texture keeps its path")
+	DirAccess.remove_absolute(path)
+
+
+## A source/image layer whose texture ExtResource names a missing file.
+const MISSING_TEXTURE_STACK_TRES: String = """[gd_resource type="Resource" script_class="GSTStack" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_layer"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_coord"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_stack"]
+[ext_resource type="Texture2D" path="res://gst_test_missing_texture.png" id="4_tex"]
+
+[sub_resource type="Resource" id="Resource_coord"]
+script = ExtResource("2_coord")
+
+[sub_resource type="Resource" id="Resource_image"]
+script = ExtResource("1_layer")
+id = &"0"
+entry = "source/image"
+kind_out = 1
+params = {
+"image": ExtResource("4_tex")
+}
+coord = SubResource("Resource_coord")
+
+[resource]
+script = ExtResource("3_stack")
+layers = Array[ExtResource("1_layer")]([SubResource("Resource_image")])
+output_color = &"0"
+next_id = 1
+"""
+
+
+## Decision 27: the stack still opens, the param is unset (absent, so it
+## reads null), and the path is reported. The run_codegen_tests wrapper
+## fails on any "ERROR:" line, so a pass also proves the load printed none.
+func test_missing_texture_ext_resource_loads_with_path_reported() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var path: String = "user://gst_test_stack_io_missing_texture.tres"
+	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(MISSING_TEXTURE_STACK_TRES)
+	file.close()
+
+	var load_result: Dictionary = GSTStackIO.load(path, lib)
+	assert_true(load_result["ok"], "a stack with a missing texture ExtResource loads: %s" % load_result["reason"])
+	var missing: Array[String] = load_result.get("missing_textures", [] as Array[String])
+	assert_eq(missing, [MISSING_TEXTURE_PATH] as Array[String], "the missing texture path is reported")
+	if load_result["ok"]:
+		var image: GSTLayer = (load_result["stack"] as GSTStack).layers[0]
+		assert_false(image.has_param_value(&"image"), "the missing texture param is left unset")
+		assert_eq(image.get(&"image"), null, "the unset texture param reads null")
+	assert_false(FileAccess.file_exists(GSTStackIO.SUBSTITUTED_PATH), "the substituted temp copy is removed")
+	print("test_missing_texture_ext_resource_loads_with_path_reported: ok=%s, missing_textures=%s" % [load_result["ok"], missing])
+	DirAccess.remove_absolute(path)
+
+
+func test_texture_param_exposes_native_texture2d_property() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var image: GSTLayer = GSTStackOps.add_layer(GSTStack.new(), "source/image", GSTLayer.Kind.COLOR, true)
+	image.manifest = lib.get_entry(image.entry)
+	var property_info: Dictionary = {}
+	for property: Dictionary in image.get_property_list():
+		if String(property.get("name", "")) == "image":
+			property_info = property
+	assert_eq(int(property_info.get("type", -1)), TYPE_OBJECT, "texture param is a TYPE_OBJECT property")
+	assert_eq(int(property_info.get("hint", -1)), PROPERTY_HINT_RESOURCE_TYPE, "texture param carries PROPERTY_HINT_RESOURCE_TYPE")
+	assert_eq(String(property_info.get("hint_string", "")), "Texture2D", "texture param hint string is Texture2D")
+	assert_eq(image.get(&"image"), null, "an absent texture param reads null")
+	var texture: Texture2D = load(TEXTURE_PATH) as Texture2D
+	image.set(&"image", texture)
+	assert_eq(image.params.get("image"), texture, "a Texture2D write stores the resource")
+
+
 func test_editor_metadata_does_not_enter_saved_resources() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = _build_stack(lib)["stack"] as GSTStack

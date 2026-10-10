@@ -9,7 +9,8 @@ extends RefCounted
 ## output_alpha: String, next_id: int, layers: [{id, entry, kind_out, slots,
 ## params, coord, label?, enabled?, param_links?}]}. coord_space is "uv" |
 ## "screen_uv" | "local". Vectors serialize as [x, y] / [x, y, z]; colors as
-## [r, g, b, a]. coord is null for an operator layer. label, enabled and
+## [r, g, b, a]. A texture param serializes as its resource_path string, an
+## unset one as null (decision 27). coord is null for an operator layer. label, enabled and
 ## param_links are written only when non-default, so a stack using none of
 ## them differs from its v0.1 header only in `schema` (decision 23).
 ## param_links serializes as {"<param>": {"target": "<layer id>", "amount":
@@ -46,12 +47,17 @@ static func serialize(stack: GSTStack) -> String:
 
 
 ## Parses a full header line (prefix included) into a GSTStack.
-## `{ok, stack, reason}`. `library` resolves each layer's `manifest`; an
-## unresolved `entry` leaves `manifest == null` (gst_stack_io.gd enforces
-## resolution itself).
+## `{ok, stack, reason, missing_textures}`. `library` resolves each layer's
+## `manifest`; an unresolved `entry` leaves `manifest == null`
+## (gst_stack_io.gd enforces resolution itself).
+##
+## A texture param whose path names no existing file is left unset and its
+## path is appended to `missing_textures`; the stack still opens with
+## `ok == true` (decision 27).
 static func parse(line: String, library: GSTLibrary) -> Dictionary:
+	var missing_textures: Array[String] = []
 	if not line.begins_with(HEADER_PREFIX):
-		return {"ok": false, "stack": null, "reason": "missing '%s' header prefix" % HEADER_PREFIX}
+		return {"ok": false, "stack": null, "reason": "missing '%s' header prefix" % HEADER_PREFIX, "missing_textures": missing_textures}
 
 	var json_text: String = line.substr(HEADER_PREFIX.length())
 	# JSON.parse_string() prints an engine ERROR line on malformed input; the
@@ -59,20 +65,20 @@ static func parse(line: String, library: GSTLibrary) -> Dictionary:
 	# not print errors (the headless test wrapper treats any as a failure).
 	var json: JSON = JSON.new()
 	if json.parse(json_text) != OK or not (json.get_data() is Dictionary):
-		return {"ok": false, "stack": null, "reason": "stack header JSON is unparsable"}
+		return {"ok": false, "stack": null, "reason": "stack header JSON is unparsable", "missing_textures": missing_textures}
 
 	var data: Dictionary = json.get_data()
 	var schema: int = int(data.get("schema", -1))
 	if not ACCEPTED_SCHEMAS.has(schema):
-		return {"ok": false, "stack": null, "reason": "unknown stack header schema %d (expected %d)" % [schema, SCHEMA_VERSION]}
+		return {"ok": false, "stack": null, "reason": "unknown stack header schema %d (expected %d)" % [schema, SCHEMA_VERSION], "missing_textures": missing_textures}
 
 	var stack: GSTStack = GSTStack.new()
 	stack.coord_space = _coord_space_from_string(String(data.get("coord_space", "uv")))
 	stack.output_color = StringName(String(data.get("output_color", "")))
 	stack.output_alpha = StringName(String(data.get("output_alpha", "")))
 	stack.next_id = int(data.get("next_id", 0))
-	stack.layers = _layers_from_json(data.get("layers", []), library, schema)
-	return {"ok": true, "stack": stack, "reason": ""}
+	stack.layers = _layers_from_json(data.get("layers", []), library, schema, missing_textures)
+	return {"ok": true, "stack": stack, "reason": "", "missing_textures": missing_textures}
 
 
 static func _coord_space_to_string(space: GSTStack.CoordSpace) -> String:
@@ -150,9 +156,15 @@ static func _params_to_json(params: Dictionary) -> Dictionary:
 
 
 ## Type comes from the value's Variant type, not the manifest, so a stack
-## with no manifest attached still serializes.
+## with no manifest attached still serializes. A Texture2D writes its
+## resource_path; a null (unset texture) writes null (decision 27).
 static func _param_value_to_json(value: Variant) -> Variant:
 	match typeof(value):
+		TYPE_NIL:
+			return null
+		TYPE_OBJECT:
+			var resource: Resource = value as Resource
+			return resource.resource_path if resource != null else null
 		TYPE_COLOR:
 			var c: Color = value
 			return [c.r, c.g, c.b, c.a]
@@ -184,26 +196,26 @@ static func _vec2_to_json(v: Vector2) -> Array:
 	return [v.x, v.y]
 
 
-static func _layers_from_json(layers_data: Variant, library: GSTLibrary, schema: int) -> Array[GSTLayer]:
+static func _layers_from_json(layers_data: Variant, library: GSTLibrary, schema: int, missing_textures: Array[String]) -> Array[GSTLayer]:
 	var layers: Array[GSTLayer] = []
 	if not (layers_data is Array):
 		return layers
 	for layer_data: Variant in (layers_data as Array):
 		if layer_data is Dictionary:
-			layers.append(_layer_from_json(layer_data as Dictionary, library, schema))
+			layers.append(_layer_from_json(layer_data as Dictionary, library, schema, missing_textures))
 	return layers
 
 
 ## Schema 1 predates label, enabled and param_links: those stay at their
 ## GSTLayer defaults even if the keys are present (decision 23).
-static func _layer_from_json(data: Dictionary, library: GSTLibrary, schema: int) -> GSTLayer:
+static func _layer_from_json(data: Dictionary, library: GSTLibrary, schema: int, missing_textures: Array[String]) -> GSTLayer:
 	var layer: GSTLayer = GSTLayer.new()
 	layer.id = StringName(String(data.get("id", "")))
 	layer.entry = String(data.get("entry", ""))
 	layer.kind_out = int(data.get("kind_out", 0)) as GSTLayer.Kind
 	layer.manifest = library.get_entry(layer.entry) if library != null else null
 	layer.slots = _slots_from_json(data.get("slots", {}))
-	layer.params = _params_from_json(data.get("params", {}), layer.manifest)
+	layer.params = _params_from_json(data.get("params", {}), layer.manifest, missing_textures)
 	var coord_data: Variant = data.get("coord", null)
 	layer.coord = _coord_from_json(coord_data as Dictionary) if coord_data is Dictionary else null
 	if schema >= 2:
@@ -242,16 +254,36 @@ static func _slots_from_json(data: Variant) -> Dictionary:
 ## JSON decodes every number as float and every vector/color as Array.
 ## `manifest` supplies the declared type per param name so int params
 ## round-trip as int. A param with no resolvable manifest type keeps its raw
-## decoded shape.
-static func _params_from_json(data: Variant, manifest: GSTManifestEntry) -> Dictionary:
+## decoded shape. A texture path that loads no Texture2D is left out of the
+## result and appended to `missing_textures` (decision 27).
+static func _params_from_json(data: Variant, manifest: GSTManifestEntry, missing_textures: Array[String]) -> Dictionary:
 	var out: Dictionary = {}
 	if not (data is Dictionary):
 		return out
 	for param_name: Variant in (data as Dictionary).keys():
 		var raw_value: Variant = (data as Dictionary)[param_name]
 		var param_type: String = _param_type(manifest, String(param_name))
+		if param_type == "texture":
+			if raw_value == null:
+				out[String(param_name)] = null
+				continue
+			var texture: Texture2D = _texture_from_path(String(raw_value))
+			if texture == null:
+				missing_textures.append(String(raw_value))
+			else:
+				out[String(param_name)] = texture
+			continue
 		out[String(param_name)] = _param_value_from_json(raw_value, param_type)
 	return out
+
+
+## ResourceLoader.exists() first: ResourceLoader.load() on a missing path
+## prints "ERROR: Resource file not found" (Godot 4.6.2), which the headless
+## test wrapper and the editor log both treat as a failure.
+static func _texture_from_path(path: String) -> Texture2D:
+	if path.is_empty() or not ResourceLoader.exists(path, "Texture2D"):
+		return null
+	return ResourceLoader.load(path, "Texture2D") as Texture2D
 
 
 static func _param_type(manifest: GSTManifestEntry, param_name: String) -> String:

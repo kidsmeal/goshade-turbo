@@ -262,6 +262,55 @@ func test_every_param_type_round_trips() -> void:
 	assert_true(typeof(reparsed_palette.params.get("a")) == TYPE_VECTOR3, "vec3 param round-trips as Vector3")
 
 
+## An imported project texture used as the source/image `image` value.
+const TEXTURE_PATH: String = "res://addons/goshade_turbo/assets/preview_default.png"
+## A texture path that names no file.
+const MISSING_TEXTURE_PATH: String = "res://gst_test_missing_texture.png"
+
+
+## Decision 27: the header stores the texture's resource_path string and
+## parse loads it back.
+func test_texture_param_round_trips_as_its_path() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var image: GSTLayer = GSTStackOps.add_layer(stack, "source/image", GSTLayer.Kind.COLOR, true)
+	image.params["image"] = load(TEXTURE_PATH) as Texture2D
+	stack.output_color = image.id
+
+	var line: String = GSTHeader.header_line(stack)
+	assert_true(line.contains("\"image\":\"%s\"" % TEXTURE_PATH), "header stores the texture path string: %s" % line)
+	var parsed: Dictionary = GSTHeader.parse(line, lib)
+	assert_true(parsed["ok"], "header with a texture param parses: %s" % parsed["reason"])
+	assert_true((parsed.get("missing_textures", [""]) as Array).is_empty(), "no texture is reported missing")
+	if not parsed["ok"]:
+		return
+	var value: Variant = (parsed["stack"] as GSTStack).layers[0].params.get("image")
+	assert_true(value is Texture2D, "texture param parses back as a Texture2D")
+	if value is Texture2D:
+		assert_eq((value as Texture2D).resource_path, TEXTURE_PATH, "parsed texture keeps its path")
+	assert_eq(GSTHeader.header_line(parsed["stack"]), line, "reparsed stack serializes to the same header")
+
+
+## Decision 27: a missing texture file leaves the param unset, reports the
+## path, and still opens the stack.
+func test_missing_texture_path_reopens_with_path_reported() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var image: GSTLayer = GSTStackOps.add_layer(stack, "source/image", GSTLayer.Kind.COLOR, true)
+	stack.output_color = image.id
+	var line: String = GSTHeader.header_line(stack).replace("\"params\":{}", "\"params\":{\"image\":\"%s\"}" % MISSING_TEXTURE_PATH)
+	assert_true(line.contains(MISSING_TEXTURE_PATH), "test header references the missing path: %s" % line)
+
+	var parsed: Dictionary = GSTHeader.parse(line, lib)
+	assert_true(parsed["ok"], "header referencing a missing texture parses: %s" % parsed["reason"])
+	var missing: Array[String] = parsed.get("missing_textures", [] as Array[String])
+	assert_eq(missing, [MISSING_TEXTURE_PATH] as Array[String], "missing texture path is reported")
+	if parsed["ok"]:
+		var reparsed: GSTLayer = (parsed["stack"] as GSTStack).layers[0]
+		assert_false(reparsed.has_param_value(&"image"), "missing texture param is left unset")
+	print("test_missing_texture_path_reopens_with_path_reported: ok=%s, missing_textures=%s" % [parsed["ok"], missing])
+
+
 func test_labels_leave_every_shipped_function_export_byte_identical() -> void:
 	var labeled: GSTLibrary = _scanned_library()
 	var unlabeled: GSTLibrary = GSTLibrary.new()
@@ -281,7 +330,7 @@ func test_labels_leave_every_shipped_function_export_byte_identical() -> void:
 		for input: Dictionary in entry.inputs:
 			layer.slots[String(input["name"])] = source.id
 		for param: Dictionary in entry.params:
-			layer.params[String(param["name"])] = param["default"]
+			layer.params[String(param["name"])] = GSTManifestEntry.param_default(param)
 		stack.output_color = layer.id
 		var with_labels: GSTCodegenResult = GSTCodegen.generate_result(stack, labeled)
 		assert_true(with_labels.ok(), "%s generates with labels: %s" % [id, with_labels.error])
