@@ -4,7 +4,8 @@ extends RefCounted
 
 ## Wraps a standalone UndoRedo for every stack edit: structural edits (add,
 ## duplicate, remove, reorder, rename, bypass, slot change, warp slot change,
-## output color change, output alpha change), coord-space edits, Randomize,
+## param link, unlink and link amount, output color change, output alpha
+## change), coord-space edits, Randomize,
 ## and native property
 ## edits (gst_inspector_column.gd finishes each native gesture and routes the
 ## result here).
@@ -130,13 +131,14 @@ func remove_layer(layer_id: StringName) -> void:
 	var removed_layer: GSTLayer = _stack.layers[removed_index]
 	var slot_snapshot: Array[Dictionary] = _snapshot_referencing_slots(layer_id)
 	var warp_snapshot: Array[Dictionary] = _snapshot_referencing_warps(layer_id)
+	var link_snapshot: Array[Dictionary] = _snapshot_referencing_links(layer_id)
 	var output_color_snapshot: StringName = _stack.output_color
 	var output_alpha_snapshot: StringName = _stack.output_alpha
 	GSTStackOps.remove_layer(_stack, layer_id, _library)
 	_clear_output_refs(layer_id)
 	_create_action("GST: remove %s" % String(layer_id))
 	_undo_redo.add_do_method(_redo_remove.bind(removed_layer))
-	_undo_redo.add_undo_method(_undo_remove.bind(removed_layer, removed_index, slot_snapshot, warp_snapshot, output_color_snapshot, output_alpha_snapshot))
+	_undo_redo.add_undo_method(_undo_remove.bind(removed_layer, removed_index, slot_snapshot, warp_snapshot, link_snapshot, output_color_snapshot, output_alpha_snapshot))
 	_undo_redo.add_do_method(_notify)
 	_undo_redo.add_undo_method(_notify)
 	_undo_redo.commit_action(false)
@@ -184,7 +186,22 @@ func _snapshot_referencing_warps(layer_id: StringName) -> Array[Dictionary]:
 	return out
 
 
-func _undo_remove(layer: GSTLayer, index: int, slot_snapshot: Array[Dictionary], warp_snapshot: Array[Dictionary], output_color: StringName, output_alpha: StringName) -> void:
+## Same as _snapshot_referencing_slots for param links (decision 29):
+## GSTStackOps.remove_layer erases every link targeting layer_id, so undo
+## writes a detached copy of each back onto the same GSTLayer instance.
+func _snapshot_referencing_links(layer_id: StringName) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for layer: GSTLayer in _stack.layers:
+		if layer.id == layer_id:
+			continue
+		for param_name: Variant in layer.param_links.keys():
+			var link: Dictionary = _link_snapshot(layer, String(param_name))
+			if StringName(link.get("target", &"")) == layer_id:
+				out.append({"layer": layer, "param_name": String(param_name), "link": link})
+	return out
+
+
+func _undo_remove(layer: GSTLayer, index: int, slot_snapshot: Array[Dictionary], warp_snapshot: Array[Dictionary], link_snapshot: Array[Dictionary], output_color: StringName, output_alpha: StringName) -> void:
 	_stack.layers.insert(clampi(index, 0, _stack.layers.size()), layer)
 	for ref: Dictionary in slot_snapshot:
 		(ref["layer"] as GSTLayer).slots[ref["slot_name"]] = ref["value"]
@@ -194,6 +211,8 @@ func _undo_remove(layer: GSTLayer, index: int, slot_snapshot: Array[Dictionary],
 			coord.warp_x = ref["value"]
 		else:
 			coord.warp_y = ref["value"]
+	for ref: Dictionary in link_snapshot:
+		(ref["layer"] as GSTLayer).param_links[ref["param_name"]] = (ref["link"] as Dictionary).duplicate()
 	_stack.output_color = output_color
 	_stack.output_alpha = output_alpha
 
@@ -379,6 +398,124 @@ func _raw_set_warp(layer_id: StringName, axis: String, target_id: StringName) ->
 		layer.coord.warp_x = target_id
 	else:
 		layer.coord.warp_y = target_id
+
+
+## Links param_name on layer_id to target_id (decisions 29, 30) as one
+## action, replacing any existing link on the param. Refused with
+## GSTStackOps.validate_param_link's reason, no mutation and no action.
+## Never writes layer.params, so the base slider value is unchanged. An
+## identical link registers no action.
+func set_param_link(layer_id: StringName, param_name: String, target_id: StringName, amount: float = GSTLinkAmountProxy.LINK_AMOUNT_DEFAULT) -> Dictionary:
+	var check: Dictionary = GSTStackOps.validate_param_link(_stack, layer_id, param_name, target_id, _library)
+	if not check["ok"]:
+		return check
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	var old_link: Dictionary = _link_snapshot(layer, param_name)
+	var result: Dictionary = GSTStackOps.set_param_link(_stack, layer_id, param_name, target_id, amount)
+	if not result["ok"]:
+		return result
+	var new_link: Dictionary = _link_snapshot(layer, param_name)
+	if _links_equal(old_link, new_link):
+		return {"ok": true, "reason": ""}
+	_create_action("GST: link %s.%s" % [String(layer_id), param_name])
+	_undo_redo.add_do_method(_raw_set_param_link.bind(layer_id, param_name, new_link))
+	_undo_redo.add_undo_method(_raw_set_param_link.bind(layer_id, param_name, old_link))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
+	_undo_redo.commit_action(false)
+	_notify()
+	return {"ok": true, "reason": ""}
+
+
+## Sets the amount of an existing link, clamped to
+## GSTStackOps.LINK_AMOUNT_MIN..LINK_AMOUNT_MAX, as one action. Notifies
+## through the property path, not _notify: the amount row stays alive across
+## the commit, like commit_property_change, and on_replayed refreshes its
+## displayed value on every undo/redo. An unchanged amount registers no
+## action; an unlinked param is refused.
+func set_link_amount(layer_id: StringName, param_name: String, amount: float, on_replayed: Callable = Callable()) -> Dictionary:
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	if layer == null:
+		return {"ok": false, "reason": "This layer no longer exists."}
+	var old_link: Dictionary = _link_snapshot(layer, param_name)
+	if old_link.is_empty():
+		return {"ok": false, "reason": "%s on %s is not linked." % [param_name, GSTStackOps.display_name(layer, _library)]}
+	var old_amount: float = float(old_link.get("amount", GSTLinkAmountProxy.LINK_AMOUNT_DEFAULT))
+	var new_amount: float = clampf(amount, GSTStackOps.LINK_AMOUNT_MIN, GSTStackOps.LINK_AMOUNT_MAX)
+	if is_equal_approx(old_amount, new_amount):
+		return {"ok": true, "reason": ""}
+	_raw_set_link_amount(layer_id, param_name, new_amount)
+	_create_action("GST: link amount %s.%s" % [String(layer_id), param_name])
+	_undo_redo.add_do_method(_raw_set_link_amount.bind(layer_id, param_name, new_amount))
+	_undo_redo.add_undo_method(_raw_set_link_amount.bind(layer_id, param_name, old_amount))
+	if on_replayed.is_valid():
+		_undo_redo.add_do_method(on_replayed)
+		_undo_redo.add_undo_method(on_replayed)
+	_undo_redo.add_do_method(_notify_property)
+	_undo_redo.add_undo_method(_notify_property)
+	_undo_redo.commit_action(false)
+	if on_replayed.is_valid():
+		on_replayed.call()
+	_notify_property()
+	return {"ok": true, "reason": ""}
+
+
+## Removes the link on param_name as one action (decision 30). The base
+## slider value is unchanged. An unlinked param registers no action.
+func clear_param_link(layer_id: StringName, param_name: String) -> Dictionary:
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	if layer == null:
+		return {"ok": false, "reason": "This layer no longer exists."}
+	var old_link: Dictionary = _link_snapshot(layer, param_name)
+	if old_link.is_empty():
+		return {"ok": true, "reason": ""}
+	GSTStackOps.clear_param_link(_stack, layer_id, param_name)
+	_create_action("GST: unlink %s.%s" % [String(layer_id), param_name])
+	_undo_redo.add_do_method(_raw_set_param_link.bind(layer_id, param_name, {}))
+	_undo_redo.add_undo_method(_raw_set_param_link.bind(layer_id, param_name, old_link))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
+	_undo_redo.commit_action(false)
+	_notify()
+	return {"ok": true, "reason": ""}
+
+
+## A detached copy of the link on param_name, or {} when unlinked. The live
+## dictionary is written in place by GSTLinkAmountProxy during an amount
+## gesture, so history never binds it directly.
+static func _link_snapshot(layer: GSTLayer, param_name: String) -> Dictionary:
+	if layer == null:
+		return {}
+	var link: Variant = layer.param_links.get(param_name, null)
+	if not (link is Dictionary):
+		return {}
+	return (link as Dictionary).duplicate()
+
+
+static func _links_equal(a: Dictionary, b: Dictionary) -> bool:
+	if a.is_empty() or b.is_empty():
+		return a.is_empty() and b.is_empty()
+	return StringName(a.get("target", &"")) == StringName(b.get("target", &"")) and is_equal_approx(float(a.get("amount", 0.0)), float(b.get("amount", 0.0)))
+
+
+## An empty link erases the param's entry.
+func _raw_set_param_link(layer_id: StringName, param_name: String, link: Dictionary) -> void:
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	if layer == null:
+		return
+	if link.is_empty():
+		layer.param_links.erase(param_name)
+	else:
+		layer.param_links[param_name] = link.duplicate()
+
+
+func _raw_set_link_amount(layer_id: StringName, param_name: String, amount: float) -> void:
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	if layer == null:
+		return
+	var link: Variant = layer.param_links.get(param_name, null)
+	if link is Dictionary:
+		(link as Dictionary)["amount"] = amount
 
 
 ## Sets stack.output_color. Any layer is a legal target; a field layer

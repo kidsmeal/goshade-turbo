@@ -3,8 +3,8 @@ class_name GSTInspectorColumn
 extends VBoxContainer
 
 ## Selected-layer controls. Manifest params and coordinates use standalone
-## native property rows; input and distortion references route through
-## GSTUndo via picker buttons.
+## native property rows; input, distortion and param link references route
+## through GSTUndo via picker buttons.
 ##
 ## Each row is built with EditorInspector.instantiate_property_editor (a
 ## static factory, independent of any EditorInspector container). This column
@@ -49,6 +49,12 @@ var _refusals: Dictionary = {}
 ## "property": StringName, "state": Dictionary}. Rebuilt wholesale on every
 ## edit(); a row's state never survives its own rebuild.
 var _property_rows: Dictionary = {}
+## param name -> Button / Label / EditorProperty for the param link controls
+## of the edited layer (decisions 29, 30). Rebuilt with the parameter rows.
+var _link_buttons: Dictionary = {}
+var _link_refusal_labels: Dictionary = {}
+var _unlink_buttons: Dictionary = {}
+var _link_amount_editors: Dictionary = {}
 
 
 func _ready() -> void:
@@ -280,6 +286,10 @@ static func _find_color_button(node: Node) -> ColorPickerButton:
 ## anything the layer's _validate_property hid from the editor.
 func _rebuild_parameter_rows() -> void:
 	_clear_rows(_parameter_rows_box)
+	_link_buttons.clear()
+	_link_refusal_labels.clear()
+	_unlink_buttons.clear()
+	_link_amount_editors.clear()
 	if _layer == null:
 		return
 	for property: Dictionary in _layer.get_property_list():
@@ -289,7 +299,73 @@ func _rebuild_parameter_rows() -> void:
 		var metadata: Dictionary = _layer.get_param_schema(property_name)
 		if metadata.is_empty():
 			continue
-		_build_property_row(_parameter_rows_box, "param", _layer, property, String(metadata["label"]), String(metadata["description"]))
+		var editor: EditorProperty = _build_property_row(_parameter_rows_box, "param", _layer, property, String(metadata["label"]), String(metadata["description"]))
+		if editor != null and String(metadata.get("type", "")) in GSTStackOps.LINKABLE_PARAM_TYPES:
+			_add_link_controls(editor, String(property_name), String(metadata["label"]))
+
+
+## Link button beside a float or int param's slider (decision 30), its
+## refusal label, and for a linked param the second line: the target's name
+## as the label of a native amount slider, then an unlink button. The base
+## slider above stays live; linking and unlinking never write layer.params.
+func _add_link_controls(editor: EditorProperty, param_name: String, param_label: String) -> void:
+	var line: HBoxContainer = editor.get_parent() as HBoxContainer
+	var row: VBoxContainer = line.get_parent() as VBoxContainer
+	var captured_layer_id: StringName = _layer.id
+	var link_button: Button = Button.new()
+	link_button.text = "Link"
+	link_button.tooltip_text = "Drive %s with a layer below this one." % param_label
+	link_button.disabled = _mutations_blocked
+	link_button.pressed.connect(_on_link_pressed.bind(captured_layer_id, param_name, link_button))
+	line.add_child(link_button)
+	_link_buttons[param_name] = link_button
+	var refusal: Label = _build_refusal_label(captured_layer_id, param_name, "link")
+	row.add_child(refusal)
+	_link_refusal_labels[param_name] = refusal
+
+	var link: Variant = _layer.param_links.get(param_name, null)
+	if not (link is Dictionary):
+		return
+	var target_text: String = _link_target_text(StringName((link as Dictionary).get("target", &"")))
+	var proxy: GSTLinkAmountProxy = GSTLinkAmountProxy.new(_layer, param_name)
+	var amount_editor: EditorProperty = _build_property_row(row, "link_amount", proxy, proxy.get_property_info(), target_text, "How strongly %s moves %s. 0 leaves the slider value unchanged; negative values invert." % [target_text, param_label])
+	if amount_editor == null:
+		return
+	_link_amount_editors[param_name] = amount_editor
+	var unlink_button: Button = Button.new()
+	unlink_button.text = "Unlink"
+	unlink_button.tooltip_text = "Remove the link. %s keeps its slider value." % param_label
+	unlink_button.disabled = _mutations_blocked
+	unlink_button.pressed.connect(_on_unlink_pressed.bind(captured_layer_id, param_name))
+	(amount_editor.get_parent() as HBoxContainer).add_child(unlink_button)
+	_unlink_buttons[param_name] = unlink_button
+
+
+## "l<id> <label> <function>", label omitted when empty (decision 25 row
+## shape: function name always visible).
+func _link_target_text(target_id: StringName) -> String:
+	var target: GSTLayer = GSTStackOps.find_layer(_stack, target_id)
+	if target == null:
+		return "Unavailable layer"
+	var entry: GSTManifestEntry = _library.get_entry(target.entry)
+	var function_name: String = entry.function if entry != null else target.entry
+	if target.label.is_empty():
+		return "l%s %s" % [String(target.id), function_name]
+	return "l%s %s %s" % [String(target.id), target.label, function_name]
+
+
+func _on_link_pressed(layer_id: StringName, param_name: String, button: Button) -> void:
+	if _mutations_blocked:
+		return
+	chooser_requested.emit("link", layer_id, param_name, button)
+
+
+func _on_unlink_pressed(layer_id: StringName, param_name: String) -> void:
+	if _mutations_blocked or _undo == null:
+		return
+	await finish_pending_edits()
+	var result: Dictionary = _undo.clear_param_link(layer_id, param_name)
+	set_refusal(layer_id, param_name, "link", "" if result["ok"] else String(result["reason"]))
 
 
 ## Coord block whitelist (scale/offset/rotation/scroll/warp_strength).
@@ -311,19 +387,24 @@ func _rebuild_coord_rows() -> void:
 		_build_property_row(_coord_rows_box, "coord", coord, property, String(metadata["label"]), String(metadata["description"]))
 
 
+## Link amount rows sit inside their param's row, so a row is matched by
+## ancestry, not by direct parent.
 func _clear_rows(box: VBoxContainer) -> void:
 	for key: String in _property_rows.keys().duplicate():
-		if (_property_rows[key]["row"] as Node).get_parent() == box:
+		if box.is_ancestor_of(_property_rows[key]["row"] as Node):
 			_property_rows.erase(key)
 	for child: Node in box.get_children():
 		child.queue_free()
 
 
-func _build_property_row(box: VBoxContainer, kind: String, target: Object, property: Dictionary, label: String, description: String) -> void:
+## Returns the row's EditorProperty, or null when Godot has no editor for the
+## property. The editor sits in an HBoxContainer line inside the row, so
+## trailing controls (link, unlink) can follow it on the same line.
+func _build_property_row(box: VBoxContainer, kind: String, target: Object, property: Dictionary, label: String, description: String) -> EditorProperty:
 	var hint: PropertyHint = int(property.get("hint", PROPERTY_HINT_NONE))
 	var editor: EditorProperty = EditorInspector.instantiate_property_editor(target, int(property.get("type", TYPE_NIL)), String(property["name"]), hint, String(property.get("hint_string", "")), int(property.get("usage", PROPERTY_USAGE_DEFAULT)), false)
 	if editor == null:
-		return
+		return null
 	var property_name: StringName = StringName(property["name"])
 	editor.set_object_and_property(target, property_name)
 	editor.set_label(label)
@@ -332,7 +413,10 @@ func _build_property_row(box: VBoxContainer, kind: String, target: Object, prope
 	editor.update_property()
 	var row: VBoxContainer = VBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(editor)
+	var line: HBoxContainer = HBoxContainer.new()
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(editor)
+	row.add_child(line)
 	if (kind == "coord" and property_name in [&"warp_strength", &"offset", &"scroll", &"rotation"]) or (kind == "param" and property_name in [&"gain", &"edge0", &"edge1"]):
 		var context: Label = Label.new()
 		context.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -367,6 +451,7 @@ func _build_property_row(box: VBoxContainer, kind: String, target: Object, prope
 		color_button.popup_closed.connect(_finish_color_popup.bind(key), CONNECT_DEFERRED)
 		color_button.get_popup().window_input.connect(_on_color_popup_window_input.bind(color_button.get_popup()))
 		color_button.get_popup().about_to_popup.connect(_connect_color_popup_field_shortcuts.bind(color_button, key))
+	return editor
 
 
 func _row_key(target: Object, property_name: StringName) -> String:
@@ -655,10 +740,16 @@ func _commit_row(key: String, old_value: Variant, new_value: Variant, old_presen
 	state["final_present"] = true
 	state["last_committed_final"] = new_value
 	state["original_present"] = true
-	if _undo != null:
-		_undo.commit_property_change(target, property_name, old_value, new_value, _refresh_row.bind(key), old_present)
-	else:
+	if _undo == null:
 		_refresh_row(key)
+	elif target is GSTLinkAmountProxy:
+		# set_link_amount is mutation-first and reads its undo value from the
+		# layer, which the live gesture already moved to new_value.
+		var proxy: GSTLinkAmountProxy = target as GSTLinkAmountProxy
+		target.set(property_name, old_value)
+		_undo.set_link_amount(proxy.layer.id, proxy.param_name, float(new_value), _refresh_row.bind(key))
+	else:
+		_undo.commit_property_change(target, property_name, old_value, new_value, _refresh_row.bind(key), old_present)
 
 
 ## Refreshes one row's displayed value and the shared context hints without
@@ -762,15 +853,31 @@ func _update_rows_layout(box: VBoxContainer) -> void:
 		var reload_allowance: float = reload_icon.get_width() + half_padding + float(property.get_theme_constant(&"h_separation", &"Tree"))
 		var padded_label_width: float = label_width + font_offset + reload_allowance
 		var child_minimum: float = property.get_combined_minimum_size().x
+		var trailing_width: float = _trailing_controls_width(property)
 		box_minimum = maxf(box_minimum, maxf(
 			(padded_label_width + editor_padding) / split_ratio,
 			padded_label_width + editor_padding + child_minimum,
-		))
+		) + trailing_width)
 	box.set_meta(&"gst_measured_minimum_width", ceilf(box_minimum))
 	var content_width: float = maxf(float(_parameter_rows_box.get_meta(&"gst_measured_minimum_width", 0.0)), float(_coord_rows_box.get_meta(&"gst_measured_minimum_width", 0.0)))
 	var scrollbar_width: float = _scroll.get_v_scroll_bar().get_combined_minimum_size().x
 	var scroll_panel_width: float = _scroll.get_theme_stylebox(&"panel").get_minimum_size().x
 	custom_minimum_size.x = content_width + scrollbar_width + scroll_panel_width
+
+
+## Width of the controls after `property` on its row line (link, unlink),
+## each plus the line's separation; 0 for an editor with nothing after it.
+func _trailing_controls_width(property: EditorProperty) -> float:
+	var line: HBoxContainer = property.get_parent() as HBoxContainer
+	if line == null:
+		return 0.0
+	var separation: float = float(line.get_theme_constant(&"separation"))
+	var width: float = 0.0
+	for child: Node in line.get_children():
+		if child == property or not (child is Control) or not (child as Control).visible:
+			continue
+		width += (child as Control).get_combined_minimum_size().x + separation
+	return width
 
 
 func _rebuild_slots() -> void:
@@ -876,10 +983,36 @@ func set_mutations_blocked(blocked: bool) -> void:
 		(button as Button).disabled = blocked
 	for button: Variant in _warp_buttons.values():
 		(button as Button).disabled = blocked
+	for button: Variant in _link_buttons.values():
+		(button as Button).disabled = blocked
+	for button: Variant in _unlink_buttons.values():
+		(button as Button).disabled = blocked
 
 
 func get_input_button(slot_name: String) -> Button:
 	return _input_buttons.get(slot_name) as Button
+
+
+## Wired-by: gst_main_panel.gd (_close_picker focus) and
+## tests/gst_editor_ui_param_links_smoke.gd.
+func get_link_button(param_name: String) -> Button:
+	return _link_buttons.get(param_name) as Button
+
+
+## Wired-by: tests/gst_editor_ui_param_links_smoke.gd.
+func get_unlink_button(param_name: String) -> Button:
+	return _unlink_buttons.get(param_name) as Button
+
+
+## The native amount slider on a linked param's second line, or null.
+## Wired-by: tests/gst_editor_ui_param_links_smoke.gd.
+func get_link_amount_property(param_name: String) -> EditorProperty:
+	return _link_amount_editors.get(param_name) as EditorProperty
+
+
+## Wired-by: tests/gst_editor_ui_param_links_smoke.gd.
+func get_link_refusal_label(param_name: String) -> Label:
+	return _link_refusal_labels.get(param_name) as Label
 
 
 func get_warp_button(axis: String) -> Button:
@@ -897,7 +1030,16 @@ func set_refusal(layer_id: StringName, slot_name: String, purpose: String, reaso
 			"purpose": purpose,
 			"reason": reason,
 		}
-	if _layer != null and _layer.id == layer_id:
+	if _layer == null or _layer.id != layer_id:
+		return
+	if purpose == "link":
+		# Writes the label in place: rebuilding the parameter rows would free
+		# native rows that may hold a gesture.
+		var label: Label = _link_refusal_labels.get(slot_name) as Label
+		if label != null:
+			label.text = reason
+			label.visible = not reason.is_empty()
+	else:
 		_rebuild_slots()
 
 

@@ -136,6 +136,11 @@ static func _write_coord_uniforms(layer: GSTLayer, material: ShaderMaterial, dec
 ## param carries no "default" key (decision 27), same as
 ## _param_uniform_line's early branch, so it is written before the
 ## `param["default"]` lookup below ever runs.
+##
+## A linked float or int param (decision 29) also writes its amount uniform,
+## GSTUniformNames.param_amount_uniform, so an amount edit reaches the
+## preview as a uniform write. Like every other uniform it is written only
+## when the compiled shader declares it.
 static func _write_param_uniform(layer: GSTLayer, function_name: String, param: Dictionary, material: ShaderMaterial, declared: Dictionary) -> void:
 	var param_name: String = param["name"]
 	var uniform_name: String = GSTUniformNames.param_uniform(layer.id, function_name, param_name)
@@ -153,6 +158,10 @@ static func _write_param_uniform(layer: GSTLayer, function_name: String, param: 
 			_set_if_declared(material, declared, uniform_name, int(value))
 		_:
 			_set_if_declared(material, declared, uniform_name, float(value))
+	if param_type in GSTStackOps.LINKABLE_PARAM_TYPES:
+		var link: Variant = layer.param_links.get(param_name, null)
+		if link is Dictionary:
+			_set_if_declared(material, declared, GSTUniformNames.param_amount_uniform(layer.id, function_name, param_name), float((link as Dictionary).get("amount", 1.0)))
 
 
 static func _set_if_declared(material: ShaderMaterial, declared: Dictionary, uniform_name: String, value: Variant) -> void:

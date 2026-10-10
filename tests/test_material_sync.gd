@@ -166,6 +166,34 @@ func test_resync_after_a_param_change_updates_only_that_uniform() -> void:
 	assert_eq(material.get_shader_parameter(GSTUniformNames.param_uniform(fbm.id, "fbm", "gain")), 0.5, "an unchanged param's uniform is untouched by the resync")
 
 
+## A linked param writes its amount uniform (decision 29); the base uniform
+## keeps the slider value, and an unlinked param declares no amount uniform.
+func test_sync_writes_the_amount_uniform_of_a_linked_param() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var ctx: Dictionary = _build_stack(lib)
+	var stack: GSTStack = ctx["stack"]
+	var fbm: GSTLayer = ctx["fbm"]
+	var top: GSTLayer = GSTStackOps.add_layer(stack, "generative/fbm", GSTLayer.Kind.FIELD, true)
+	stack.output_color = top.id
+	var link: Dictionary = GSTStackOps.set_param_link(stack, top.id, "gain", fbm.id, 0.25)
+	assert_true(link["ok"], "linking top.gain to the fbm below succeeds: %s" % link["reason"])
+	var material: ShaderMaterial = ShaderMaterial.new()
+	var amount_name: String = GSTUniformNames.param_amount_uniform(top.id, "fbm", "gain")
+
+	var result: GSTCodegenResult = GSTMaterialSync.sync(stack, lib, material, &"", Vector2(256.0, 256.0))
+
+	assert_true(result.ok(), "sync of a stack with a linked param succeeds: %s" % result.error)
+	assert_eq(material.get_shader_parameter(amount_name), 0.25, "the amount uniform matches the link amount")
+	assert_eq(material.get_shader_parameter(GSTUniformNames.param_uniform(top.id, "fbm", "gain")), 0.5, "the base uniform keeps the slider value")
+	assert_eq(material.get_shader_parameter(GSTUniformNames.param_amount_uniform(top.id, "fbm", "octaves")), null, "an unlinked param has no amount uniform")
+
+	(top.param_links["gain"] as Dictionary)["amount"] = -0.5
+	var resync: GSTCodegenResult = GSTMaterialSync.sync(stack, lib, material, &"", Vector2(256.0, 256.0))
+	assert_true(resync.ok(), "resync after an amount change succeeds: %s" % resync.error)
+	assert_eq(material.get_shader_parameter(amount_name), -0.5, "the amount uniform reflects the changed amount")
+	assert_true(GSTShaderCompile.compiles(material.shader.code), "the linked shader compiles")
+
+
 func test_codegen_failure_leaves_material_code_and_uniforms_unchanged() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var ctx: Dictionary = _build_stack(lib)

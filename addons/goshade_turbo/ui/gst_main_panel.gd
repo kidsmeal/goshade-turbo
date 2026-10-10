@@ -1929,7 +1929,7 @@ func _on_refused(reason: String) -> void:
 ## GSTUndo's on_changed callback: fires after every do and undo.
 func _on_stack_changed() -> void:
 	for key: String in _control_refusals.keys():
-		if key.begins_with("input:") or key.begins_with("warp:"):
+		if key.begins_with("input:") or key.begins_with("warp:") or key.begins_with("link:"):
 			if GSTStackOps.find_layer(_stack, StringName(key.get_slice(":", 1))) == null:
 				_control_refusals.erase(key)
 	_stack_list.refresh()
@@ -2146,20 +2146,22 @@ func _on_recipes_pressed() -> void:
 
 
 func _on_chooser_requested(purpose: String, layer_id: StringName, slot_name: String, initiator: Control) -> void:
-	if purpose not in ["add", "recipe", "output_color", "output_alpha", "input", "warp"]:
+	if purpose not in ["add", "recipe", "output_color", "output_alpha", "input", "warp", "link"]:
 		return
 	if is_picker_open():
 		return
 	_picker_context = {"stack": _stack, "purpose": purpose, "layer_id": layer_id, "slot_name": slot_name}
 	_picker_focus = weakref(initiator)
-	var title: String = {"add": "Add Layer", "recipe": "Recipes", "output_color": "Output color", "output_alpha": "Transparency", "input": "Choose input", "warp": "Choose distortion"}.get(purpose, "Choose layer")
-	if purpose == "input" or purpose == "warp":
+	var title: String = {"add": "Add Layer", "recipe": "Recipes", "output_color": "Output color", "output_alpha": "Transparency", "input": "Choose input", "warp": "Choose distortion", "link": "Link to layer"}.get(purpose, "Choose layer")
+	if purpose in ["input", "warp", "link"]:
 		var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
 		if layer != null:
 			var entry: GSTManifestEntry = _library.get_entry(layer.entry)
 			var label: String = slot_name.capitalize()
 			if purpose == "warp":
 				label = "Horizontal distortion" if slot_name == "x" else "Vertical distortion"
+			elif purpose == "link":
+				label = "Link %s" % String(_manifest_param(layer, slot_name).get("label", label))
 			elif entry != null:
 				for input: Dictionary in entry.inputs:
 					if String(input["name"]) == slot_name:
@@ -2270,6 +2272,8 @@ func _close_picker(restore_focus: bool = true) -> void:
 			target = _inspector_column.get_input_button(context["slot_name"])
 		elif context["purpose"] == "warp":
 			target = _inspector_column.get_warp_button(context["slot_name"])
+		elif context["purpose"] == "link":
+			target = _inspector_column.get_link_button(context["slot_name"])
 	if not is_instance_valid(target) or not target.is_visible_in_tree():
 		target = _stack_list.get_node("%AddButton") as Control
 	if target.is_visible_in_tree():
@@ -2285,7 +2289,7 @@ func _picker_refusal(reason: String) -> void:
 	_control_refusals[_picker_key()] = reason
 	_picker.set_refusal(reason)
 	var purpose: String = _picker_context["purpose"]
-	if purpose == "input" or purpose == "warp":
+	if purpose in ["input", "warp", "link"]:
 		_inspector_column.set_refusal(_picker_context["layer_id"], _picker_context["slot_name"], purpose, reason)
 	elif purpose.begins_with("output_"):
 		_output_block.set_refusal(purpose, reason)
@@ -2304,7 +2308,7 @@ func _destination_error() -> String:
 	if _picker_context.get("stack") != _stack:
 		return "The open stack changed. Close this chooser and choose again."
 	var purpose: String = _picker_context["purpose"]
-	if purpose != "input" and purpose != "warp":
+	if purpose not in ["input", "warp", "link"]:
 		return ""
 	var layer: GSTLayer = GSTStackOps.find_layer(_stack, _picker_context["layer_id"])
 	if layer == null:
@@ -2312,6 +2316,9 @@ func _destination_error() -> String:
 	var name: String = _picker_context["slot_name"]
 	if purpose == "warp":
 		return "" if layer.coord != null and name in ["x", "y"] else "This distortion input is no longer available."
+	if purpose == "link":
+		var param_type: String = String(_manifest_param(layer, name).get("type", ""))
+		return "" if param_type in GSTStackOps.LINKABLE_PARAM_TYPES else "This setting is no longer available."
 	var entry: GSTManifestEntry = _library.get_entry(layer.entry)
 	if entry != null:
 		for input: Dictionary in entry.inputs:
@@ -2352,6 +2359,8 @@ func _choice_rows(tab: int) -> Array[Dictionary]:
 		for name: String in _recipe_names():
 			rows.append({"value": name, "title": name, "category": "Recipes", "kind": "stack", "description": "Open this bundled recipe as an editable stack.", "conversion": ""})
 		return rows
+	if purpose == "link":
+		return _link_choice_rows(dest)
 	if purpose in ["input", "warp"]:
 		rows.append(_mode_row("", "No layer", "Leave this input unconnected."))
 	elif purpose == "output_color":
@@ -2372,6 +2381,31 @@ func _choice_rows(tab: int) -> Array[Dictionary]:
 		var entry: GSTManifestEntry = _library.get_entry(layer.entry)
 		rows.append({"value": String(layer.id), "title": "%s (l%s)" % [entry.function if entry != null else layer.entry, String(layer.id)], "category": "Layers", "kind": _kind_name(layer.kind_out), "description": entry.description if entry != null else "", "conversion": _conversion(layer.kind_out, wanted_kind)})
 	return rows
+
+
+## Param link chooser rows (decision 30): every field and color layer below
+## `linker`, nearest first, titled by label and function name. No library
+## entries and no "No layer" row; Unlink on the param row removes a link.
+func _link_choice_rows(linker: GSTLayer) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	for i: int in range(GSTStackOps.find_index(_stack, linker.id) - 1, -1, -1):
+		var layer: GSTLayer = _stack.layers[i]
+		var entry: GSTManifestEntry = _library.get_entry(layer.entry)
+		var function_name: String = entry.function if entry != null else layer.entry
+		var title: String = function_name if layer.label.is_empty() else "%s %s" % [layer.label, function_name]
+		rows.append({"value": String(layer.id), "title": "%s (l%s)" % [title, String(layer.id)], "category": "Layers", "kind": _kind_name(layer.kind_out), "description": entry.description if entry != null else "", "conversion": _conversion(layer.kind_out, GSTLayer.Kind.FIELD)})
+	return rows
+
+
+## The manifest param dict named `param_name` on `layer`'s entry, or {}.
+func _manifest_param(layer: GSTLayer, param_name: String) -> Dictionary:
+	var entry: GSTManifestEntry = _library.get_entry(layer.entry)
+	if entry == null:
+		return {}
+	for param: Dictionary in entry.params:
+		if String(param.get("name", "")) == param_name:
+			return param
+	return {}
 
 
 func _mode_row(value: String, title: String, description: String) -> Dictionary:
@@ -2421,6 +2455,12 @@ func _on_picker_choice(choice: Dictionary) -> void:
 			result = _undo.add_layer_below_and_wire(layer_id, value, slot) if _picker.get_tab_index() == 1 else _undo.assign_slot(layer_id, slot, StringName(value))
 		"warp":
 			result = _undo.add_layer_below_and_wire_warp(layer_id, value, slot) if _picker.get_tab_index() == 1 else _undo.assign_warp(layer_id, slot, StringName(value))
+		"link":
+			# Relinking an already linked param keeps its amount.
+			var linker: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+			var current: Variant = linker.param_links.get(slot, null)
+			var amount: float = float((current as Dictionary).get("amount", GSTLinkAmountProxy.LINK_AMOUNT_DEFAULT)) if current is Dictionary else GSTLinkAmountProxy.LINK_AMOUNT_DEFAULT
+			result = _undo.set_param_link(layer_id, slot, StringName(value), amount)
 		"output_color":
 			if _stack.output_color != StringName(value):
 				result = _undo.set_output_color(StringName(value))
