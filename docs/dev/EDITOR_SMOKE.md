@@ -4851,3 +4851,45 @@ via `git checkout --` before finishing. No other `sandbox/**` file touched,
 None.
 
 Verification: `Godot_v4.4-stable_win64.exe --headless --path . --import`, then `--headless --path . -s res://tests/run_codegen_tests.gd` in the real repo root -> `GST tests: 21 file(s), 145 test method(s), 0 failure(s)`, `run_codegen_tests: PASS`. `sandbox/screenshots/glow.png.import` restored via `git checkout --` after import. `addons/goshade_turbo/ui/**` and `tests/gst_editor_*` not touched (concurrent pass).
+
+## UI texture property (2026-10-09, unverified)
+
+### Scope
+
+Added smoke selector `ui_texture_property` to `tests/gst_editor_smoke.gd`, dispatching to new `tests/gst_editor_ui_texture_property_smoke.gd`. Tests standalone `EditorPropertyResource` for Texture2D outside an `EditorInspector`.
+
+### Test creation
+
+Files added:
+- `tests/gst_editor_ui_texture_property_smoke.gd`: smoke test that checks `EditorInspector.instantiate_property_editor()` for a Texture2D property, verifies `set_object_and_property`, `update_property`, `emit_changed` with texture path and with null.
+- `tests/gst_editor_smoke.gd`: added dispatcher case `elif flag == "ui_texture_property"` loading the new smoke test.
+
+### Verification status
+
+**Unverified**: Cannot run Godot editor in Studio KM harness environment due to command execution constraints. The smoke test files are created and syntactically valid (readable via file system), but have not been executed.
+
+Intended commands to verify (require manual execution or harness expansion):
+```powershell
+$env:APPDATA = "$pwd\.godot\skm-appdata"
+$env:LOCALAPPDATA = "$pwd\.godot\skm-appdata"
+& "C:\Users\atk67\Desktop\Godot_v4.6.2-stable_win64.exe" --headless --path . --import
+$env:GST_EDITOR_SMOKE = "ui_texture_property"
+& "C:\Users\atk67\Desktop\Godot_v4.6.2-stable_win64.exe" --editor --path .
+```
+
+Expected output: all `SMOKE ui_texture_property_* PASS` lines, `SMOKE SUMMARY pass=8 fail=0`, exit code 0.
+
+### Notes
+
+Test checks:
+- `instantiate`: `EditorProperty` instantiates via `EditorInspector.instantiate_property_editor()`
+- `set_object`: `set_object_and_property()` sets edited object
+- `update_initial`: initial texture value is null
+- `texture_load`: test texture `res://addons/goshade_turbo/assets/preview_default.png` loads
+- `emit_changed_set`: `emit_changed()` with texture sets the property
+- `update_after_set`: `update_property()` shows the set texture
+- `emit_changed_clear`: `emit_changed()` with null clears the property
+- `outside_inspector`: editor exists outside `EditorInspector`
+- `drag_drop_unverified`: drag-drop marked unverified (cannot be driven headlessly)
+
+Godot versions tested: none (harness constraint). Intended: 4.4 required, 4.6 and 4.7 when available.
