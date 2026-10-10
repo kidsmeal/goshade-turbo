@@ -5,8 +5,7 @@ extends RefCounted
 ## through %LayerMenu's id_pressed and the stack list's inline rename edit.
 ## Each edit registers one history entry and undoes to the prior state; a
 ## refused bypass registers none and shows its reason in the refusal label.
-## GST_LAYER_OPS_SCREENSHOT_PATH, when set, saves the editor window with a
-## renamed, a duplicated and a bypassed row.
+## The row screenshot comes from tests/capture_layer_rows.gd.
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -40,13 +39,6 @@ func run(plugin: EditorPlugin) -> void:
 	await _run_rename_cancel(plugin, panel, invert)
 	await _run_bypass(plugin, panel, invert)
 	await _run_bypass_refused(plugin, panel, hash_layer)
-
-	var screenshot_path: String = OS.get_environment("GST_LAYER_OPS_SCREENSHOT_PATH")
-	if not screenshot_path.is_empty():
-		for i: int in range(3):
-			await plugin.get_tree().process_frame
-		var error: Error = plugin.get_tree().root.get_texture().get_image().save_png(screenshot_path)
-		_check("screenshot", error == OK, "path='%s' error=%d rows=%s" % [screenshot_path, error, _row_texts(stack_list)])
 	_finish(plugin)
 
 
@@ -145,13 +137,15 @@ func _run_bypass(plugin: EditorPlugin, panel: GSTMainPanel, invert: GSTLayer) ->
 	var history: UndoRedo = panel.get_watched_history()
 	stack_list.select_layer(invert.id)
 	await plugin.get_tree().process_frame
-	var count: int = history.get_history_count()
+	# The rename_empty undo left one redo entry; this commit truncates it, so
+	# the history count stays flat and the current action index moves by one.
+	var action: int = history.get_current_action()
 	var code_before: String = panel.get_shader_material().shader.code
 	_press_layer_menu(panel, GSTMainPanel.LAYER_BYPASS)
 	await plugin.get_tree().process_frame
 	var row: String = stack_list.get_row_text(invert.id)
 	var code_changed: bool = panel.get_shader_material().shader.code != code_before
-	_check("bypass", not invert.enabled and row == "l%s  invert (field)%s" % [String(invert.id), GSTStackList.BYPASSED_SUFFIX] and _bypass_checked(panel) and code_changed and history.get_history_count() == count + 1, "enabled=%s row='%s' checked=%s code_changed=%s history=%d->%d" % [invert.enabled, row, _bypass_checked(panel), code_changed, count, history.get_history_count()])
+	_check("bypass", not invert.enabled and row == "l%s  invert (field)%s" % [String(invert.id), GSTStackList.BYPASSED_SUFFIX] and _bypass_checked(panel) and code_changed and history.get_current_action() == action + 1 and not history.has_redo(), "enabled=%s row='%s' checked=%s code_changed=%s current_action=%d->%d has_redo=%s" % [invert.enabled, row, _bypass_checked(panel), code_changed, action, history.get_current_action(), history.has_redo()])
 
 	history.undo()
 	await plugin.get_tree().process_frame
@@ -170,12 +164,13 @@ func _run_bypass_refused(plugin: EditorPlugin, panel: GSTMainPanel, hash_layer: 
 	stack_list.select_layer(hash_layer.id)
 	await plugin.get_tree().process_frame
 	var count: int = history.get_history_count()
+	var action: int = history.get_current_action()
 	var expected: String = String(GSTStackOps.can_bypass(panel.get_stack(), hash_layer.id, panel.get_library())["reason"])
 	_press_layer_menu(panel, GSTMainPanel.LAYER_BYPASS)
 	await plugin.get_tree().process_frame
 	var label: Label = stack_list.get_refusal_label()
 	var row: String = stack_list.get_row_text(hash_layer.id)
-	_check("bypass_refused", hash_layer.enabled and not expected.is_empty() and label.visible and label.text == expected and not _bypass_checked(panel) and not row.ends_with(GSTStackList.BYPASSED_SUFFIX) and history.get_history_count() == count, "enabled=%s refusal='%s' expected='%s' checked=%s history=%d->%d" % [hash_layer.enabled, label.text, expected, _bypass_checked(panel), count, history.get_history_count()])
+	_check("bypass_refused", hash_layer.enabled and not expected.is_empty() and label.visible and label.text == expected and not _bypass_checked(panel) and not row.ends_with(GSTStackList.BYPASSED_SUFFIX) and history.get_history_count() == count and history.get_current_action() == action, "enabled=%s refusal='%s' expected='%s' checked=%s history=%d->%d current_action=%d->%d" % [hash_layer.enabled, label.text, expected, _bypass_checked(panel), count, history.get_history_count(), action, history.get_current_action()])
 
 
 func _press_layer_menu(panel: GSTMainPanel, id: int) -> void:
@@ -185,13 +180,6 @@ func _press_layer_menu(panel: GSTMainPanel, id: int) -> void:
 func _bypass_checked(panel: GSTMainPanel) -> bool:
 	var popup: PopupMenu = panel.get_layer_menu().get_popup()
 	return popup.is_item_checked(popup.get_item_index(GSTMainPanel.LAYER_BYPASS))
-
-
-func _row_texts(stack_list: GSTStackList) -> Array[String]:
-	var rows: Array[String] = []
-	for i: int in range(stack_list.get_item_count()):
-		rows.append(stack_list.get_row_text(stack_list.get_item_id(i)))
-	return rows
 
 
 func _check(item: String, ok: bool, detail: String) -> void:
