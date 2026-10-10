@@ -32,8 +32,10 @@ func _has_color_input(entry: GSTManifestEntry) -> bool:
 	return false
 
 
-## Every entry with coord == true: every generative/* generator plus every
-## sdf/* generator. New entries must be added here on purpose.
+## Every non-source entry with coord == true: every generative/* generator
+## plus every sdf/* generator. source/image carries a coord block but is a
+## color source (decision 28), covered by EXPECTED_COLOR_ENTRY_IDS. New
+## entries must be added here on purpose.
 const EXPECTED_GENERATOR_IDS: Array[String] = [
 	"generative/cell_borders", "generative/cell_borders_edge_warp", "generative/cell_borders_round",
 	"generative/cell_borders_round_varied", "generative/cellular_edges", "generative/checker",
@@ -68,7 +70,7 @@ const EXPECTED_COLOR_ENTRY_IDS: Array[String] = [
 	"color/hue_shift", "color/mix", "color/multiply", "color/overlay", "color/palette",
 	"color/posterize", "color/saturation", "color/screen", "color/soft_light",
 	"filter/box_blur", "filter/chromatic_split", "filter/dither", "filter/outline", "filter/pixelate",
-	"source/screen", "source/texture",
+	"source/image", "source/screen", "source/texture",
 ]
 
 ## sdf/* entries with coord == false. New entries must be added here on
@@ -86,14 +88,15 @@ const EXPECTED_SDF_GENERATOR_IDS: Array[String] = [
 
 ## Every field op with every generator wired into every one of that field
 ## op's input slots, so a two-input op (e.g. fieldops/max) gets the same
-## generator on both "a" and "b". A generator is any entry with coord == true.
+## generator on both "a" and "b". A generator is any non-source entry with
+## coord == true.
 func test_every_field_op_compiles_with_every_generator_as_input() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var generator_ids: Array[String] = []
 	var field_op_ids: Array[String] = []
 	for id: String in lib.entries.keys():
 		var entry: GSTManifestEntry = lib.get_entry(id)
-		if entry.coord:
+		if entry.coord and not entry.is_source():
 			generator_ids.append(id)
 		elif id.begins_with("fieldops/") and _all_inputs_field(entry):
 			field_op_ids.append(id)
@@ -125,12 +128,13 @@ func _is_filter(id: String) -> bool:
 
 
 ## Builds `color_entry_id` as a layer in `stack` and returns it, ready to be
-## wired as a color-kind input. A color/* or source/* entry is added as is. A
-## filter/* entry gets a source/texture layer added first and wired into its
-## "source" (samples_source) slot; the returned layer is the filter.
+## wired as a color-kind input. A color/* or source/* entry is added as is,
+## with a coord block when its manifest has one (source/image). A filter/*
+## entry gets a source/texture layer added first and wired into its "source"
+## (samples_source) slot; the returned layer is the filter.
 func _build_color_entry_layer(stack: GSTStack, color_entry_id: String, lib: GSTLibrary) -> GSTLayer:
 	if not _is_filter(color_entry_id):
-		return GSTStackOps.add_layer(stack, color_entry_id, GSTLayer.Kind.COLOR, false)
+		return GSTStackOps.add_layer(stack, color_entry_id, GSTLayer.Kind.COLOR, lib.get_entry(color_entry_id).coord)
 	var texture_layer: GSTLayer = GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
 	var filter_layer: GSTLayer = GSTStackOps.add_layer(stack, color_entry_id, GSTLayer.Kind.COLOR, false)
 	var filter_entry: GSTManifestEntry = lib.get_entry(color_entry_id)
@@ -142,7 +146,7 @@ func _build_color_entry_layer(stack: GSTStack, color_entry_id: String, lib: GSTL
 
 ## Every color op (a color/* entry with at least one color-kind input; fill,
 ## gradient_map, and palette are excluded) with every color-kind entry (the
-## color/* roster, the two source/* entries, and every filter/* entry fed by
+## color/* roster, the three source/* entries, and every filter/* entry fed by
 ## a source/texture layer) wired into its first color input. A second color
 ## input (the blend family, color/mix) is fed color/fill; a field input
 ## (color/mix's mask) is fed generative/fbm.

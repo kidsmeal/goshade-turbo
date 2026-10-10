@@ -291,12 +291,17 @@ static func _coord_uniform_lines(layer: GSTLayer) -> Array[String]:
 
 ## Uniform types: int/float carry hint_range; color carries no range and the
 ## source_color hint; vec3 carries no range, since a scalar hint_range is not
-## meaningful per channel on a color-like triple (palette's a/b/c/d).
+## meaningful per channel on a color-like triple (palette's a/b/c/d). A
+## texture is a sampler2D with no default and no hint_range (decision 27);
+## the preview binds its Texture2D with set_shader_parameter. The unset-
+## sampler hint is an open owner decision, so none is emitted yet.
 static func _param_uniform_line(layer: GSTLayer, function_name: String, param: Dictionary) -> String:
 	var param_name: String = param["name"]
 	var param_type: String = param["type"]
-	var value: Variant = layer.params.get(param_name, param["default"])
 	var uniform_name: String = GSTUniformNames.param_uniform(layer.id, function_name, param_name)
+	if GSTManifestEntry.is_texture_param(param):
+		return "uniform sampler2D %s : source_color, filter_linear, repeat_enable;" % uniform_name
+	var value: Variant = layer.params.get(param_name, param["default"])
 	if param_type == "color":
 		return "uniform vec4 %s : source_color = %s;" % [uniform_name, _glsl_color4(value)]
 	if param_type == "vec3":
@@ -359,16 +364,31 @@ static func _layer_body_lines(layer: GSTLayer, library: GSTLibrary, stack: GSTSt
 	var entry: GSTManifestEntry = library.get_entry(layer.entry)
 	if entry == null:
 		return []
+	# Sources route first: source/image carries a coord block but has no
+	# function to call (decision 28).
+	if entry.is_source():
+		return _source_body_lines(entry, layer, stack)
 	if layer.coord != null:
 		return _generator_body_lines(layer, entry, stack)
-	if entry.is_source():
-		return _source_body_lines(entry, layer)
 	if entry.samples_source:
 		return _filter_body_lines(layer, entry, stack, codegen_result)
 	return _operator_body_lines(layer, entry, stack)
 
 
 static func _generator_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack) -> Array[String]:
+	var lines: Array[String] = _coord_block_lines(layer, stack)
+	var coord_var: String = GSTUniformNames.coord_var(layer.id)
+	var args: Array[String] = [coord_var]
+	for param: Dictionary in entry.params:
+		args.append(GSTUniformNames.param_uniform(layer.id, entry.function, param["name"]))
+	var glsl_type: String = "vec4" if entry.kind_out == GSTLayer.Kind.COLOR else "float"
+	lines.append("\t%s %s = %s(%s);" % [glsl_type, GSTUniformNames.local_var(layer.id), entry.function, ", ".join(args)])
+	return lines
+
+
+## The `coord<id>` transform, scroll and warp lines of a layer with a coord
+## block. Shared by generators and source/image (decision 28).
+static func _coord_block_lines(layer: GSTLayer, stack: GSTStack) -> Array[String]:
 	var lines: Array[String] = []
 	var coord: GSTCoordBlock = layer.coord
 	var coord_var: String = GSTUniformNames.coord_var(layer.id)
@@ -384,11 +404,6 @@ static func _generator_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stac
 		var wx: String = _warp_arg(stack, coord.warp_x)
 		var wy: String = _warp_arg(stack, coord.warp_y)
 		lines.append("\t%s += vec2(%s, %s) * %s;" % [coord_var, wx, wy, GSTUniformNames.coord_warp_strength(layer.id)])
-	var args: Array[String] = [coord_var]
-	for param: Dictionary in entry.params:
-		args.append(GSTUniformNames.param_uniform(layer.id, entry.function, param["name"]))
-	var glsl_type: String = "vec4" if entry.kind_out == GSTLayer.Kind.COLOR else "float"
-	lines.append("\t%s %s = %s(%s);" % [glsl_type, GSTUniformNames.local_var(layer.id), entry.function, ", ".join(args)])
 	return lines
 
 
@@ -400,13 +415,22 @@ static func _warp_arg(stack: GSTStack, target_id: StringName) -> String:
 	return "luma(%s)" % local if target != null and target.kind_out == GSTLayer.Kind.COLOR else local
 
 
-## Sources have no function body: codegen reads the built-in directly.
+## Sources have no function body: codegen reads the sampler directly.
 ## "texture" reads at the stack's coordinate space; "screen" always reads
-## SCREEN_UV, independent of coord_space.
-static func _source_body_lines(entry: GSTManifestEntry, layer: GSTLayer) -> Array[String]:
+## SCREEN_UV, independent of coord_space. "image" emits its coord block, then
+## samples its own `image` uniform at `coord<id>` (decision 28).
+static func _source_body_lines(entry: GSTManifestEntry, layer: GSTLayer, stack: GSTStack) -> Array[String]:
 	var local: String = GSTUniformNames.local_var(layer.id)
 	if entry.id == "source/screen":
 		return ["\tvec4 %s = texture(gst_screen_texture, SCREEN_UV);" % local]
+	if entry.id == "source/image":
+		var lines: Array[String] = _coord_block_lines(layer, stack)
+		lines.append("\tvec4 %s = texture(%s, %s);" % [
+			local,
+			GSTUniformNames.param_uniform(layer.id, entry.function, "image"),
+			GSTUniformNames.coord_var(layer.id),
+		])
+		return lines
 	return ["\tvec4 %s = texture(TEXTURE, space_coord);" % local]
 
 

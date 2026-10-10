@@ -36,17 +36,33 @@ func test_every_source_manifest_compiles_alone() -> void:
 	for id: String in lib.entries.keys():
 		if id.begins_with("source/"):
 			source_ids.append(id)
-	assert_eq(source_ids.size(), 2, "the full v0.1 source roster is present (texture, screen)")
+	assert_eq(source_ids.size(), 3, "the full source roster is present (texture, screen, image)")
 
 	for id: String in source_ids:
 		var stack: GSTStack = GSTStack.new()
-		var layer: GSTLayer = GSTStackOps.add_layer(stack, id, GSTLayer.Kind.COLOR, false)
+		var layer: GSTLayer = GSTStackOps.add_layer(stack, id, GSTLayer.Kind.COLOR, lib.get_entry(id).coord)
 		stack.output_color = layer.id
 		var code: String = GSTCodegen.generate(stack, lib)
-		# A lone source has no params; source/screen's gst_screen_texture
+		# source/texture has no params; source/screen's gst_screen_texture
 		# (hint_screen_texture) is excluded from get_shader_uniform_list(), so
-		# both need the sentinel.
+		# both need the sentinel. source/image has coord and sampler uniforms.
 		assert_true(GSTShaderCompile.compiles(code, true), "%s compiles alone" % id)
+
+
+## Decisions 27, 28: source/image emits a sampler2D uniform with no
+## hint_range, then its coord block, then one texture() read at coord<id>.
+func test_source_image_emits_sampler_uniform_and_coord_read() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var layer: GSTLayer = GSTStackOps.add_layer(stack, "source/image", GSTLayer.Kind.COLOR, true)
+	stack.output_color = layer.id
+	var code: String = GSTCodegen.generate(stack, lib)
+	var id: String = String(layer.id)
+	assert_true(code.contains("uniform sampler2D l%s_image_image : source_color, filter_linear, repeat_enable;" % id), "sampler2D uniform line with no hint_range:\n%s" % code)
+	assert_true(code.contains("\tvec2 coord%s = gst_transform(space_coord," % id), "coord block line emitted:\n%s" % code)
+	assert_true(code.contains("\tvec4 l%s = texture(l%s_image_image, coord%s);" % [id, id, id]), "image read at coord<id>:\n%s" % code)
+	assert_false(code.contains("image(coord"), "no generator call to a missing image() function")
+	assert_true(GSTShaderCompile.compiles(code), "source/image stack compiles")
 
 
 func test_source_entries_have_empty_code_and_emit_no_stray_comments() -> void:
@@ -56,9 +72,11 @@ func test_source_entries_have_empty_code_and_emit_no_stray_comments() -> void:
 	assert_true(texture_entry.code.is_empty(), "source/texture entry.code is empty (B10 source contract)")
 	assert_true(screen_entry.code.is_empty(), "source/screen entry.code is empty (B10 source contract)")
 
-	for source_id: String in ["source/texture", "source/screen"]:
+	assert_true(lib.get_entry("source/image").code.is_empty(), "source/image entry.code is empty (B10 source contract)")
+
+	for source_id: String in ["source/texture", "source/screen", "source/image"]:
 		var stack: GSTStack = GSTStack.new()
-		var layer: GSTLayer = GSTStackOps.add_layer(stack, source_id, GSTLayer.Kind.COLOR, false)
+		var layer: GSTLayer = GSTStackOps.add_layer(stack, source_id, GSTLayer.Kind.COLOR, lib.get_entry(source_id).coord)
 		stack.output_color = layer.id
 		var code: String = GSTCodegen.generate(stack, lib)
 		var body_lines: PackedStringArray = code.split("\n")
