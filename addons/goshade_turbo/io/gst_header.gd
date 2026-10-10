@@ -10,9 +10,10 @@ extends RefCounted
 ## params, coord, label?, enabled?, param_links?}]}. coord_space is "uv" |
 ## "screen_uv" | "local". Vectors serialize as [x, y] / [x, y, z]; colors as
 ## [r, g, b, a]. A texture param serializes as its resource_path string, an
-## unset one as null (decision 27). coord is null for an operator layer. label, enabled and
-## param_links are written only when non-default, so a stack using none of
-## them differs from its v0.1 header only in `schema` (decision 23).
+## unset one as null (decision 27). coord is null for an operator layer.
+## label, enabled and param_links are written only when non-default, so a
+## stack using none of them differs from its v0.1 header only in `schema`
+## (decision 23).
 ## param_links serializes as {"<param>": {"target": "<layer id>", "amount":
 ## <float>}}. JSON.stringify with an empty indent never inserts a newline, so
 ## the header is always exactly one line.
