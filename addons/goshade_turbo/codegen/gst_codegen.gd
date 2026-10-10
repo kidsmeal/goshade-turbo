@@ -360,14 +360,15 @@ static func _coord_uniform_lines(layer: GSTLayer) -> Array[String]:
 ## source_color hint; vec3 carries no range, since a scalar hint_range is not
 ## meaningful per channel on a color-like triple (palette's a/b/c/d). A
 ## texture is a sampler2D with no default and no hint_range (decision 27);
-## the preview binds its Texture2D with set_shader_parameter. The unset-
-## sampler hint is an open owner decision, so none is emitted yet.
+## the preview binds its Texture2D with set_shader_parameter. An unset
+## sampler reads transparent through hint_default_transparent (owner
+## recommendation on the open unset-hint marker, applied in T-0099).
 static func _param_uniform_line(layer: GSTLayer, function_name: String, param: Dictionary) -> String:
 	var param_name: String = param["name"]
 	var param_type: String = param["type"]
 	var uniform_name: String = GSTUniformNames.param_uniform(layer.id, function_name, param_name)
 	if GSTManifestEntry.is_texture_param(param):
-		return "uniform sampler2D %s : source_color, filter_linear, repeat_enable;" % uniform_name
+		return "uniform sampler2D %s : source_color, filter_linear, repeat_enable, hint_default_transparent;" % uniform_name
 	var value: Variant = layer.params.get(param_name, param["default"])
 	if param_type == "color":
 		return "uniform vec4 %s : source_color = %s;" % [uniform_name, _glsl_color4(value)]

@@ -51,6 +51,8 @@ func test_every_source_manifest_compiles_alone() -> void:
 
 ## Decisions 27, 28: source/image emits a sampler2D uniform with no
 ## hint_range, then its coord block, then one texture() read at coord<id>.
+## The unset sampler reads transparent (hint_default_transparent, owner
+## recommendation for the open unset-hint marker).
 func test_source_image_emits_sampler_uniform_and_coord_read() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()
@@ -58,7 +60,7 @@ func test_source_image_emits_sampler_uniform_and_coord_read() -> void:
 	stack.output_color = layer.id
 	var code: String = GSTCodegen.generate(stack, lib)
 	var id: String = String(layer.id)
-	var sampler_line: String = "uniform sampler2D l%s_image_image : source_color, filter_linear, repeat_enable;" % id
+	var sampler_line: String = "uniform sampler2D l%s_image_image : source_color, filter_linear, repeat_enable, hint_default_transparent;" % id
 	assert_true(code.contains(sampler_line), "sampler2D uniform line exact text:\n%s" % code)
 	for line: String in code.split("\n"):
 		if line.begins_with("uniform sampler2D l"):
