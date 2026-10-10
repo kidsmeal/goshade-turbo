@@ -390,7 +390,8 @@ func begin_rename(layer_id: StringName) -> void:
 	_rename_layer_id = layer_id
 	var rect: Rect2 = _list.get_item_rect(index)
 	var bar: VScrollBar = _list.get_v_scroll_bar()
-	bar.value = clampf(bar.value, rect.end.y - _list.size.y, rect.position.y)
+	# A row taller than the list scrolls to its top edge.
+	bar.value = clampf(bar.value, minf(rect.end.y - _list.size.y, rect.position.y), rect.position.y)
 	rect.position.y -= bar.value
 	_rename_edit.position = rect.position
 	_rename_edit.size = rect.size
