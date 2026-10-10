@@ -27,6 +27,21 @@ const VIEWPORT_SIZE: Vector2i = Vector2i(128, 128)
 const SETTLE_FRAMES: int = 3
 const WRITE_SCREENSHOTS_ARG: String = "--write-screenshots"
 
+const SOURCE_IMAGE_STACK_PATH: String = "res://sandbox/stacks/ref_source_image.tres"
+const PARAM_LINK_STACK_PATH: String = "res://sandbox/stacks/ref_param_link.tres"
+
+## Two fully-opaque, distinctly-colored interior points of
+## preview_default.png (0..1 UV): the yellow circle and the pink/magenta
+## circle, each measured ~70 pixels from its own shape edge so GPU texture
+## filtering cannot shift the sample across a color boundary.
+const SOURCE_IMAGE_SAMPLE_POINTS: Array[Vector2] = [Vector2(0.25, 0.25), Vector2(0.75, 0.75)]
+const SOURCE_IMAGE_SAMPLE_TOLERANCE: float = 0.08
+
+## The param_links entry name ref_param_link.tres's linker layer carries.
+const PARAM_LINK_PARAM_NAME: String = "radius"
+const PARAM_LINK_MIN_LEFT_RIGHT_DELTA: float = 0.2
+const PARAM_LINK_EQUAL_TOLERANCE: float = 0.004
+
 
 ## On Godot 4.4/4.6 the docs/TESTING.md --import prerequisite leaves
 ## .recovery_mode_lock in the user data dir (the editor removes it 1s after
@@ -70,6 +85,10 @@ func _run() -> void:
 	if not await _check_preview_composition():
 		all_passed = false
 	if not await _check_noise_continuity(library):
+		all_passed = false
+	if not await _check_source_image(library):
+		all_passed = false
+	if not await _check_param_link(library):
 		all_passed = false
 
 	print("run_render_checks: %s, %d stack(s) checked" % ["PASS" if all_passed else "FAIL", paths.size()])
@@ -332,6 +351,126 @@ func _check_noise_continuity(library: GSTLibrary) -> bool:
 	return passed
 
 
+## Loads the checked-in `ref_source_image.tres` (not a rebuilt equivalent, so
+## a broken `image` ExtResource in the file itself would fail this) and
+## confirms its own GLSL sampler (`_source_body_lines` in gst_codegen.gd)
+## actually reads the asset, by comparing the render against an independent
+## CPU read of the same file.
+func _check_source_image(library: GSTLibrary) -> bool:
+	var load_result: Dictionary = GSTStackIO.load(SOURCE_IMAGE_STACK_PATH, library)
+	if not load_result["ok"]:
+		print("SOURCE_IMAGE FAIL [\"load: %s\"]" % load_result["reason"])
+		return false
+
+	var result: Dictionary = await _render_stack_image(load_result["stack"], library)
+	if not result["ok"]:
+		print("SOURCE_IMAGE FAIL [\"%s\"]" % result["reason"])
+		return false
+
+	var source_texture: Texture2D = load(PREVIEW_IMAGE_PATH) as Texture2D
+	var source_image: Image = source_texture.get_image() if source_texture != null else null
+	var reasons: Array[String] = GSTRenderAssert.check_matches_source_at(result["image"], source_image, SOURCE_IMAGE_SAMPLE_POINTS, SOURCE_IMAGE_SAMPLE_TOLERANCE)
+	print("SOURCE_IMAGE %s %s" % ["PASS" if reasons.is_empty() else "FAIL", reasons])
+	return reasons.is_empty()
+
+
+## The layer carrying a non-empty `param_links` dict, or null. Used to find
+## `ref_param_link.tres`'s linker layer (`generative/radial_gradient`)
+## without hardcoding its id.
+func _find_linked_layer(stack: GSTStack) -> GSTLayer:
+	for layer: GSTLayer in stack.layers:
+		if not layer.param_links.is_empty():
+			return layer
+	return null
+
+
+## Loads the checked-in `ref_param_link.tres` three independent times
+## (GSTStackIO.load uses CACHE_MODE_IGNORE, so each call returns its own
+## layer instances, not shared state) and renders it three ways: as checked
+## in (linked, amount 1.0, must show a left-right difference the unlinked
+## render does not), with the linked layer's amount forced to 0, and with
+## its link erased entirely. Then checks amount 0 against unlinked pixel for
+## pixel (decision 29: "amount 0 is identical to unlinked"). Loading the
+## file itself, rather than rebuilding its shape in code, means a
+## `param_links` entry that fails to round-trip through the .tres would fail
+## this check.
+func _check_param_link(library: GSTLibrary) -> bool:
+	var linked_load: Dictionary = GSTStackIO.load(PARAM_LINK_STACK_PATH, library)
+	var amount_zero_load: Dictionary = GSTStackIO.load(PARAM_LINK_STACK_PATH, library)
+	var unlinked_load: Dictionary = GSTStackIO.load(PARAM_LINK_STACK_PATH, library)
+
+	var load_failures: Array[String] = []
+	for load_result: Dictionary in [linked_load, amount_zero_load, unlinked_load]:
+		if not load_result["ok"]:
+			load_failures.append("load: %s" % load_result["reason"])
+	if not load_failures.is_empty():
+		print("PARAM_LINK_EFFECT FAIL %s" % [load_failures])
+		print("PARAM_LINK_AMOUNT_ZERO FAIL %s" % [load_failures])
+		return false
+
+	var amount_zero_linker: GSTLayer = _find_linked_layer(amount_zero_load["stack"])
+	var unlinked_linker: GSTLayer = _find_linked_layer(unlinked_load["stack"])
+	if amount_zero_linker == null or unlinked_linker == null:
+		var reason: String = "%s has no layer with a param_links entry" % PARAM_LINK_STACK_PATH
+		print("PARAM_LINK_EFFECT FAIL [\"%s\"]" % reason)
+		print("PARAM_LINK_AMOUNT_ZERO FAIL [\"%s\"]" % reason)
+		return false
+	(amount_zero_linker.param_links[PARAM_LINK_PARAM_NAME] as Dictionary)["amount"] = 0.0
+	unlinked_linker.param_links.erase(PARAM_LINK_PARAM_NAME)
+
+	var linked_result: Dictionary = await _render_stack_image(linked_load["stack"], library)
+	var amount_zero_result: Dictionary = await _render_stack_image(amount_zero_load["stack"], library)
+	var unlinked_result: Dictionary = await _render_stack_image(unlinked_load["stack"], library)
+
+	var render_failures: Array[String] = []
+	for result: Dictionary in [linked_result, amount_zero_result, unlinked_result]:
+		if not result["ok"]:
+			render_failures.append(result["reason"])
+	if not render_failures.is_empty():
+		print("PARAM_LINK_EFFECT FAIL %s" % [render_failures])
+		print("PARAM_LINK_AMOUNT_ZERO FAIL %s" % [render_failures])
+		return false
+
+	var delta: float = GSTRenderAssert.left_right_mean_delta(linked_result["image"])
+	var effect_passed: bool = absf(delta) >= PARAM_LINK_MIN_LEFT_RIGHT_DELTA
+	print("PARAM_LINK_EFFECT %s left_right_delta=%f minimum=%f" % ["PASS" if effect_passed else "FAIL", delta, PARAM_LINK_MIN_LEFT_RIGHT_DELTA])
+
+	var equal_reasons: Array[String] = GSTRenderAssert.check_images_equal(amount_zero_result["image"], unlinked_result["image"], PARAM_LINK_EQUAL_TOLERANCE)
+	print("PARAM_LINK_AMOUNT_ZERO %s %s" % ["PASS" if equal_reasons.is_empty() else "FAIL", equal_reasons])
+
+	return effect_passed and equal_reasons.is_empty()
+
+
+## Shared by `_check_one`, `_check_source_image` and `_check_param_link`:
+## codegens `stack`, syncs it to a fresh material, renders it through a
+## throwaway GSTPreview at VIEWPORT_SIZE, and reads back the result.
+func _render_stack_image(stack: GSTStack, library: GSTLibrary) -> Dictionary:
+	var codegen_result: GSTCodegenResult = GSTExport.build(stack, library)
+	if not codegen_result.ok():
+		return {"ok": false, "reason": "codegen: %s" % codegen_result.error, "image": null, "code": ""}
+
+	var material: ShaderMaterial = ShaderMaterial.new()
+	var sync_result: GSTCodegenResult = GSTMaterialSync.sync(stack, library, material, &"", Vector2(VIEWPORT_SIZE))
+	if not sync_result.ok():
+		return {"ok": false, "reason": "material sync: %s" % sync_result.error, "image": null, "code": codegen_result.code}
+
+	var preview_image: Texture2D = load(PREVIEW_IMAGE_PATH) as Texture2D
+	var preview: GSTPreview = GSTPreview.new()
+	preview.size = Vector2(VIEWPORT_SIZE)
+	root.add_child(preview)
+	preview.set_image(preview_image)
+	preview.set_preset(GSTPreviewPresets.SPRITE)
+	preview.set_shader_material(material)
+
+	for i: int in range(SETTLE_FRAMES):
+		await process_frame
+
+	var image: Image = preview.get_viewport_image()
+	preview.queue_free()
+	await process_frame
+	return {"ok": true, "reason": "", "image": image, "code": codegen_result.code}
+
+
 func _collect_stack_paths() -> Array[String]:
 	var paths: Array[String] = []
 	paths.append_array(_tres_paths_in(RECIPE_DIR))
@@ -355,47 +494,26 @@ func _tres_paths_in(dir_path: String) -> Array[String]:
 	return out
 
 
-## Loads `path`, codegens it through GSTExport.build (so the has_TIME check
-## reads the export text), builds a SubViewport render tree through
-## GSTPreview, syncs uniforms through GSTMaterialSync, waits SETTLE_FRAMES
-## frames, reads back, and runs GSTRenderAssert.check. Returns whether `path`
-## passed. Every failure path prints one RENDER line. When `write_screenshots`
-## is true the image is saved to SCREENSHOT_DIR before the assert result is
-## decided, so a failing stack's image is on disk.
+## Loads `path`, then renders it through `_render_stack_image` (codegen,
+## material sync, a throwaway GSTPreview, readback) and runs
+## GSTRenderAssert.check on the result. Returns whether `path` passed. Every
+## failure path prints one RENDER line, naming has_TIME=false when codegen
+## never ran. When `write_screenshots` is true the image is saved to
+## SCREENSHOT_DIR before the assert result is decided, so a failing stack's
+## image is on disk.
 func _check_one(path: String, library: GSTLibrary, write_screenshots: bool) -> bool:
 	var load_result: Dictionary = GSTStackIO.load(path, library)
 	if not load_result["ok"]:
 		print("RENDER %s FAIL [\"load: %s\"] has_TIME=false" % [path, load_result["reason"]])
 		return false
-	var stack: GSTStack = load_result["stack"]
 
-	var codegen_result: GSTCodegenResult = GSTExport.build(stack, library)
-	if not codegen_result.ok():
-		print("RENDER %s FAIL [\"codegen: %s\"] has_TIME=false" % [path, codegen_result.error])
-		return false
-	var has_time: bool = codegen_result.code.contains("TIME")
-
-	var preview_image: Texture2D = load(PREVIEW_IMAGE_PATH) as Texture2D
-	var material: ShaderMaterial = ShaderMaterial.new()
-
-	# Sync before the material reaches a live CanvasItem: a ShaderMaterial
-	# assigned with empty shader code never picks up later code edits.
-	var sync_result: GSTCodegenResult = GSTMaterialSync.sync(stack, library, material, &"", Vector2(VIEWPORT_SIZE))
-	if not sync_result.ok():
-		print("RENDER %s FAIL [\"material sync: %s\"] has_TIME=%s" % [path, sync_result.error, has_time])
+	var render_result: Dictionary = await _render_stack_image(load_result["stack"], library)
+	var has_time: bool = String(render_result.get("code", "")).contains("TIME")
+	if not render_result["ok"]:
+		print("RENDER %s FAIL [\"%s\"] has_TIME=%s" % [path, render_result["reason"], has_time])
 		return false
 
-	var preview: GSTPreview = GSTPreview.new()
-	preview.size = Vector2(VIEWPORT_SIZE)
-	root.add_child(preview)
-	preview.set_image(preview_image)
-	preview.set_preset(GSTPreviewPresets.SPRITE)
-	preview.set_shader_material(material)
-
-	for i: int in range(SETTLE_FRAMES):
-		await process_frame
-
-	var image: Image = preview.get_viewport_image()
+	var image: Image = render_result["image"]
 	var reasons: Array[String] = GSTRenderAssert.check(image)
 	if write_screenshots and image != null:
 		var screenshot_path: String = "%s/%s.png" % [SCREENSHOT_DIR, path.get_file().get_basename()]
@@ -405,6 +523,4 @@ func _check_one(path: String, library: GSTLibrary, write_screenshots: bool) -> b
 
 	var status: String = "PASS" if reasons.is_empty() else "FAIL"
 	print("RENDER %s %s %s has_TIME=%s" % [path, status, reasons, has_time])
-
-	preview.queue_free()
 	return reasons.is_empty()

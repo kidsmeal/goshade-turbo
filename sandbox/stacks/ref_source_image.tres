@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_layer"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_coord"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_stack"]
+[ext_resource type="Texture2D" path="res://addons/goshade_turbo/assets/preview_default.png" id="4_image"]
+
+[sub_resource type="Resource" id="Resource_coord0"]
+script = ExtResource("2_coord")
+
+[sub_resource type="Resource" id="Resource_layer0"]
+script = ExtResource("1_layer")
+id = &"0"
+entry = "source/image"
+kind_out = 1
+coord = SubResource("Resource_coord0")
+params = {
+"image": ExtResource("4_image")
+}
+
+[resource]
+script = ExtResource("3_stack")
+layers = Array[ExtResource("1_layer")]([SubResource("Resource_layer0")])
+output_color = &"0"
+next_id = 1
