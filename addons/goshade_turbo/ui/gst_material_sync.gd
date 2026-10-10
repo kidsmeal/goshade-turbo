@@ -132,11 +132,17 @@ static func _write_coord_uniforms(layer: GSTLayer, material: ShaderMaterial, dec
 
 ## Mirrors GSTCodegen._param_uniform_line's type switch, including its
 ## fallback: any type other than "color"/"vec3"/"int" is declared as a GLSL
-## float uniform there, so it is written as float here.
+## float uniform there, so it is written as float here. A `type: "texture"`
+## param carries no "default" key (decision 27), same as
+## _param_uniform_line's early branch, so it is written before the
+## `param["default"]` lookup below ever runs.
 static func _write_param_uniform(layer: GSTLayer, function_name: String, param: Dictionary, material: ShaderMaterial, declared: Dictionary) -> void:
 	var param_name: String = param["name"]
-	var param_type: String = param["type"]
 	var uniform_name: String = GSTUniformNames.param_uniform(layer.id, function_name, param_name)
+	if GSTManifestEntry.is_texture_param(param):
+		_set_if_declared(material, declared, uniform_name, layer.params.get(param_name) as Texture2D)
+		return
+	var param_type: String = param["type"]
 	var value: Variant = layer.params.get(param_name, param["default"])
 	match param_type:
 		"color":
