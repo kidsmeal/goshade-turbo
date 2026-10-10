@@ -5,9 +5,11 @@ extends RefCounted
 ## column's link and unlink buttons, the shared picker and the native amount
 ## slider. Stack, bottom to top: color/fill, generative/fbm,
 ## color/gradient_map (t from that fbm), generative/fbm. Each edit registers
-## one history entry and never writes the base slider value. With
-## GST_UI_SCREENSHOT_PATH set and a display, saves the linked fbm rows and
-## the gradient_map color rows next to that path.
+## one history entry and never writes the base slider value. With a display,
+## saves the linked fbm rows and the gradient_map color rows next to
+## GST_UI_SCREENSHOT_PATH, or DEFAULT_SCREENSHOT_PATH when it is unset.
+
+const DEFAULT_SCREENSHOT_PATH: String = "res://.godot/param-links.png"
 
 var _pass_count: int = 0
 var _fail_count: int = 0
@@ -201,9 +203,11 @@ func _run_undo_chain(plugin: EditorPlugin, panel: GSTMainPanel, gradient: GSTLay
 
 
 func _save_screenshots(plugin: EditorPlugin, panel: GSTMainPanel, gradient: GSTLayer, top_fbm: GSTLayer) -> void:
-	var path: String = OS.get_environment("GST_UI_SCREENSHOT_PATH")
-	if path.is_empty() or DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless":
 		return
+	var path: String = OS.get_environment("GST_UI_SCREENSHOT_PATH")
+	if path.is_empty():
+		path = ProjectSettings.globalize_path(DEFAULT_SCREENSHOT_PATH)
 	var inspector: GSTInspectorColumn = panel.get_inspector_column()
 	var amount_editor: EditorProperty = inspector.get_link_amount_property("gain")
 	if amount_editor != null:
