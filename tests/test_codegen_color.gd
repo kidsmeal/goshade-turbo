@@ -273,6 +273,132 @@ func test_blend_family_emits_t_opacity_uniform_and_uses_it() -> void:
 		assert_true(GSTShaderCompile.compiles(code), "%s compiles with the t opacity uniform" % id)
 
 
+## Decision 26: a bypassed color operator passes its first color input.
+func test_bypassed_color_operator_passes_its_first_color_input() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var mask: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	var a_layer: GSTLayer = GSTStackOps.add_layer(stack, "color/fill", GSTLayer.Kind.COLOR, false)
+	var b_layer: GSTLayer = GSTStackOps.add_layer(stack, "color/fill", GSTLayer.Kind.COLOR, false)
+	var mix_layer: GSTLayer = GSTStackOps.add_layer(stack, "color/mix", GSTLayer.Kind.COLOR, false)
+	GSTStackOps.assign_slot(stack, mix_layer.id, "a", a_layer.id, lib)
+	GSTStackOps.assign_slot(stack, mix_layer.id, "b", b_layer.id, lib)
+	GSTStackOps.assign_slot(stack, mix_layer.id, "mask", mask.id, lib)
+	mix_layer.enabled = false
+	stack.output_color = mix_layer.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("\tvec4 l%s = l%s;" % [mix_layer.id, a_layer.id]), "bypassed color operator emits l<id> = <first color input>")
+	assert_false(code.contains("= color_mix("), "bypassed color operator emits no call")
+	assert_true(GSTShaderCompile.compiles(code), "bypassed color operator compiles")
+
+
+func test_bypassed_color_operator_unwired_emits_the_color_fallback() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var op: GSTLayer = GSTStackOps.add_layer(stack, "color/saturation", GSTLayer.Kind.COLOR, false)
+	op.enabled = false
+	stack.output_color = op.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("\tvec4 l%s = %s;" % [op.id, GSTCodegen.FALLBACK_COLOR_CONSTANT]), "unwired bypassed color operator emits the color fallback constant line")
+	assert_true(GSTShaderCompile.compiles(code, true), "unwired bypassed color operator compiles")
+
+
+## color/gradient_map has only a field input: bypass converts it to color.
+func test_bypassed_color_operator_with_only_a_field_input_converts_to_color() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var field: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	var ramp: GSTLayer = GSTStackOps.add_layer(stack, "color/gradient_map", GSTLayer.Kind.COLOR, false)
+	GSTStackOps.assign_slot(stack, ramp.id, "t", field.id, lib)
+	ramp.enabled = false
+	stack.output_color = ramp.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("\tvec4 l%s = vec4(vec3(l%s), 1.0);" % [ramp.id, field.id]), "field input converts to color (decision 2)")
+	assert_true(GSTShaderCompile.compiles(code), "bypassed gradient_map compiles")
+
+
+## Decision 26: a bypassed filter samples its source unchanged at the
+## filter's GST_UV mapping, and keeps its uniforms.
+func test_bypassed_filter_samples_its_source_unchanged() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var cases: Dictionary = {
+		"source/texture": "texture(TEXTURE, UV)",
+		"source/screen": "texture(gst_screen_texture, SCREEN_UV)",
+	}
+	for source_id: String in cases.keys():
+		var stack: GSTStack = GSTStack.new()
+		var source: GSTLayer = GSTStackOps.add_layer(stack, source_id, GSTLayer.Kind.COLOR, false)
+		var filter: GSTLayer = GSTStackOps.add_layer(stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
+		GSTStackOps.assign_slot(stack, filter.id, "source", source.id, lib)
+		filter.enabled = false
+		stack.output_color = filter.id
+
+		var result: GSTCodegenResult = GSTCodegen.generate_result(stack, lib)
+
+		assert_true(result.ok(), "bypassed filter over %s generates: %s" % [source_id, result.error])
+		assert_true(result.code.contains("\tvec4 l%s = %s;" % [filter.id, cases[source_id]]), "bypassed filter over %s emits its source sample" % source_id)
+		assert_false(result.code.contains("snapped"), "bypassed filter over %s emits no template body" % source_id)
+		assert_true(result.code.contains("uniform float l%s_pixelate_cell_size" % filter.id), "bypassed filter over %s keeps its uniform" % source_id)
+		assert_true(GSTShaderCompile.compiles(result.code), "bypassed filter over %s compiles" % source_id)
+
+
+## A layer with no inputs refuses bypass (decision 26): a disabled flag
+## emits it as is.
+func test_disabled_layer_with_no_inputs_emits_unchanged() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var fill: GSTLayer = GSTStackOps.add_layer(stack, "color/fill", GSTLayer.Kind.COLOR, false)
+	fill.enabled = false
+	stack.output_color = fill.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("vec4 l%s = fill(" % fill.id), "color/fill has no inputs, so it emits its call")
+	assert_true(GSTShaderCompile.compiles(code), "disabled no-input layer compiles")
+
+
+## Decision 29: a color link target reads through luma and declares it.
+func test_color_link_target_emits_luma() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var tex: GSTLayer = GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
+	var poster: GSTLayer = GSTStackOps.add_layer(stack, "color/posterize", GSTLayer.Kind.COLOR, false)
+	GSTStackOps.assign_slot(stack, poster.id, "color", tex.id, lib)
+	poster.param_links["levels"] = {"target": tex.id, "amount": -0.5}
+	stack.output_color = poster.id
+
+	var code: String = GSTCodegen.generate(stack, lib)
+
+	assert_true(code.contains("int(round(clamp(float(l%s_posterize_levels) + (luma(l%s) - 0.5) * l%s_posterize_levels_amount * (32.0 - 2.0), 2.0, 32.0)))" % [poster.id, tex.id, poster.id]), "color target reads luma(l<target>) inside the int link expression")
+	assert_true(code.contains("float luma(vec4 c)"), "_stack_needs_luma counts the color link target")
+	assert_true(code.contains("_amount : hint_range(-1.0, 1.0) = -0.5;"), "negative amount literal")
+	assert_true(GSTShaderCompile.compiles(code), "color-target link compiles")
+
+
+## Decision 29: GST_PARAM in a filter template maps to the link expression.
+func test_linked_filter_param_substitutes_in_the_template() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var noise: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	var tex: GSTLayer = GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
+	var filter: GSTLayer = GSTStackOps.add_layer(stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
+	GSTStackOps.assign_slot(stack, filter.id, "source", tex.id, lib)
+	filter.param_links["cell_size"] = {"target": noise.id, "amount": 1.0}
+	stack.output_color = filter.id
+
+	var result: GSTCodegenResult = GSTCodegen.generate_result(stack, lib)
+
+	assert_true(result.ok(), "linked filter generates: %s" % result.error)
+	assert_true(result.code.contains("vec2(clamp(l%s_pixelate_cell_size + (l%s - 0.5) * l%s_pixelate_cell_size_amount * (0.2 - 0.001), 0.001, 0.2))" % [filter.id, noise.id, filter.id]), "GST_PARAM expands to the link expression")
+	assert_true(GSTShaderCompile.compiles(result.code), "linked filter compiles")
+
+
 func test_screen_texture_uniform_absent_without_a_screen_layer() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = GSTStack.new()

@@ -155,21 +155,35 @@ static func _stack_has_texture_source(stack: GSTStack) -> bool:
 	return false
 
 
-## True when any slot, warp assignment, or output alpha mode converts a color
-## layer to a field through luminance, so _luma_function must be declared.
-## Structural, not a text scan, so it does not depend on fragment() having
-## been generated yet.
+## True when any slot, warp assignment, param link target (decision 29),
+## bypassed operator passthrough (decision 26), or output alpha mode converts
+## a color layer to a field through luminance, so _luma_function must be
+## declared. Structural, not a text scan, so it does not depend on
+## fragment() having been generated yet. A bypassed layer's slots and links
+## still count; an unused luma declaration compiles.
 static func _stack_needs_luma(stack: GSTStack, library: GSTLibrary) -> bool:
 	for layer: GSTLayer in stack.layers:
+		var entry: GSTManifestEntry = library.get_entry(layer.entry)
+		if entry != null:
+			for param: Dictionary in entry.params:
+				var link: Dictionary = _param_link(layer, param)
+				if link.is_empty():
+					continue
+				var link_target: GSTLayer = GSTStackOps.find_layer(stack, StringName(String(link["target"])))
+				if link_target != null and link_target.kind_out == GSTLayer.Kind.COLOR:
+					return true
 		if layer.coord != null:
 			for target_id: StringName in [layer.coord.warp_x, layer.coord.warp_y]:
 				var target_layer: GSTLayer = GSTStackOps.find_layer(stack, target_id)
 				if target_layer != null and target_layer.kind_out == GSTLayer.Kind.COLOR:
 					return true
 			continue
-		var entry: GSTManifestEntry = library.get_entry(layer.entry)
 		if entry == null or entry.samples_source:
 			continue
+		if _is_bypassed(layer, entry) and entry.kind_out == GSTLayer.Kind.FIELD:
+			var passthrough_target: GSTLayer = GSTStackOps.find_layer(stack, layer.slots.get(_bypass_input(entry)["name"], &""))
+			if passthrough_target != null and passthrough_target.kind_out == GSTLayer.Kind.COLOR:
+				return true
 		for input: Dictionary in entry.inputs:
 			if int(input["kind"]) != GSTLayer.Kind.FIELD:
 				continue
@@ -235,7 +249,9 @@ static func _include_order(stack: GSTStack, library: GSTLibrary) -> Array[GSTMan
 
 
 ## One group_uniforms line plus its uniform declarations per layer that
-## carries any uniform, stack order (group position = stack index).
+## carries any uniform, stack order (group position = stack index). The
+## group name carries the layer label (decision 25). A bypassed layer still
+## emits its uniforms (decision 26).
 static func _uniform_lines(stack: GSTStack, library: GSTLibrary) -> Array[String]:
 	var lines: Array[String] = []
 	for i: int in range(stack.layers.size()):
@@ -246,12 +262,15 @@ static func _uniform_lines(stack: GSTStack, library: GSTLibrary) -> Array[String
 		var layer_lines: Array[String] = _layer_uniform_lines(layer, entry)
 		if layer_lines.is_empty():
 			continue
-		lines.append(GSTUniformNames.group_line(i, entry.function))
+		lines.append(GSTUniformNames.group_line(i, entry.function, layer.label))
 		for layer_line: String in layer_lines:
 			lines.append(layer_line)
 	return lines
 
 
+## A linked param keeps its own uniform as the slider base and gains an
+## amount uniform right after it in the same group (decision 29, base plus
+## amount emit form, the open marker's recommendation).
 static func _layer_uniform_lines(layer: GSTLayer, entry: GSTManifestEntry) -> Array[String]:
 	var lines: Array[String] = []
 	if layer.coord != null:
@@ -259,7 +278,55 @@ static func _layer_uniform_lines(layer: GSTLayer, entry: GSTManifestEntry) -> Ar
 			lines.append(coord_line)
 	for param: Dictionary in entry.params:
 		lines.append(_param_uniform_line(layer, entry.function, param))
+		var link: Dictionary = _param_link(layer, param)
+		if not link.is_empty():
+			lines.append("uniform float %s : hint_range(-1.0, 1.0) = %s;" % [
+				GSTUniformNames.param_amount_uniform(layer.id, entry.function, param["name"]),
+				_glsl_float(float(link.get("amount", 1.0))),
+			])
 	return lines
+
+
+## The param_links entry for `param` when the param is linkable (int or
+## float, decision 29) and linked, else {}. A link on a color, vec3 or
+## texture param is ignored.
+static func _param_link(layer: GSTLayer, param: Dictionary) -> Dictionary:
+	var param_type: String = param["type"]
+	if param_type != "float" and param_type != "int":
+		return {}
+	var link: Variant = layer.param_links.get(String(param["name"]), null)
+	if not (link is Dictionary) or String((link as Dictionary).get("target", "")) == "":
+		return {}
+	return link
+
+
+## The value a layer's call or filter template reads for `param`: its
+## uniform, or for a linked param the base plus amount expression
+## clamp(base + (l<target> - 0.5) * amount * (max - min), min, max), wrapped
+## in int(round(...)) for an int param (decision 29). A color target reads
+## through luma (decision 2). Amount 0 reduces to the base.
+static func _param_arg(stack: GSTStack, layer: GSTLayer, function_name: String, param: Dictionary) -> String:
+	var param_name: String = param["name"]
+	var base: String = GSTUniformNames.param_uniform(layer.id, function_name, param_name)
+	var link: Dictionary = _param_link(layer, param)
+	if link.is_empty():
+		return base
+	var target_id: StringName = StringName(String(link["target"]))
+	var target_value: String = GSTUniformNames.local_var(target_id)
+	var target_layer: GSTLayer = GSTStackOps.find_layer(stack, target_id)
+	if target_layer != null and target_layer.kind_out == GSTLayer.Kind.COLOR:
+		target_value = "luma(%s)" % target_value
+	var is_int: bool = param["type"] == "int"
+	var min_literal: String = _glsl_float(float(param["min"]))
+	var max_literal: String = _glsl_float(float(param["max"]))
+	var expression: String = "clamp(%s + (%s - %s) * %s * (%s - %s), %s, %s)" % [
+		"float(%s)" % base if is_int else base,
+		target_value,
+		_glsl_float(0.5),
+		GSTUniformNames.param_amount_uniform(layer.id, function_name, param_name),
+		max_literal, min_literal, min_literal, max_literal,
+	]
+	return "int(round(%s))" % expression if is_int else expression
 
 
 ## scale/offset/rotation are always emitted for a generator. scroll and its
@@ -360,12 +427,17 @@ static func _space_coord_source(coord_space: GSTStack.CoordSpace) -> String:
 			return "UV"
 
 
+## Branches on bypass before kind dispatch (decision 26).
 static func _layer_body_lines(layer: GSTLayer, library: GSTLibrary, stack: GSTStack, codegen_result: GSTCodegenResult) -> Array[String]:
 	var entry: GSTManifestEntry = library.get_entry(layer.entry)
 	if entry == null:
 		return []
-	# Sources route first: source/image carries a coord block but has no
-	# function to call (decision 28).
+	if _is_bypassed(layer, entry):
+		if entry.samples_source:
+			return _bypassed_filter_body_lines(layer, entry, stack, codegen_result)
+		return _bypassed_operator_body_lines(layer, entry, stack)
+	# Sources route before generators: source/image carries a coord block but
+	# has no function to call (decision 28).
 	if entry.is_source():
 		return _source_body_lines(entry, layer, stack)
 	if layer.coord != null:
@@ -375,12 +447,57 @@ static func _layer_body_lines(layer: GSTLayer, library: GSTLibrary, stack: GSTSt
 	return _operator_body_lines(layer, entry, stack)
 
 
+## True for a disabled layer that can be bypassed. Generators, sources and
+## every layer with no inputs refuse bypass (decision 26), so a disabled
+## flag on one of them, e.g. from a hand-edited header, emits the layer
+## unchanged.
+static func _is_bypassed(layer: GSTLayer, entry: GSTManifestEntry) -> bool:
+	return not layer.enabled and layer.coord == null and not entry.is_source() and not entry.inputs.is_empty()
+
+
+## The input a bypassed operator passes through: the first input of the
+## entry's own kind, else the first input (decision 26).
+static func _bypass_input(entry: GSTManifestEntry) -> Dictionary:
+	for input: Dictionary in entry.inputs:
+		if int(input["kind"]) == entry.kind_out:
+			return input
+	return entry.inputs[0]
+
+
+## A bypassed operator assigns its pass-through input to its local:
+## l<id> = <input>, converted to the entry's kind via decision 2 when the
+## wired layer differs in kind. An unwired input passes the fallback
+## constant of the entry's kind.
+static func _bypassed_operator_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack) -> Array[String]:
+	var is_color: bool = entry.kind_out == GSTLayer.Kind.COLOR
+	var target_id: StringName = layer.slots.get(_bypass_input(entry)["name"], &"")
+	var value: String = FALLBACK_COLOR_CONSTANT if is_color else FALLBACK_FIELD_CONSTANT
+	if target_id != &"":
+		value = _converted_local(stack, target_id, entry.kind_out)
+	return ["\t%s %s = %s;" % ["vec4" if is_color else "float", GSTUniformNames.local_var(layer.id), value]]
+
+
+## A bypassed filter emits its source sampled unchanged at the filter's
+## GST_UV mapping (decision 26). An unresolved source sets the same error as
+## _filter_body_lines.
+static func _bypassed_filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack, codegen_result: GSTCodegenResult) -> Array[String]:
+	var target_layer: GSTLayer = _filter_source_layer(layer, entry, stack, codegen_result)
+	if target_layer == null:
+		return []
+	var is_screen: bool = target_layer.entry == "source/screen"
+	return ["\tvec4 %s = texture(%s, %s);" % [
+		GSTUniformNames.local_var(layer.id),
+		"gst_screen_texture" if is_screen else "TEXTURE",
+		"SCREEN_UV" if is_screen else "UV",
+	]]
+
+
 static func _generator_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack) -> Array[String]:
 	var lines: Array[String] = _coord_block_lines(layer, stack)
 	var coord_var: String = GSTUniformNames.coord_var(layer.id)
 	var args: Array[String] = [coord_var]
 	for param: Dictionary in entry.params:
-		args.append(GSTUniformNames.param_uniform(layer.id, entry.function, param["name"]))
+		args.append(_param_arg(stack, layer, entry.function, param))
 	var glsl_type: String = "vec4" if entry.kind_out == GSTLayer.Kind.COLOR else "float"
 	lines.append("\t%s %s = %s(%s);" % [glsl_type, GSTUniformNames.local_var(layer.id), entry.function, ", ".join(args)])
 	return lines
@@ -448,18 +565,15 @@ static func _source_body_lines(entry: GSTManifestEntry, layer: GSTLayer, stack: 
 ## invocation-local error naming the filter layer and its entry on
 ## `codegen_result` and emits no lines for this layer.
 static func _filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack, codegen_result: GSTCodegenResult) -> Array[String]:
-	var input: Dictionary = entry.inputs[0]
-	var target_id: StringName = layer.slots.get(input["name"], &"")
-	var target_layer: GSTLayer = GSTStackOps.find_layer(stack, target_id) if target_id != &"" else null
-	if target_layer == null or (target_layer.entry != "source/texture" and target_layer.entry != "source/screen"):
-		codegen_result.error = "filter layer %s (entry %s) has no resolved texture or screen source wired to its %s slot" % [String(layer.id), entry.id, input["name"]]
+	var target_layer: GSTLayer = _filter_source_layer(layer, entry, stack, codegen_result)
+	if target_layer == null:
 		return []
 	var is_screen: bool = target_layer.entry == "source/screen"
 	var sample_tex: String = "gst_screen_texture" if is_screen else "TEXTURE"
 	var uv_source: String = "SCREEN_UV" if is_screen else "UV"
 	var out_var: String = GSTUniformNames.local_var(layer.id)
 
-	var expanded: String = _expand_filter_template(entry, layer, sample_tex, uv_source, out_var, codegen_result)
+	var expanded: String = _expand_filter_template(entry, layer, stack, sample_tex, uv_source, out_var, codegen_result)
 	if not codegen_result.error.is_empty():
 		return []
 
@@ -472,10 +586,25 @@ static func _filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: 
 	return lines
 
 
+## The "source/texture" or "source/screen" layer wired to a filter's
+## samples_source slot, or null after setting the unresolved-source error on
+## `codegen_result`. Shared by the normal and the bypassed filter body.
+static func _filter_source_layer(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack, codegen_result: GSTCodegenResult) -> GSTLayer:
+	var input: Dictionary = entry.inputs[0]
+	var target_id: StringName = layer.slots.get(input["name"], &"")
+	var target_layer: GSTLayer = GSTStackOps.find_layer(stack, target_id) if target_id != &"" else null
+	if target_layer == null or (target_layer.entry != "source/texture" and target_layer.entry != "source/screen"):
+		codegen_result.error = "filter layer %s (entry %s) has no resolved texture or screen source wired to its %s slot" % [String(layer.id), entry.id, input["name"]]
+		return null
+	return target_layer
+
+
 ## GST_SAMPLE( and GST_PARAM( take a balanced parenthesized argument, found
 ## by a scanner rather than a regex so a nested paren in the argument (e.g.
-## GST_SAMPLE(uv + vec2(x, y))) does not break the match.
-static func _expand_filter_template(entry: GSTManifestEntry, layer: GSTLayer, sample_tex: String, uv_source: String, out_var: String, codegen_result: GSTCodegenResult) -> String:
+## GST_SAMPLE(uv + vec2(x, y))) does not break the match. GST_PARAM maps
+## through _param_arg, so a linked filter param reads the link expression
+## (decision 29). An unknown param name keeps the plain uniform form.
+static func _expand_filter_template(entry: GSTManifestEntry, layer: GSTLayer, stack: GSTStack, sample_tex: String, uv_source: String, out_var: String, codegen_result: GSTCodegenResult) -> String:
 	var body: String = entry.code
 	var sample_mapper: Callable = func(arg: String) -> String:
 		return "texture(%s, %s)" % [sample_tex, arg]
@@ -483,7 +612,11 @@ static func _expand_filter_template(entry: GSTManifestEntry, layer: GSTLayer, sa
 	if not codegen_result.error.is_empty():
 		return ""
 	var param_mapper: Callable = func(arg: String) -> String:
-		return GSTUniformNames.param_uniform(layer.id, entry.function, arg.strip_edges())
+		var param_name: String = arg.strip_edges()
+		for param: Dictionary in entry.params:
+			if String(param["name"]) == param_name:
+				return _param_arg(stack, layer, entry.function, param)
+		return GSTUniformNames.param_uniform(layer.id, entry.function, param_name)
 	body = _expand_balanced_calls(body, "GST_PARAM(", param_mapper, codegen_result)
 	if not codegen_result.error.is_empty():
 		return ""
@@ -541,7 +674,7 @@ static func _operator_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack
 	for input: Dictionary in entry.inputs:
 		args.append(_slot_arg(stack, layer, input))
 	for param: Dictionary in entry.params:
-		args.append(GSTUniformNames.param_uniform(layer.id, entry.function, param["name"]))
+		args.append(_param_arg(stack, layer, entry.function, param))
 	var glsl_type: String = "vec4" if entry.kind_out == GSTLayer.Kind.COLOR else "float"
 	var line: String = "\t%s %s = %s(%s);" % [glsl_type, GSTUniformNames.local_var(layer.id), entry.function, ", ".join(args)]
 	return [line]
@@ -556,6 +689,13 @@ static func _slot_arg(stack: GSTStack, layer: GSTLayer, input: Dictionary) -> St
 	var target_id: StringName = layer.slots.get(input_name, &"")
 	if target_id == &"":
 		return FALLBACK_COLOR_CONSTANT if expected_kind == GSTLayer.Kind.COLOR else FALLBACK_FIELD_CONSTANT
+	return _converted_local(stack, target_id, expected_kind)
+
+
+## A layer's local read as `expected_kind` (decision 2): as is for the same
+## kind, vec4(vec3(l), 1.0) for field to color, luma(l) for color to field.
+## A missing target reads as the expected kind.
+static func _converted_local(stack: GSTStack, target_id: StringName, expected_kind: int) -> String:
 	var target_layer: GSTLayer = GSTStackOps.find_layer(stack, target_id)
 	var local: String = GSTUniformNames.local_var(target_id)
 	var target_kind: int = target_layer.kind_out if target_layer != null else expected_kind
