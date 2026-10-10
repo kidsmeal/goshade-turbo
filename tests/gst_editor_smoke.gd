@@ -52,6 +52,9 @@ func run(plugin: EditorPlugin) -> void:
 	elif flag == "ui_actions":
 		var actions_smoke: RefCounted = load("res://tests/gst_editor_ui_actions_smoke.gd").new()
 		await actions_smoke.run(plugin)
+	elif flag == "ui_layer_ops":
+		var layer_ops_smoke: RefCounted = load("res://tests/gst_editor_ui_layer_ops_smoke.gd").new()
+		await layer_ops_smoke.run(plugin)
 	elif flag == "ui_labels":
 		var labels_smoke: RefCounted = load("res://tests/gst_editor_ui_labels_smoke.gd").new()
 		await labels_smoke.run(plugin)

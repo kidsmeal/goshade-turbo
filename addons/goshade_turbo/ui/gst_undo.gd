@@ -3,8 +3,9 @@ class_name GSTUndo
 extends RefCounted
 
 ## Wraps a standalone UndoRedo for every stack edit: structural edits (add,
-## remove, reorder, slot change, warp slot change, output color change,
-## output alpha change), coord-space edits, Randomize, and native property
+## duplicate, remove, reorder, rename, bypass, slot change, warp slot change,
+## output color change, output alpha change), coord-space edits, Randomize,
+## and native property
 ## edits (gst_inspector_column.gd finishes each native gesture and routes the
 ## result here).
 ##
@@ -195,6 +196,87 @@ func _undo_remove(layer: GSTLayer, index: int, slot_snapshot: Array[Dictionary],
 			coord.warp_y = ref["value"]
 	_stack.output_color = output_color
 	_stack.output_alpha = output_alpha
+
+
+## Duplicates layer_id directly above itself (decision 24) as one action.
+## Redo reinserts the same GSTLayer instance the first do created, so a
+## property edit recorded on the copy still lands on it after undo/redo; undo
+## leaves stack.next_id untouched, so ids are never reused.
+func duplicate_layer(layer_id: StringName) -> Dictionary:
+	var copy: GSTLayer = GSTStackOps.duplicate_layer(_stack, layer_id, _library)
+	if copy == null:
+		return {"ok": false, "reason": "This layer no longer exists.", "layer": null}
+	var index: int = GSTStackOps.find_index(_stack, copy.id)
+	_create_action("GST: duplicate %s" % String(layer_id))
+	_undo_redo.add_do_method(_redo_duplicate.bind(copy, index))
+	_undo_redo.add_undo_method(_undo_add.bind(copy.id))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
+	_undo_redo.commit_action(false)
+	_notify()
+	return {"ok": true, "reason": "", "layer": copy}
+
+
+func _redo_duplicate(layer: GSTLayer, index: int) -> void:
+	_stack.layers.insert(clampi(index, 0, _stack.layers.size()), layer)
+
+
+## Sets layer_id's label (decision 25). An empty label is legal and shows the
+## function name alone. An unchanged label registers no action.
+func rename_layer(layer_id: StringName, label: String) -> Dictionary:
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	if layer == null:
+		return {"ok": false, "reason": "This layer no longer exists."}
+	var old_label: String = layer.label
+	if old_label == label:
+		return {"ok": true, "reason": ""}
+	_raw_set_label(layer_id, label)
+	_create_action("GST: rename %s" % String(layer_id))
+	_undo_redo.add_do_method(_raw_set_label.bind(layer_id, label))
+	_undo_redo.add_undo_method(_raw_set_label.bind(layer_id, old_label))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
+	_undo_redo.commit_action(false)
+	_notify()
+	return {"ok": true, "reason": ""}
+
+
+func _raw_set_label(layer_id: StringName, label: String) -> void:
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	if layer != null:
+		layer.label = label
+
+
+## Bypasses (enabled false) or restores (enabled true) layer_id (decision 26).
+## Bypassing is refused with GSTStackOps.can_bypass's reason, no mutation and
+## no action; restoring is never refused. An unchanged value registers no
+## action.
+func set_enabled(layer_id: StringName, enabled: bool) -> Dictionary:
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	if layer == null:
+		return {"ok": false, "reason": "This layer no longer exists."}
+	if not enabled:
+		var check: Dictionary = GSTStackOps.can_bypass(_stack, layer_id, _library)
+		if not check["ok"]:
+			return check
+	var old_enabled: bool = layer.enabled
+	if old_enabled == enabled:
+		return {"ok": true, "reason": ""}
+	_raw_set_enabled(layer_id, enabled)
+	_create_action("GST: %s %s" % ["enable" if enabled else "bypass", String(layer_id)])
+	_undo_redo.add_do_method(_raw_set_enabled.bind(layer_id, enabled))
+	_undo_redo.add_undo_method(_raw_set_enabled.bind(layer_id, old_enabled))
+	_undo_redo.add_do_method(_notify)
+	_undo_redo.add_undo_method(_notify)
+	_undo_redo.commit_action(false)
+	_notify()
+	return {"ok": true, "reason": ""}
+
+
+func _raw_set_enabled(layer_id: StringName, enabled: bool) -> void:
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	if layer != null:
+		layer.enabled = enabled
 
 
 ## Moves layer_id to new_index. Refused, with a reason, when the move would

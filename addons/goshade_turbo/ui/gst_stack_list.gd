@@ -11,7 +11,11 @@ signal layer_selected(layer_id: StringName)
 signal structural_edit_refused(reason: String)
 signal chooser_requested(purpose: String, layer_id: StringName, slot_name: String, initiator: Control)
 
+## Row suffix for a layer with enabled == false (decision 26).
+const BYPASSED_SUFFIX: String = "  bypassed"
+
 @onready var _list: ItemList = %List
+@onready var _rename_edit: LineEdit = %RenameEdit
 @onready var _add_button: Button = %AddButton
 @onready var _remove_button: Button = %RemoveButton
 @onready var _up_button: Button = %UpButton
@@ -25,6 +29,8 @@ var _picker: GSTPicker = null
 var _mutations_blocked: bool = false
 var _refusals: Dictionary = {}
 var _visible_refusal_control: String = ""
+## Layer id the inline rename edit is open on; empty when closed.
+var _rename_layer_id: StringName = &""
 
 
 func _ready() -> void:
@@ -33,6 +39,9 @@ func _ready() -> void:
 	_up_button.pressed.connect(_on_up_pressed)
 	_down_button.pressed.connect(_on_down_pressed)
 	_list.item_selected.connect(_on_item_selected)
+	_rename_edit.text_submitted.connect(_on_rename_submitted)
+	_rename_edit.focus_exited.connect(_on_rename_focus_exited)
+	_rename_edit.gui_input.connect(_on_rename_gui_input)
 
 
 func setup(stack: GSTStack, library: GSTLibrary, undo: GSTUndo) -> void:
@@ -65,11 +74,31 @@ func refresh() -> void:
 		var entry: GSTManifestEntry = _library.get_entry(layer.entry)
 		var kind_label: String = "field" if layer.kind_out == GSTLayer.Kind.FIELD else "color"
 		var function_name: String = entry.function if entry != null else layer.entry
-		_list.add_item("l%s  %s (%s)" % [String(layer.id), function_name, kind_label])
+		_list.add_item(_row_text(layer, function_name, kind_label))
 		_list.set_item_metadata(_list.item_count - 1, layer.id)
 	_select_layer_silently(selected_id)
+	if _rename_layer_id != &"" and GSTStackOps.find_layer(_stack, _rename_layer_id) == null:
+		cancel_rename()
 	if anchor_id != &"":
 		_restore_scroll_anchor.call_deferred(anchor_id, anchor_offset)
+
+
+## Label then function name; the function name stays visible on every row
+## (decision 25). A bypassed layer ends in BYPASSED_SUFFIX (decision 26).
+func _row_text(layer: GSTLayer, function_name: String, kind_label: String) -> String:
+	var name_text: String = function_name if layer.label.is_empty() else "%s %s" % [layer.label, function_name]
+	var text: String = "l%s  %s (%s)" % [String(layer.id), name_text, kind_label]
+	if not layer.enabled:
+		text += BYPASSED_SUFFIX
+	return text
+
+
+## Wired-by: tests/gst_editor_ui_layer_ops_smoke.gd.
+func get_row_text(layer_id: StringName) -> String:
+	var index: int = _item_index_for_id(layer_id)
+	if index == -1:
+		return ""
+	return _list.get_item_text(index)
 
 
 func select_layer(layer_id: StringName) -> void:
@@ -104,6 +133,8 @@ func set_shared_picker(picker: GSTPicker) -> void:
 
 func set_mutations_blocked(blocked: bool) -> void:
 	_mutations_blocked = blocked
+	if blocked:
+		cancel_rename()
 	for button: Button in [_add_button, _remove_button, _up_button, _down_button]:
 		button.disabled = blocked
 
@@ -310,6 +341,105 @@ func _on_down_pressed() -> void:
 	if _mutations_blocked:
 		return
 	_move_selected(-1)
+
+
+## Duplicates layer_id through GSTUndo and selects the copy. Wired-by:
+## gst_main_panel.gd (Layer menu Duplicate).
+func duplicate_layer(layer_id: StringName) -> GSTLayer:
+	if _mutations_blocked:
+		return null
+	var result: Dictionary = _undo.duplicate_layer(layer_id)
+	if not result["ok"]:
+		set_refusal(String(result["reason"]), "duplicate", layer_id)
+		return null
+	var copy: GSTLayer = result["layer"]
+	_clear_refusal("duplicate")
+	refresh()
+	select_layer(copy.id)
+	return copy
+
+
+## Bypasses or restores layer_id through GSTUndo. A refusal shows its reason
+## in the refusal label and leaves the layer unchanged. Wired-by:
+## gst_main_panel.gd (Layer menu Bypass).
+func set_layer_enabled(layer_id: StringName, enabled: bool) -> bool:
+	if _mutations_blocked:
+		return false
+	var result: Dictionary = _undo.set_enabled(layer_id, enabled)
+	if not result["ok"]:
+		set_refusal(String(result["reason"]), "bypass", layer_id)
+		return false
+	_clear_refusal("bypass")
+	refresh()
+	return true
+
+
+## Opens the inline rename edit over layer_id's row, prefilled with its label
+## and the function name as placeholder. Enter or focus loss commits, Escape
+## cancels; an empty label is legal. Wired-by: gst_main_panel.gd (Layer menu
+## Rename).
+func begin_rename(layer_id: StringName) -> void:
+	if _mutations_blocked:
+		return
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
+	var index: int = _item_index_for_id(layer_id)
+	if layer == null or index == -1:
+		return
+	_rename_layer_id = layer_id
+	var rect: Rect2 = _list.get_item_rect(index)
+	var bar: VScrollBar = _list.get_v_scroll_bar()
+	bar.value = clampf(bar.value, rect.end.y - _list.size.y, rect.position.y)
+	rect.position.y -= bar.value
+	_rename_edit.position = rect.position
+	_rename_edit.size = rect.size
+	_rename_edit.text = layer.label
+	var entry: GSTManifestEntry = _library.get_entry(layer.entry)
+	_rename_edit.placeholder_text = entry.function if entry != null else layer.entry
+	_rename_edit.show()
+	_rename_edit.grab_focus()
+	_rename_edit.select_all()
+
+
+## Wired-by: tests/gst_editor_ui_layer_ops_smoke.gd.
+func get_rename_edit() -> LineEdit:
+	return _rename_edit
+
+
+## Closes the inline rename edit without writing the label.
+func cancel_rename() -> void:
+	_rename_layer_id = &""
+	if _rename_edit != null:
+		_rename_edit.hide()
+
+
+func _commit_rename() -> void:
+	var layer_id: StringName = _rename_layer_id
+	if layer_id == &"":
+		return
+	var label: String = _rename_edit.text.strip_edges()
+	cancel_rename()
+	var result: Dictionary = _undo.rename_layer(layer_id, label)
+	if not result["ok"]:
+		set_refusal(String(result["reason"]), "rename", layer_id)
+		return
+	_clear_refusal("rename")
+	refresh()
+
+
+func _on_rename_submitted(_text: String) -> void:
+	_commit_rename()
+
+
+func _on_rename_focus_exited() -> void:
+	_commit_rename()
+
+
+func _on_rename_gui_input(event: InputEvent) -> void:
+	var key: InputEventKey = event as InputEventKey
+	if key != null and key.pressed and key.keycode == KEY_ESCAPE:
+		_rename_edit.accept_event()
+		cancel_rename()
+		_list.grab_focus()
 
 
 func _move_selected(delta: int) -> void:

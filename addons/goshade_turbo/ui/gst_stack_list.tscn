@@ -35,6 +35,11 @@ size_flags_vertical = 3
 max_columns = 1
 same_column_width = true
 
+[node name="RenameEdit" type="LineEdit" parent="List"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+
 [node name="RefusalLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false

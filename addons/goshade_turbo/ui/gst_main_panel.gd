@@ -73,6 +73,13 @@ const FILE_NEW: int = 0
 const FILE_OPEN: int = 1
 const FILE_SAVE_AS: int = 2
 const FILE_REOPEN_SHADER: int = 3
+## %LayerMenu item ids. Duplicate, Rename and Bypass sit in the selected
+## layer's secondary menu (EDITOR_UI_DESIGN_reviewed.md decision 14, owner
+## placement recommendation in v0-2-stack-features.md).
+const LAYER_PREVIEW: int = 0
+const LAYER_DUPLICATE: int = 1
+const LAYER_RENAME: int = 2
+const LAYER_BYPASS: int = 3
 
 var _stack: GSTStack = null
 var _library: GSTLibrary = null
@@ -205,8 +212,14 @@ func _ready() -> void:
 		_preset_option.add_item(preset_name)
 	_preset_option.item_selected.connect(_on_preset_selected)
 	_image_button.pressed.connect(_on_image_button_pressed)
-	_layer_menu.get_popup().add_item("Preview this layer", 0)
-	_layer_menu.get_popup().id_pressed.connect(_on_layer_menu_pressed)
+	var layer_popup: PopupMenu = _layer_menu.get_popup()
+	layer_popup.add_item("Preview this layer", LAYER_PREVIEW)
+	layer_popup.add_separator()
+	layer_popup.add_item("Duplicate", LAYER_DUPLICATE)
+	layer_popup.add_item("Rename", LAYER_RENAME)
+	layer_popup.add_check_item("Bypass", LAYER_BYPASS)
+	layer_popup.id_pressed.connect(_on_layer_menu_pressed)
+	layer_popup.about_to_popup.connect(_update_layer_menu)
 	_return_to_effect.pressed.connect(_on_return_to_effect_pressed)
 
 	for space_name: String in COORD_SPACE_NAMES:
@@ -1922,6 +1935,7 @@ func _on_stack_changed() -> void:
 	_stack_list.refresh()
 	_output_block.refresh()
 	_inspector_column.edit(_stack_list.get_selected_layer_id())
+	_update_layer_menu()
 	_syncing_coord_space = true
 	_coord_space_option.select(int(_stack.coord_space))
 	_syncing_coord_space = false
@@ -1983,11 +1997,25 @@ func _on_preview_image_selected(path: String) -> void:
 
 
 func _on_layer_menu_pressed(id: int) -> void:
-	if id != 0 or is_picker_open():
+	if is_picker_open():
 		return
 	var selected: StringName = _stack_list.get_selected_layer_id()
-	if GSTStackOps.find_layer(_stack, selected) == null:
+	var layer: GSTLayer = GSTStackOps.find_layer(_stack, selected)
+	if layer == null:
 		return
+	match id:
+		LAYER_PREVIEW:
+			_preview_selected_layer(selected)
+		LAYER_DUPLICATE:
+			_stack_list.duplicate_layer(selected)
+		LAYER_RENAME:
+			_stack_list.begin_rename(selected)
+		LAYER_BYPASS:
+			_stack_list.set_layer_enabled(selected, not layer.enabled)
+	_update_layer_menu()
+
+
+func _preview_selected_layer(selected: StringName) -> void:
 	_preview_layer_id = selected
 	if _active_document != null:
 		_active_document.preview_layer_id = _preview_layer_id
@@ -2090,8 +2118,15 @@ func _resync_material() -> void:
 	_update_layer_menu()
 
 
+## Bypass is checked only while the selected layer is bypassed, so a refused
+## bypass leaves the item unchecked.
 func _update_layer_menu() -> void:
-	_layer_menu.disabled = is_picker_open() or _stack == null or GSTStackOps.find_layer(_stack, _stack_list.get_selected_layer_id()) == null
+	var layer: GSTLayer = null if _stack == null else GSTStackOps.find_layer(_stack, _stack_list.get_selected_layer_id())
+	_layer_menu.disabled = is_picker_open() or layer == null
+	var popup: PopupMenu = _layer_menu.get_popup()
+	var bypass_index: int = popup.get_item_index(LAYER_BYPASS)
+	if bypass_index != -1:
+		popup.set_item_checked(bypass_index, layer != null and not layer.enabled)
 
 
 func get_picker() -> GSTPicker:
