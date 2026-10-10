@@ -144,6 +144,39 @@ func _build_color_entry_layer(stack: GSTStack, color_entry_id: String, lib: GSTL
 	return filter_layer
 
 
+## Every filter/* entry fed a source/image layer (decision 28), enabled and
+## bypassed (decision 26), compiles. The filter roster is the
+## EXPECTED_COLOR_ENTRY_IDS filter subset.
+func test_source_image_under_every_filter_compiles() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var filter_ids: Array[String] = []
+	for id: String in lib.entries.keys():
+		if _is_filter(id):
+			filter_ids.append(id)
+	var expected_filter_ids: Array[String] = []
+	for id: String in EXPECTED_COLOR_ENTRY_IDS:
+		if _is_filter(id):
+			expected_filter_ids.append(id)
+	assert_true(_roster_matches(filter_ids, expected_filter_ids), "filter roster matches expected (%s)" % _roster_diff_message(filter_ids, expected_filter_ids))
+
+	var checked: int = 0
+	for filter_id: String in filter_ids:
+		for enabled: bool in [true, false]:
+			var stack: GSTStack = GSTStack.new()
+			var image_layer: GSTLayer = GSTStackOps.add_layer(stack, "source/image", GSTLayer.Kind.COLOR, true)
+			var filter_layer: GSTLayer = GSTStackOps.add_layer(stack, filter_id, GSTLayer.Kind.COLOR, false)
+			var assign_result: Dictionary = GSTStackOps.assign_slot(stack, filter_layer.id, "source", image_layer.id, lib)
+			assert_true(assign_result["ok"], "%s accepts source/image: %s" % [filter_id, assign_result["reason"]])
+			filter_layer.enabled = enabled
+			stack.output_color = filter_layer.id
+			var result: GSTCodegenResult = GSTCodegen.generate_result(stack, lib)
+			assert_true(result.ok(), "%s (enabled %s) over source/image generates: %s" % [filter_id, enabled, result.error])
+			assert_true(GSTShaderCompile.compiles(result.code), "%s (enabled %s) over source/image compiles" % [filter_id, enabled])
+			checked += 1
+	assert_eq(checked, filter_ids.size() * 2, "checked %d filter x bypass combinations over source/image" % checked)
+	print("test_combinations: source/image under every filter compiled: %d (%d filters x enabled, bypassed)" % [checked, filter_ids.size()])
+
+
 ## Every color op (a color/* entry with at least one color-kind input; fill,
 ## gradient_map, and palette are excluded) with every color-kind entry (the
 ## color/* roster, the three source/* entries, and every filter/* entry fed by

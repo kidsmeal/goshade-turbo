@@ -434,7 +434,7 @@ static func _layer_body_lines(layer: GSTLayer, library: GSTLibrary, stack: GSTSt
 		return []
 	if _is_bypassed(layer, entry):
 		if entry.samples_source:
-			return _bypassed_filter_body_lines(layer, entry, stack, codegen_result)
+			return _bypassed_filter_body_lines(layer, entry, library, stack, codegen_result)
 		return _bypassed_operator_body_lines(layer, entry, stack)
 	# Sources route before generators: source/image carries a coord block but
 	# has no function to call (decision 28).
@@ -443,7 +443,7 @@ static func _layer_body_lines(layer: GSTLayer, library: GSTLibrary, stack: GSTSt
 	if layer.coord != null:
 		return _generator_body_lines(layer, entry, stack)
 	if entry.samples_source:
-		return _filter_body_lines(layer, entry, stack, codegen_result)
+		return _filter_body_lines(layer, entry, library, stack, codegen_result)
 	return _operator_body_lines(layer, entry, stack)
 
 
@@ -478,17 +478,16 @@ static func _bypassed_operator_body_lines(layer: GSTLayer, entry: GSTManifestEnt
 
 
 ## A bypassed filter emits its source sampled unchanged at the filter's
-## GST_UV mapping (decision 26). An unresolved source sets the same error as
-## _filter_body_lines.
-static func _bypassed_filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack, codegen_result: GSTCodegenResult) -> Array[String]:
+## GST_UV mapping (decision 26): UV, SCREEN_UV, or coord<src> for a
+## source/image source (decision 28). An unresolved source sets the same
+## error as _filter_body_lines.
+static func _bypassed_filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, library: GSTLibrary, stack: GSTStack, codegen_result: GSTCodegenResult) -> Array[String]:
 	var target_layer: GSTLayer = _filter_source_layer(layer, entry, stack, codegen_result)
 	if target_layer == null:
 		return []
-	var is_screen: bool = target_layer.entry == "source/screen"
+	var mapping: Dictionary = _filter_sample_mapping(target_layer, library)
 	return ["\tvec4 %s = texture(%s, %s);" % [
-		GSTUniformNames.local_var(layer.id),
-		"gst_screen_texture" if is_screen else "TEXTURE",
-		"SCREEN_UV" if is_screen else "UV",
+		GSTUniformNames.local_var(layer.id), mapping["sampler"], mapping["uv"],
 	]]
 
 
@@ -558,22 +557,20 @@ static func _source_body_lines(entry: GSTManifestEntry, layer: GSTLayer, stack: 
 ## template's locals (token list in gst_manifest_entry.gd's samples_source
 ## comment).
 ##
-## An unwired slot, or one whose target is not a "source/texture" or
-## "source/screen" layer, is not silently sampled as TEXTURE: assign_slot
-## refuses most such assignments, but remove_layer's reset can still leave a
-## samples_source slot empty when no source remains below. That case sets an
-## invocation-local error naming the filter layer and its entry on
-## `codegen_result` and emits no lines for this layer.
-static func _filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack, codegen_result: GSTCodegenResult) -> Array[String]:
+## An unwired slot, or one whose target is not a source layer
+## (GSTStackOps.is_source_layer), is not silently sampled as TEXTURE:
+## assign_slot refuses most such assignments, but remove_layer's reset can
+## still leave a samples_source slot empty when no source remains below. That
+## case sets an invocation-local error naming the filter layer and its entry
+## on `codegen_result` and emits no lines for this layer.
+static func _filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, library: GSTLibrary, stack: GSTStack, codegen_result: GSTCodegenResult) -> Array[String]:
 	var target_layer: GSTLayer = _filter_source_layer(layer, entry, stack, codegen_result)
 	if target_layer == null:
 		return []
-	var is_screen: bool = target_layer.entry == "source/screen"
-	var sample_tex: String = "gst_screen_texture" if is_screen else "TEXTURE"
-	var uv_source: String = "SCREEN_UV" if is_screen else "UV"
+	var mapping: Dictionary = _filter_sample_mapping(target_layer, library)
 	var out_var: String = GSTUniformNames.local_var(layer.id)
 
-	var expanded: String = _expand_filter_template(entry, layer, stack, sample_tex, uv_source, out_var, codegen_result)
+	var expanded: String = _expand_filter_template(entry, layer, stack, mapping["sampler"], mapping["uv"], out_var, codegen_result)
 	if not codegen_result.error.is_empty():
 		return []
 
@@ -586,17 +583,32 @@ static func _filter_body_lines(layer: GSTLayer, entry: GSTManifestEntry, stack: 
 	return lines
 
 
-## The "source/texture" or "source/screen" layer wired to a filter's
+## The source layer (GSTStackOps.is_source_layer: source/texture,
+## source/screen or source/image, decision 28) wired to a filter's
 ## samples_source slot, or null after setting the unresolved-source error on
 ## `codegen_result`. Shared by the normal and the bypassed filter body.
 static func _filter_source_layer(layer: GSTLayer, entry: GSTManifestEntry, stack: GSTStack, codegen_result: GSTCodegenResult) -> GSTLayer:
 	var input: Dictionary = entry.inputs[0]
 	var target_id: StringName = layer.slots.get(input["name"], &"")
-	var target_layer: GSTLayer = GSTStackOps.find_layer(stack, target_id) if target_id != &"" else null
-	if target_layer == null or (target_layer.entry != "source/texture" and target_layer.entry != "source/screen"):
-		codegen_result.error = "filter layer %s (entry %s) has no resolved texture or screen source wired to its %s slot" % [String(layer.id), entry.id, input["name"]]
+	if not GSTStackOps.is_source_layer(stack, target_id):
+		codegen_result.error = "filter layer %s (entry %s) has no resolved texture, screen or image source wired to its %s slot" % [String(layer.id), entry.id, input["name"]]
 		return null
-	return target_layer
+	return GSTStackOps.find_layer(stack, target_id)
+
+
+## The `{sampler, uv}` a filter's GST_SAMPLE and GST_UV map to for its
+## source layer (decisions 21, 28): gst_screen_texture at SCREEN_UV for
+## source/screen, the layer's own `image` uniform at coord<src> for
+## source/image, TEXTURE at UV for source/texture.
+static func _filter_sample_mapping(source_layer: GSTLayer, library: GSTLibrary) -> Dictionary:
+	if source_layer.entry == "source/screen":
+		return {"sampler": "gst_screen_texture", "uv": "SCREEN_UV"}
+	if source_layer.entry == "source/image":
+		return {
+			"sampler": GSTUniformNames.param_uniform(source_layer.id, library.get_entry(source_layer.entry).function, "image"),
+			"uv": GSTUniformNames.coord_var(source_layer.id),
+		}
+	return {"sampler": "TEXTURE", "uv": "UV"}
 
 
 ## GST_SAMPLE( and GST_PARAM( take a balanced parenthesized argument, found

@@ -58,11 +58,37 @@ func test_source_image_emits_sampler_uniform_and_coord_read() -> void:
 	stack.output_color = layer.id
 	var code: String = GSTCodegen.generate(stack, lib)
 	var id: String = String(layer.id)
-	assert_true(code.contains("uniform sampler2D l%s_image_image : source_color, filter_linear, repeat_enable;" % id), "sampler2D uniform line with no hint_range:\n%s" % code)
+	var sampler_line: String = "uniform sampler2D l%s_image_image : source_color, filter_linear, repeat_enable;" % id
+	assert_true(code.contains(sampler_line), "sampler2D uniform line exact text:\n%s" % code)
+	for line: String in code.split("\n"):
+		if line.begins_with("uniform sampler2D l"):
+			assert_false(line.contains("hint_range"), "sampler line carries no hint_range: %s" % line)
+			assert_false(line.contains("="), "sampler line carries no default: %s" % line)
 	assert_true(code.contains("\tvec2 coord%s = gst_transform(space_coord," % id), "coord block line emitted:\n%s" % code)
 	assert_true(code.contains("\tvec4 l%s = texture(l%s_image_image, coord%s);" % [id, id, id]), "image read at coord<id>:\n%s" % code)
 	assert_false(code.contains("image(coord"), "no generator call to a missing image() function")
 	assert_true(GSTShaderCompile.compiles(code), "source/image stack compiles")
+
+
+## Decision 28: the source/image body is exactly the coord block lines then
+## the sampler read, in that order, with no other lines for the layer.
+func test_source_image_body_lines_are_the_coord_block_then_the_read() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var layer: GSTLayer = GSTStackOps.add_layer(stack, "source/image", GSTLayer.Kind.COLOR, true)
+	layer.coord.scroll = Vector2(0.5, 0.0)
+	stack.output_color = layer.id
+	var code: String = GSTCodegen.generate(stack, lib)
+	var id: String = String(layer.id)
+	var expected: Array[String] = [
+		"\tvec2 coord%s = gst_transform(space_coord, l%s_scale, l%s_rotation, l%s_offset);" % [id, id, id, id],
+		"\tcoord%s += l%s_scroll * TIME;" % [id, id],
+		"\tvec4 l%s = texture(l%s_image_image, coord%s);" % [id, id, id],
+	]
+	var start: int = code.find(expected[0])
+	assert_true(start != -1, "coord block opens the body:\n%s" % code)
+	assert_true(code.substr(start).begins_with("\n".join(expected) + "\n"), "body is coord block then read, nothing between:\n%s" % code)
+	assert_true(GSTShaderCompile.compiles(code), "scrolled source/image compiles")
 
 
 func test_source_entries_have_empty_code_and_emit_no_stray_comments() -> void:
@@ -324,25 +350,29 @@ func test_bypassed_color_operator_with_only_a_field_input_converts_to_color() ->
 
 
 ## Decision 26: a bypassed filter samples its source unchanged at the
-## filter's GST_UV mapping, and keeps its uniforms.
+## filter's GST_UV mapping, and keeps its uniforms. A source/image source
+## samples its own sampler at coord<src> (decision 28); `%s` is the source id.
 func test_bypassed_filter_samples_its_source_unchanged() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var cases: Dictionary = {
 		"source/texture": "texture(TEXTURE, UV)",
 		"source/screen": "texture(gst_screen_texture, SCREEN_UV)",
+		"source/image": "texture(l%s_image_image, coord%s)",
 	}
 	for source_id: String in cases.keys():
 		var stack: GSTStack = GSTStack.new()
-		var source: GSTLayer = GSTStackOps.add_layer(stack, source_id, GSTLayer.Kind.COLOR, false)
+		var source: GSTLayer = GSTStackOps.add_layer(stack, source_id, GSTLayer.Kind.COLOR, lib.get_entry(source_id).coord)
+		var expected_sample: String = String(cases[source_id]).replace("%s", String(source.id))
 		var filter: GSTLayer = GSTStackOps.add_layer(stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
-		GSTStackOps.assign_slot(stack, filter.id, "source", source.id, lib)
+		var assign_result: Dictionary = GSTStackOps.assign_slot(stack, filter.id, "source", source.id, lib)
+		assert_true(assign_result["ok"], "filter accepts %s: %s" % [source_id, assign_result["reason"]])
 		filter.enabled = false
 		stack.output_color = filter.id
 
 		var result: GSTCodegenResult = GSTCodegen.generate_result(stack, lib)
 
 		assert_true(result.ok(), "bypassed filter over %s generates: %s" % [source_id, result.error])
-		assert_true(result.code.contains("\tvec4 l%s = %s;" % [filter.id, cases[source_id]]), "bypassed filter over %s emits its source sample" % source_id)
+		assert_true(result.code.contains("\tvec4 l%s = %s;" % [filter.id, expected_sample]),"bypassed filter over %s emits its source sample:\n%s" % [source_id, result.code])
 		assert_false(result.code.contains("snapped"), "bypassed filter over %s emits no template body" % source_id)
 		assert_true(result.code.contains("uniform float l%s_pixelate_cell_size" % filter.id), "bypassed filter over %s keeps its uniform" % source_id)
 		assert_true(GSTShaderCompile.compiles(result.code), "bypassed filter over %s compiles" % source_id)

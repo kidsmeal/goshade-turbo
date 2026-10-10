@@ -60,6 +60,39 @@ func test_assigning_a_screen_layer_to_a_samples_source_slot_succeeds() -> void:
 	assert_eq(filter.slots["source"], screen.id, "the slot stores the screen layer id")
 
 
+## Decision 28: source/image is an allowed filter input under every filter.
+## GST_SAMPLE reads its own sampler l<src>_image_image and GST_UV maps to
+## coord<src>; TEXTURE and UV are never read for it.
+func test_source_image_is_accepted_under_every_filter() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var filter_ids: Array[String] = []
+	for id: String in lib.entries.keys():
+		if lib.get_entry(id).samples_source:
+			filter_ids.append(id)
+	assert_eq(filter_ids.size(), 5, "the full filter roster is present (5 entries)")
+
+	for id: String in filter_ids:
+		var stack: GSTStack = GSTStack.new()
+		var image: GSTLayer = GSTStackOps.add_layer(stack, "source/image", GSTLayer.Kind.COLOR, true)
+		var filter: GSTLayer = GSTStackOps.add_layer(stack, id, GSTLayer.Kind.COLOR, false)
+		var result: Dictionary = GSTStackOps.assign_slot(stack, filter.id, "source", image.id, lib)
+		assert_true(result["ok"], "%s accepts a source/image layer: %s" % [id, result["reason"]])
+		assert_eq(filter.slots.get("source", &""), image.id, "%s slot stores the image layer id" % id)
+		stack.output_color = filter.id
+
+		var codegen_result: GSTCodegenResult = GSTCodegen.generate_result(stack, lib)
+
+		assert_true(codegen_result.ok(), "%s over source/image generates: %s" % [id, codegen_result.error])
+		var src: String = String(image.id)
+		assert_true(codegen_result.code.contains("texture(l%s_image_image, " % src), "%s samples the image sampler:\n%s" % [id, codegen_result.code])
+		assert_false(codegen_result.code.contains("texture(TEXTURE,"), "%s over source/image never samples TEXTURE" % id)
+		# The image layer alone writes coord<src> twice (coord block, read);
+		# every filter template reads GST_UV at least once more.
+		assert_true(codegen_result.code.count("coord%s" % src) > 2, "%s reads GST_UV as coord%s:\n%s" % [id, src, codegen_result.code])
+		assert_false(codegen_result.code.contains("UV +") or codegen_result.code.contains("(UV)") or codegen_result.code.contains("UV /"), "%s over source/image never reads UV:\n%s" % [id, codegen_result.code])
+		assert_true(GSTShaderCompile.compiles(codegen_result.code), "%s over source/image compiles" % id)
+
+
 func test_filter_default_initializes_only_from_an_immediate_source() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var legal_stack: GSTStack = GSTStack.new()
