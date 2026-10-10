@@ -27,6 +27,32 @@ func test_group_line_matches_b3_resolution() -> void:
 	assert_eq(GSTUniformNames.group_line(12, "voronoi"), "group_uniforms L12_voronoi;", "position beyond one digit stays two digits, not truncated")
 
 
+func test_group_line_uses_the_sanitized_label() -> void:
+	assert_eq(GSTUniformNames.group_line(3, "fbm", "Clouds"), "group_uniforms L03_Clouds;", "a plain label replaces the function name (decision 25)")
+	assert_eq(GSTUniformNames.group_line(3, "fbm", "  Big cloud #2! "), "group_uniforms L03_Big_cloud_2;", "runs of other characters become one underscore, edges dropped")
+	assert_eq(GSTUniformNames.group_line(3, "fbm", "a__b"), "group_uniforms L03_a_b;", "a double underscore collapses, GLSL reserves __")
+	assert_eq(GSTUniformNames.sanitize_label("héllo wörld"), "h_llo_w_rld", "non-ASCII letters fall outside [A-Za-z0-9_]")
+
+
+func test_group_line_falls_back_to_function_when_label_sanitizes_empty() -> void:
+	assert_eq(GSTUniformNames.group_line(1, "hash", ""), "group_uniforms L01_hash;", "an empty label uses the function name")
+	assert_eq(GSTUniformNames.group_line(1, "hash", "!!! ___ ***"), "group_uniforms L01_hash;", "a label with no letter or digit uses the function name")
+
+
+func test_labeled_layer_keeps_id_based_uniform_names() -> void:
+	var lib: GSTLibrary = GSTLibrary.new()
+	lib.scan()
+	var stack: GSTStack = GSTStack.new()
+	var layer: GSTLayer = GSTStackOps.add_layer(stack, "generative/fbm", GSTLayer.Kind.FIELD, true)
+	layer.label = "My Clouds"
+	var code: String = GSTCodegen.generate(stack, lib)
+	assert_true(code.contains("group_uniforms L00_My_Clouds;"), "codegen emits the label group name")
+	assert_false(code.contains("group_uniforms L00_fbm;"), "the function group name is replaced")
+	assert_true(code.contains("uniform int l0_fbm_octaves"), "param uniform stays l<id>_<function>_<param>")
+	assert_true(code.contains("uniform vec2 l0_scale"), "coord uniform stays l<id>_scale")
+	assert_true(GSTShaderCompile.compiles(code), "labeled stack compiles")
+
+
 func test_readable_labels_preserve_native_paths_and_uniform_names() -> void:
 	var lib: GSTLibrary = GSTLibrary.new()
 	lib.scan()

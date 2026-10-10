@@ -199,6 +199,61 @@ func test_every_color_op_compiles_with_every_color_entry_as_input() -> void:
 	print("test_combinations: color-op x color-entry combinations checked: %d (%d color ops x %d color-kind entries, filters included per fix pass 3 item 5)" % [checked, color_op_ids.size(), color_entry_ids.size()])
 
 
+## The int and float params of `entry`, the linkable set (decision 29).
+func _linkable_params(entry: GSTManifestEntry) -> Array[String]:
+	var names: Array[String] = []
+	for param: Dictionary in entry.params:
+		if param["type"] == "float" or param["type"] == "int":
+			names.append(param["name"])
+	return names
+
+
+## Decision 29: every field-kind entry as the link target of every linkable
+## param of every entry. One stack per (target, linker) pair links all of
+## the linker's linkable params at once to the target below it. A filter
+## linker gets a source/texture layer wired to its samples_source slot;
+## other unwired inputs take the fallback constants.
+func test_every_field_entry_links_into_every_linkable_param_and_compiles() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var field_ids: Array[String] = []
+	var linker_ids: Array[String] = []
+	for id: String in lib.entries.keys():
+		var entry: GSTManifestEntry = lib.get_entry(id)
+		if entry.kind_out == GSTLayer.Kind.FIELD:
+			field_ids.append(id)
+		if not _linkable_params(entry).is_empty():
+			linker_ids.append(id)
+	field_ids.sort()
+	linker_ids.sort()
+	assert_true(field_ids.size() >= 40, "field-kind roster present (%d entries)" % field_ids.size())
+
+	var checked: int = 0
+	var links: int = 0
+	for field_id: String in field_ids:
+		var field_entry: GSTManifestEntry = lib.get_entry(field_id)
+		for linker_id: String in linker_ids:
+			var linker_entry: GSTManifestEntry = lib.get_entry(linker_id)
+			var stack: GSTStack = GSTStack.new()
+			var target: GSTLayer = GSTStackOps.add_layer(stack, field_id, field_entry.kind_out, field_entry.coord)
+			var source: GSTLayer = null
+			if linker_entry.samples_source:
+				source = GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
+			var linker: GSTLayer = GSTStackOps.add_layer(stack, linker_id, linker_entry.kind_out, linker_entry.coord)
+			if source != null:
+				var assign_result: Dictionary = GSTStackOps.assign_slot(stack, linker.id, linker_entry.inputs[0]["name"], source.id, lib)
+				assert_true(assign_result["ok"], "%s accepts source/texture: %s" % [linker_id, assign_result["reason"]])
+			for param_name: String in _linkable_params(linker_entry):
+				linker.param_links[param_name] = {"target": target.id, "amount": 1.0}
+				links += 1
+			stack.output_color = linker.id
+			var result: GSTCodegenResult = GSTCodegen.generate_result(stack, lib)
+			assert_true(result.ok(), "%s linked to %s generates: %s" % [linker_id, field_id, result.error])
+			assert_true(GSTShaderCompile.compiles(result.code), "%s with every linkable param linked to %s compiles" % [linker_id, field_id])
+			checked += 1
+	assert_eq(checked, field_ids.size() * linker_ids.size(), "checked %d field-target x linker combinations" % checked)
+	print("test_combinations: param link combinations checked: %d stacks, %d links (%d field targets x %d linker entries)" % [checked, links, field_ids.size(), linker_ids.size()])
+
+
 ## Every sdf operator (union, subtract, intersect, smooth_union) with every
 ## ordered pair of sdf generators (circle, box, rounded_box, polygon, star,
 ## line, ring) wired into its "a" and "b" slots.
