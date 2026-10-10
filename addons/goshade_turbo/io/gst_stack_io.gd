@@ -9,6 +9,10 @@ extends RefCounted
 ##
 ## GSTManifestEntry is never saved here: manifests are load-only and resolved
 ## from `library` on every load().
+##
+## The .tres carries no schema field (decision 23). A v0.1 file has no
+## label, enabled or param_links lines and loads them at their GSTLayer
+## defaults; ResourceSaver omits those properties while they are at default.
 
 
 ## Saves `stack` to `path`. `{ok, reason}`.
@@ -54,8 +58,8 @@ static func load(path: String, library: GSTLibrary) -> Dictionary:
 
 ## ResourceLoader coerces a typed @export StringName (GSTStack.output_color/
 ## output_alpha, GSTCoordBlock.warp_x/warp_y) to its declared type on load.
-## GSTLayer.slots is an untyped Dictionary, so its values may come back as
-## String; this re-wraps them.
+## GSTLayer.slots and the `target` of each GSTLayer.param_links entry sit in
+## untyped Dictionaries, so they may come back as String; this re-wraps them.
 static func _normalize_stringnames(stack: GSTStack) -> void:
 	stack.output_color = StringName(stack.output_color)
 	stack.output_alpha = StringName(stack.output_alpha)
@@ -64,6 +68,10 @@ static func _normalize_stringnames(stack: GSTStack) -> void:
 			var value: Variant = layer.slots[slot_name]
 			if typeof(value) == TYPE_STRING:
 				layer.slots[slot_name] = StringName(value)
+		for param_name: Variant in layer.param_links.keys():
+			var link: Variant = layer.param_links[param_name]
+			if link is Dictionary and typeof((link as Dictionary).get("target")) == TYPE_STRING:
+				(link as Dictionary)["target"] = StringName((link as Dictionary)["target"])
 		if layer.coord != null:
 			if typeof(layer.coord.warp_x) == TYPE_STRING:
 				layer.coord.warp_x = StringName(layer.coord.warp_x)

@@ -104,6 +104,97 @@ func test_load_refuses_unresolved_entry() -> void:
 	DirAccess.remove_absolute(path)
 
 
+## A stack resource file as v0.1 saved it: fbm wired into invert, no
+## label/enabled/param_links properties, no schema field. Decision 23.
+const V0_1_STACK_TRES: String = """[gd_resource type="Resource" script_class="GSTStack" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_layer.gd" id="1_layer"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_coord_block.gd" id="2_coord"]
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_stack.gd" id="3_stack"]
+
+[sub_resource type="Resource" id="Resource_coord"]
+script = ExtResource("2_coord")
+
+[sub_resource type="Resource" id="Resource_fbm"]
+script = ExtResource("1_layer")
+id = &"0"
+entry = "generative/fbm"
+params = {
+"octaves": 6
+}
+coord = SubResource("Resource_coord")
+
+[sub_resource type="Resource" id="Resource_invert"]
+script = ExtResource("1_layer")
+id = &"1"
+entry = "fieldops/invert"
+slots = {
+"x": &"0"
+}
+
+[resource]
+script = ExtResource("3_stack")
+layers = Array[ExtResource("1_layer")]([SubResource("Resource_fbm"), SubResource("Resource_invert")])
+output_color = &"1"
+next_id = 2
+"""
+
+
+func test_v0_1_stack_file_loads_with_v0_2_fields_at_default() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var path: String = "user://gst_test_stack_io_v0_1.tres"
+	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(V0_1_STACK_TRES)
+	file.close()
+
+	var load_result: Dictionary = GSTStackIO.load(path, lib)
+	assert_true(load_result["ok"], "v0.1 stack resource file loads: %s" % load_result["reason"])
+	if load_result["ok"]:
+		var stack: GSTStack = load_result["stack"]
+		assert_eq(stack.layers.size(), 2, "v0.1 file keeps its layers")
+		assert_eq(stack.layers[0].params.get("octaves"), 6, "v0.1 params survive the load")
+		for layer: GSTLayer in stack.layers:
+			assert_eq(layer.label, "", "layer %s label defaults to empty" % String(layer.id))
+			assert_true(layer.enabled, "layer %s enabled defaults to true" % String(layer.id))
+			assert_true(layer.param_links.is_empty(), "layer %s param_links defaults to empty" % String(layer.id))
+	DirAccess.remove_absolute(path)
+
+
+func test_v0_2_fields_save_only_when_non_default_and_round_trip() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var ctx: Dictionary = _build_stack(lib)
+	var stack: GSTStack = ctx["stack"]
+	var path: String = "user://gst_test_stack_io_v0_2.tres"
+
+	GSTStackIO.save(stack, path)
+	var default_text: String = FileAccess.get_file_as_string(path)
+	for key: String in ["label = ", "enabled = ", "param_links = ", "schema"]:
+		assert_false(default_text.contains(key), "a stack with default v0.2 fields saves no '%s'" % key)
+
+	var hash_layer: GSTLayer = ctx["hash"]
+	var fbm: GSTLayer = ctx["fbm"]
+	var invert: GSTLayer = ctx["invert"]
+	fbm.label = "clouds base"
+	invert.enabled = false
+	fbm.param_links = {"gain": {"target": hash_layer.id, "amount": 0.5}}
+	var save_result: Dictionary = GSTStackIO.save(stack, path)
+	assert_true(save_result["ok"], "save succeeds: %s" % save_result["reason"])
+
+	var load_result: Dictionary = GSTStackIO.load(path, lib)
+	assert_true(load_result["ok"], "load succeeds: %s" % load_result["reason"])
+	if load_result["ok"]:
+		var loaded: GSTStack = load_result["stack"]
+		var loaded_fbm: GSTLayer = GSTStackOps.find_layer(loaded, fbm.id)
+		var loaded_invert: GSTLayer = GSTStackOps.find_layer(loaded, invert.id)
+		assert_eq(loaded_fbm.label, "clouds base", "label survives save/load")
+		assert_false(loaded_invert.enabled, "enabled false survives save/load")
+		var link: Dictionary = loaded_fbm.param_links.get("gain", {})
+		assert_eq(link.get("target"), hash_layer.id, "link target survives save/load")
+		assert_true(typeof(link.get("target")) == TYPE_STRING_NAME, "link target loads as StringName")
+		assert_eq(link.get("amount"), 0.5, "link amount survives save/load")
+	DirAccess.remove_absolute(path)
+
+
 func test_editor_metadata_does_not_enter_saved_resources() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = _build_stack(lib)["stack"] as GSTStack

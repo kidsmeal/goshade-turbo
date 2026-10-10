@@ -123,10 +123,115 @@ func test_parse_refuses_unparsable_json() -> void:
 
 func test_parse_refuses_unknown_schema() -> void:
 	var lib: GSTLibrary = _scanned_library()
-	var line: String = "// stack: {\"schema\":2,\"coord_space\":\"uv\",\"output_color\":\"\",\"output_alpha\":\"\",\"next_id\":0,\"layers\":[]}"
+	var line: String = "// stack: {\"schema\":3,\"coord_space\":\"uv\",\"output_color\":\"\",\"output_alpha\":\"\",\"next_id\":0,\"layers\":[]}"
 	var parsed: Dictionary = GSTHeader.parse(line, lib)
-	assert_false(parsed["ok"], "schema 2 is refused (only schema 1 is known)")
-	assert_true(parsed["reason"].contains("schema"), "refusal names the schema mismatch: %s" % parsed["reason"])
+	assert_false(parsed["ok"], "schema 3 is refused (only schemas 1 and 2 are known)")
+	assert_true(parsed["reason"].contains("unknown stack header schema 3"), "refusal keeps the unknown-schema message: %s" % parsed["reason"])
+
+
+## The header v0.1 wrote for _build_small_stack, captured from v0.1 code
+## (schema 1, no label/enabled/param_links keys). Decision 23.
+const V0_1_SMALL_HEADER: String = "// stack: {\"coord_space\":\"uv\",\"layers\":[{\"coord\":{\"offset\":[0.0,0.0],\"rotation\":0.0,\"scale\":[1.0,1.0],\"scroll\":[0.0,0.0],\"warp_strength\":0.0,\"warp_x\":\"\",\"warp_y\":\"\"},\"entry\":\"generative/fbm\",\"id\":\"0\",\"kind_out\":0,\"params\":{},\"slots\":{}},{\"coord\":null,\"entry\":\"fieldops/invert\",\"id\":\"1\",\"kind_out\":0,\"params\":{},\"slots\":{\"x\":\"0\"}}],\"next_id\":2,\"output_alpha\":\"\",\"output_color\":\"1\",\"schema\":1}"
+
+
+## generative/fbm wired into fieldops/invert, output_color the invert: the
+## stack V0_1_SMALL_HEADER was captured from.
+func _build_small_stack(lib: GSTLibrary) -> GSTStack:
+	var stack: GSTStack = GSTStack.new()
+	var fbm: GSTLayer = GSTStackOps.add_layer(stack, "generative/fbm", GSTLayer.Kind.FIELD, true)
+	var invert: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/invert", GSTLayer.Kind.FIELD, false)
+	GSTStackOps.assign_slot(stack, invert.id, "x", fbm.id, lib)
+	stack.output_color = invert.id
+	return stack
+
+
+func test_schema_1_header_opens_with_v0_2_fields_at_default() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var parsed: Dictionary = GSTHeader.parse(V0_1_SMALL_HEADER, lib)
+	assert_true(parsed["ok"], "a schema 1 header parses: %s" % parsed["reason"])
+	if not parsed["ok"]:
+		return
+	var stack: GSTStack = parsed["stack"]
+	assert_eq(stack.layers.size(), 2, "schema 1 header keeps its layers")
+	for layer: GSTLayer in stack.layers:
+		assert_eq(layer.label, "", "layer %s label defaults to empty" % String(layer.id))
+		assert_true(layer.enabled, "layer %s enabled defaults to true" % String(layer.id))
+		assert_true(layer.param_links.is_empty(), "layer %s param_links defaults to empty" % String(layer.id))
+	print("test_schema_1_header_opens_with_v0_2_fields_at_default: ok=%s, %d layers at label \"\", enabled true, param_links empty" % [parsed["ok"], stack.layers.size()])
+
+
+func test_schema_1_header_ignores_v0_2_keys() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var line: String = V0_1_SMALL_HEADER.replace("\"id\":\"1\",", "\"enabled\":false,\"id\":\"1\",\"label\":\"x\",")
+	var parsed: Dictionary = GSTHeader.parse(line, lib)
+	assert_true(parsed["ok"], "schema 1 header with stray v0.2 keys parses: %s" % parsed["reason"])
+	if not parsed["ok"]:
+		return
+	var invert: GSTLayer = (parsed["stack"] as GSTStack).layers[1]
+	assert_eq(invert.label, "", "schema 1 opens label at its default regardless of keys")
+	assert_true(invert.enabled, "schema 1 opens enabled at its default regardless of keys")
+
+
+func test_header_without_v0_2_fields_differs_from_v0_1_only_in_schema() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var line: String = GSTHeader.header_line(_build_small_stack(lib))
+	assert_true(line.contains("\"schema\":2"), "header writes schema 2: %s" % line)
+	assert_eq(line.replace("\"schema\":2", "\"schema\":1"), V0_1_SMALL_HEADER, "header differs from the v0.1 string only in the schema value")
+
+
+func test_v0_2_fields_serialize_only_when_non_default() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = _build_small_stack(lib)
+	var invert: GSTLayer = stack.layers[1]
+	invert.label = "edge"
+	var line: String = GSTHeader.header_line(stack)
+	var json: JSON = JSON.new()
+	assert_eq(json.parse(GSTHeader.serialize(stack)), OK, "serialized header is valid JSON")
+	var layers: Array = (json.get_data() as Dictionary)["layers"]
+	var fbm_keys: Array = (layers[0] as Dictionary).keys()
+	var invert_keys: Array = (layers[1] as Dictionary).keys()
+	for key: String in ["label", "enabled", "param_links"]:
+		assert_false(fbm_keys.has(key), "default %s is not serialized" % key)
+	assert_true(invert_keys.has("label"), "non-default label is serialized")
+	assert_false(invert_keys.has("enabled"), "default enabled is not serialized beside a set label")
+	assert_false(invert_keys.has("param_links"), "empty param_links is not serialized beside a set label")
+	assert_false(line.contains("\n"), "header with v0.2 fields stays one line")
+
+
+func test_schema_2_round_trips_label_enabled_and_param_links() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var ctx: Dictionary = _build_stack(lib)
+	var stack: GSTStack = ctx["stack"]
+	var hash_layer: GSTLayer = ctx["hash"]
+	var fbm: GSTLayer = ctx["fbm"]
+	var invert: GSTLayer = ctx["invert"]
+	fbm.label = "clouds base"
+	invert.enabled = false
+	fbm.param_links = {"gain": {"target": hash_layer.id, "amount": -0.35}, "octaves": {"target": hash_layer.id, "amount": 1.0}}
+
+	var parsed: Dictionary = GSTHeader.parse(GSTHeader.header_line(stack), lib)
+	assert_true(parsed["ok"], "schema 2 header parses: %s" % parsed["reason"])
+	if not parsed["ok"]:
+		return
+	var reparsed: GSTStack = parsed["stack"]
+	var reparsed_fbm: GSTLayer = GSTStackOps.find_layer(reparsed, fbm.id)
+	var reparsed_invert: GSTLayer = GSTStackOps.find_layer(reparsed, invert.id)
+	var reparsed_hash: GSTLayer = GSTStackOps.find_layer(reparsed, hash_layer.id)
+
+	assert_eq(reparsed_fbm.label, "clouds base", "label round-trips")
+	assert_eq(reparsed_invert.label, "", "unset label stays empty")
+	assert_false(reparsed_invert.enabled, "enabled false round-trips")
+	assert_true(reparsed_fbm.enabled, "unset enabled stays true")
+	assert_eq(reparsed_fbm.param_links.size(), 2, "both param links round-trip")
+	var gain_link: Dictionary = reparsed_fbm.param_links.get("gain", {})
+	assert_eq(gain_link.get("target"), hash_layer.id, "link target round-trips by value")
+	assert_true(typeof(gain_link.get("target")) == TYPE_STRING_NAME, "link target round-trips as StringName")
+	assert_eq(gain_link.get("amount"), -0.35, "link amount round-trips by value")
+	assert_true(typeof(gain_link.get("amount")) == TYPE_FLOAT, "link amount round-trips as float")
+	var octaves_link: Dictionary = reparsed_fbm.param_links.get("octaves", {})
+	assert_true(typeof(octaves_link.get("amount")) == TYPE_FLOAT, "amount 1.0 round-trips as float, not int")
+	assert_true(reparsed_hash.param_links.is_empty(), "unset param_links stays empty")
+	assert_eq(GSTHeader.header_line(reparsed), GSTHeader.header_line(stack), "reparsed stack serializes to the same header")
 
 
 func test_every_param_type_round_trips() -> void:

@@ -65,6 +65,41 @@ func test_check_reports_no_difference_after_a_clean_export() -> void:
 	DirAccess.remove_absolute(path)
 
 
+## The header v0.1 wrote for _build_stack, captured from v0.1 code: schema 1,
+## no label/enabled/param_links keys. Decision 23.
+const V0_1_HEADER: String = "// stack: {\"coord_space\":\"uv\",\"layers\":[{\"coord\":{\"offset\":[0.0,0.0],\"rotation\":0.0,\"scale\":[1.0,1.0],\"scroll\":[0.0,0.0],\"warp_strength\":0.0,\"warp_x\":\"\",\"warp_y\":\"\"},\"entry\":\"generative/fbm\",\"id\":\"0\",\"kind_out\":0,\"params\":{},\"slots\":{}},{\"coord\":null,\"entry\":\"fieldops/invert\",\"id\":\"1\",\"kind_out\":0,\"params\":{},\"slots\":{\"x\":\"0\"}}],\"next_id\":2,\"output_alpha\":\"\",\"output_color\":\"1\",\"schema\":1}"
+
+
+## An unedited v0.1 export: the schema 1 header above the codegen body of the
+## same stack. Reopen and regenerate must report no hand edit (decision 23).
+func test_unedited_v0_1_export_reports_no_hand_edit() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = _build_stack(lib)
+	var path: String = "user://gst_test_overwrite_v0_1.gdshader"
+
+	var exported: GSTCodegenResult = GSTExport.build(stack, lib)
+	assert_true(exported.ok(), "fixture stack exports: %s" % exported.error)
+	var found: Dictionary = GSTOverwriteCheck.find_header_line(exported.code)
+	var v0_1_text: String = exported.code.replace(found["line"], V0_1_HEADER)
+	_write_text(path, v0_1_text)
+
+	var check_result: Dictionary = GSTOverwriteCheck.check(path, lib)
+	assert_true(check_result["has_header"], "check finds the schema 1 header")
+	assert_false(check_result["differs"], "an unedited v0.1 export reports no difference: %s" % check_result["reason"])
+
+	var reopen_result: Dictionary = GSTExport.reopen(path, lib)
+	assert_true(reopen_result["ok"], "a v0.1 export reopens: %s" % reopen_result["reason"])
+	if reopen_result["ok"]:
+		assert_false(reopen_result["body_differs"], "reopen does not flag the v0.1 body as hand-edited")
+		var regenerated: GSTCodegenResult = GSTCodegen.generate_result(reopen_result["stack"], lib)
+		assert_true(regenerated.ok(), "the reopened stack regenerates: %s" % regenerated.error)
+		var regenerated_found: Dictionary = GSTOverwriteCheck.find_header_line(regenerated.code)
+		var v0_1_found: Dictionary = GSTOverwriteCheck.find_header_line(v0_1_text)
+		assert_eq(regenerated_found["body"], v0_1_found["body"], "regenerated body is byte-identical to the v0.1 body")
+
+	DirAccess.remove_absolute(path)
+
+
 func test_check_reports_a_difference_after_mutating_one_character() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = _build_stack(lib)

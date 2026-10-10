@@ -7,16 +7,24 @@ extends RefCounted
 ##
 ## Schema: {schema: int, coord_space: String, output_color: String,
 ## output_alpha: String, next_id: int, layers: [{id, entry, kind_out, slots,
-## params, coord}]}. coord_space is "uv" | "screen_uv" | "local". Vectors
-## serialize as [x, y] / [x, y, z]; colors as [r, g, b, a]. coord is null for
-## an operator layer. JSON.stringify with an empty indent never inserts a
-## newline, so the header is always exactly one line.
+## params, coord, label?, enabled?, param_links?}]}. coord_space is "uv" |
+## "screen_uv" | "local". Vectors serialize as [x, y] / [x, y, z]; colors as
+## [r, g, b, a]. coord is null for an operator layer. label, enabled and
+## param_links are written only when non-default, so a stack using none of
+## them differs from its v0.1 header only in `schema` (decision 23).
+## param_links serializes as {"<param>": {"target": "<layer id>", "amount":
+## <float>}}. JSON.stringify with an empty indent never inserts a newline, so
+## the header is always exactly one line.
 ##
-## parse() refuses a missing "// stack: " prefix, unparsable JSON, or an
-## unknown schema version with a reason; no empty stack is offered.
+## parse() refuses a missing "// stack: " prefix, unparsable JSON, or a schema
+## outside ACCEPTED_SCHEMAS with a reason; no empty stack is offered.
 
 const HEADER_PREFIX: String = "// stack: "
-const SCHEMA_VERSION: int = 1
+## Written by serialize(). 2 added label, enabled and param_links (decision 23).
+const SCHEMA_VERSION: int = 2
+## Every schema parse() opens. Schema 1 opens with label, enabled and
+## param_links at their defaults (decision 23).
+const ACCEPTED_SCHEMAS: Array[int] = [1, 2]
 
 
 ## The full header line: "// stack: " plus the one-line JSON for `stack`.
@@ -55,7 +63,7 @@ static func parse(line: String, library: GSTLibrary) -> Dictionary:
 
 	var data: Dictionary = json.get_data()
 	var schema: int = int(data.get("schema", -1))
-	if schema != SCHEMA_VERSION:
+	if not ACCEPTED_SCHEMAS.has(schema):
 		return {"ok": false, "stack": null, "reason": "unknown stack header schema %d (expected %d)" % [schema, SCHEMA_VERSION]}
 
 	var stack: GSTStack = GSTStack.new()
@@ -63,7 +71,7 @@ static func parse(line: String, library: GSTLibrary) -> Dictionary:
 	stack.output_color = StringName(String(data.get("output_color", "")))
 	stack.output_alpha = StringName(String(data.get("output_alpha", "")))
 	stack.next_id = int(data.get("next_id", 0))
-	stack.layers = _layers_from_json(data.get("layers", []), library)
+	stack.layers = _layers_from_json(data.get("layers", []), library, schema)
 	return {"ok": true, "stack": stack, "reason": ""}
 
 
@@ -94,8 +102,10 @@ static func _layers_to_json(layers: Array[GSTLayer]) -> Array:
 	return out
 
 
+## label, enabled and param_links are omitted at their defaults so a stack
+## using no v0.2 field keeps its v0.1 header keys (decision 23).
 static func _layer_to_json(layer: GSTLayer) -> Dictionary:
-	return {
+	var out: Dictionary = {
 		"id": String(layer.id),
 		"entry": layer.entry,
 		"kind_out": int(layer.kind_out),
@@ -103,6 +113,26 @@ static func _layer_to_json(layer: GSTLayer) -> Dictionary:
 		"params": _params_to_json(layer.params),
 		"coord": _coord_to_json(layer.coord) if layer.coord != null else null,
 	}
+	if not layer.label.is_empty():
+		out["label"] = layer.label
+	if not layer.enabled:
+		out["enabled"] = false
+	if not layer.param_links.is_empty():
+		out["param_links"] = _param_links_to_json(layer.param_links)
+	return out
+
+
+## {"<param>": {"target": "<layer id>", "amount": <float>}}; amount goes
+## through _param_value_to_json like every other param value (decision 29).
+static func _param_links_to_json(links: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for param_name: Variant in links.keys():
+		var link: Dictionary = links[param_name]
+		out[String(param_name)] = {
+			"target": String(link.get("target", &"")),
+			"amount": _param_value_to_json(float(link.get("amount", 1.0))),
+		}
+	return out
 
 
 static func _slots_to_json(slots: Dictionary) -> Dictionary:
@@ -154,17 +184,19 @@ static func _vec2_to_json(v: Vector2) -> Array:
 	return [v.x, v.y]
 
 
-static func _layers_from_json(layers_data: Variant, library: GSTLibrary) -> Array[GSTLayer]:
+static func _layers_from_json(layers_data: Variant, library: GSTLibrary, schema: int) -> Array[GSTLayer]:
 	var layers: Array[GSTLayer] = []
 	if not (layers_data is Array):
 		return layers
 	for layer_data: Variant in (layers_data as Array):
 		if layer_data is Dictionary:
-			layers.append(_layer_from_json(layer_data as Dictionary, library))
+			layers.append(_layer_from_json(layer_data as Dictionary, library, schema))
 	return layers
 
 
-static func _layer_from_json(data: Dictionary, library: GSTLibrary) -> GSTLayer:
+## Schema 1 predates label, enabled and param_links: those stay at their
+## GSTLayer defaults even if the keys are present (decision 23).
+static func _layer_from_json(data: Dictionary, library: GSTLibrary, schema: int) -> GSTLayer:
 	var layer: GSTLayer = GSTLayer.new()
 	layer.id = StringName(String(data.get("id", "")))
 	layer.entry = String(data.get("entry", ""))
@@ -174,7 +206,28 @@ static func _layer_from_json(data: Dictionary, library: GSTLibrary) -> GSTLayer:
 	layer.params = _params_from_json(data.get("params", {}), layer.manifest)
 	var coord_data: Variant = data.get("coord", null)
 	layer.coord = _coord_from_json(coord_data as Dictionary) if coord_data is Dictionary else null
+	if schema >= 2:
+		layer.label = String(data.get("label", ""))
+		layer.enabled = bool(data.get("enabled", true))
+		layer.param_links = _param_links_from_json(data.get("param_links", {}))
 	return layer
+
+
+## JSON decodes amount as float already; float() also covers a hand-written
+## integer literal. target is re-wrapped as StringName to match slots.
+static func _param_links_from_json(data: Variant) -> Dictionary:
+	var out: Dictionary = {}
+	if not (data is Dictionary):
+		return out
+	for param_name: Variant in (data as Dictionary).keys():
+		var link: Variant = (data as Dictionary)[param_name]
+		if not (link is Dictionary):
+			continue
+		out[String(param_name)] = {
+			"target": StringName(String((link as Dictionary).get("target", ""))),
+			"amount": float((link as Dictionary).get("amount", 1.0)),
+		}
+	return out
 
 
 static func _slots_from_json(data: Variant) -> Dictionary:

@@ -21,6 +21,16 @@ enum Kind {
 @export var params: Dictionary = {}
 ## Generators only. Null for operators.
 @export var coord: GSTCoordBlock = null
+## User name for the row; empty shows the function name only (decision 25).
+## The default is never written to the stack .tres, so a v0.1 file loads it
+## unchanged and the file stays schema-free (decision 23).
+@export var label: String = ""
+## False bypasses the layer (decision 26). Default true, same .tres rule as
+## `label`.
+@export var enabled: bool = true
+## param_name (String) -> {"target": layer id (StringName), "amount": float}
+## (decision 29). Empty means no param is linked; same .tres rule as `label`.
+@export var param_links: Dictionary = {}
 
 ## The manifest `entry` resolves to, set by the panel on add and on load.
 ## Backs the dynamic inspector properties below. Never serialized: `entry` is
@@ -34,6 +44,9 @@ const EDITOR_HIDDEN_PROPERTIES: Array[StringName] = [
 	&"slots",
 	&"params",
 	&"coord",
+	&"label",
+	&"enabled",
+	&"param_links",
 	&"resource_local_to_scene",
 	&"resource_name",
 	&"resource_path",
