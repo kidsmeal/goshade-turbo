@@ -100,6 +100,167 @@ func test_unedited_v0_1_export_reports_no_hand_edit() -> void:
 	DirAccess.remove_absolute(path)
 
 
+## A schema 1 stack touching every body path codegen emits: a generator with
+## scroll, warp and tuned params, a field op, a color-to-field luma slot, a
+## field-to-color op, a texture source, a filter and a three-input color op.
+## No layer carries a label, a bypass or a param link.
+func _build_parity_stack(lib: GSTLibrary) -> GSTStack:
+	var stack: GSTStack = GSTStack.new()
+	var fbm: GSTLayer = GSTStackOps.add_layer(stack, "generative/fbm", GSTLayer.Kind.FIELD, true)
+	fbm.params["octaves"] = 6
+	fbm.params["gain"] = 0.65
+	fbm.coord.scroll = Vector2(0.1, 0.0)
+	var hash_layer: GSTLayer = GSTStackOps.add_layer(stack, "generative/hash", GSTLayer.Kind.FIELD, true)
+	hash_layer.coord.warp_x = fbm.id
+	hash_layer.coord.warp_strength = 0.25
+	var smooth: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/smoothstep", GSTLayer.Kind.FIELD, false)
+	GSTStackOps.assign_slot(stack, smooth.id, "x", fbm.id, lib)
+	var ramp: GSTLayer = GSTStackOps.add_layer(stack, "color/gradient_map", GSTLayer.Kind.COLOR, false)
+	GSTStackOps.assign_slot(stack, ramp.id, "t", smooth.id, lib)
+	var tex: GSTLayer = GSTStackOps.add_layer(stack, "source/texture", GSTLayer.Kind.COLOR, false)
+	var pixel: GSTLayer = GSTStackOps.add_layer(stack, "filter/pixelate", GSTLayer.Kind.COLOR, false)
+	GSTStackOps.assign_slot(stack, pixel.id, "source", tex.id, lib)
+	var inv: GSTLayer = GSTStackOps.add_layer(stack, "fieldops/invert", GSTLayer.Kind.FIELD, false)
+	GSTStackOps.assign_slot(stack, inv.id, "x", pixel.id, lib)
+	var mix_layer: GSTLayer = GSTStackOps.add_layer(stack, "color/mix", GSTLayer.Kind.COLOR, false)
+	GSTStackOps.assign_slot(stack, mix_layer.id, "a", ramp.id, lib)
+	GSTStackOps.assign_slot(stack, mix_layer.id, "b", pixel.id, lib)
+	GSTStackOps.assign_slot(stack, mix_layer.id, "mask", inv.id, lib)
+	stack.output_color = mix_layer.id
+	return stack
+
+
+## The body (everything below the "// stack:" line) main generated for
+## _build_parity_stack before v0.2 codegen landed (decision 23).
+const PARITY_BODY_FROM_MAIN: String = """shader_type canvas_item;
+
+group_uniforms L00_fbm;
+uniform vec2 l0_scale = vec2(1.0, 1.0);
+uniform vec2 l0_offset = vec2(0.0, 0.0);
+uniform float l0_rotation = 0.0;
+uniform vec2 l0_scroll = vec2(0.10000000149012, 0.0);
+uniform int l0_fbm_octaves : hint_range(1, 8) = 6;
+uniform float l0_fbm_gain : hint_range(0.2, 0.8) = 0.65;
+group_uniforms L01_hash;
+uniform vec2 l1_scale = vec2(1.0, 1.0);
+uniform vec2 l1_offset = vec2(0.0, 0.0);
+uniform float l1_rotation = 0.0;
+uniform float l1_warp_strength = 0.25;
+group_uniforms L02_gst_smoothstep;
+uniform float l2_gst_smoothstep_edge0 : hint_range(-1.0, 2.0) = 0.0;
+uniform float l2_gst_smoothstep_edge1 : hint_range(-1.0, 2.0) = 1.0;
+group_uniforms L03_gradient_map;
+uniform vec4 l3_gradient_map_color_a : source_color = vec4(0.0, 0.0, 0.0, 1.0);
+uniform vec4 l3_gradient_map_color_b : source_color = vec4(1.0, 1.0, 1.0, 1.0);
+group_uniforms L05_pixelate;
+uniform float l5_pixelate_cell_size : hint_range(0.001, 0.2) = 0.02;
+
+vec2 gst_transform(vec2 p, vec2 scale, float rotation, vec2 offset) {
+	vec2 scaled = p * scale;
+	float s = sin(rotation);
+	float c = cos(rotation);
+	vec2 rotated = vec2(scaled.x * c - scaled.y * s, scaled.x * s + scaled.y * c);
+	return rotated + offset;
+}
+
+
+float luma(vec4 c) {
+	return dot(c.rgb, vec3(0.299, 0.587, 0.114));
+}
+
+
+float hash(vec2 p) {
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
+vec2 gst_grad2(ivec2 i) {
+	float a = hash(vec2(i)) * 6.28318530718;
+	return vec2(cos(a), sin(a));
+}
+
+float snoise(vec2 p) {
+	const float k1 = 0.36602540378; // (sqrt(3.0) - 1.0) / 2.0
+	const float k2 = 0.21132486541; // (3.0 - sqrt(3.0)) / 6.0
+	vec2 i = floor(p + (p.x + p.y) * k1);
+	vec2 a = p - i + (i.x + i.y) * k2;
+	vec2 o = a.x > a.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+	vec2 b = a - o + k2;
+	vec2 c = a - 1.0 + 2.0 * k2;
+	vec3 h = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
+	// Integer corner addresses keep shared gradients consistent across renderers.
+	vec3 n = h * h * h * h * vec3(dot(a, gst_grad2(ivec2(i))), dot(b, gst_grad2(ivec2(i) + ivec2(o))), dot(c, gst_grad2(ivec2(i) + ivec2(1))));
+	return dot(n, vec3(70.0)) * 0.5 + 0.5;
+}
+
+float fbm(vec2 p, int octaves, float gain) {
+	float sum = 0.0;
+	float amp = 0.5;
+	float freq = 1.0;
+	for (int i = 0; i < octaves; i++) {
+		sum += amp * (snoise(p * freq) * 2.0 - 1.0);
+		freq *= 2.0;
+		amp *= gain;
+	}
+	return sum + 0.5;
+}
+
+float gst_smoothstep(float x, float edge0, float edge1) {
+	// Equal or reversed edges: clamp edge1 above edge0 so GLSL smoothstep
+	// (undefined for edge0 >= edge1) instead resolves to a step at edge0.
+	float e1 = max(edge1, edge0 + 0.00001);
+	return smoothstep(edge0, e1, x);
+}
+
+vec4 gradient_map(float t, vec4 color_a, vec4 color_b) {
+	return mix(color_a, color_b, clamp(t, 0.0, 1.0));
+}
+
+float invert(float x) {
+	return 1.0 - x;
+}
+
+vec4 color_mix(vec4 a, vec4 b, float mask) {
+	return mix(a, b, mask);
+}
+
+void fragment() {
+	vec2 space_coord = UV;
+	vec2 coord0 = gst_transform(space_coord, l0_scale, l0_rotation, l0_offset);
+	coord0 += l0_scroll * TIME;
+	float l0 = fbm(coord0, l0_fbm_octaves, l0_fbm_gain);
+	vec2 coord1 = gst_transform(space_coord, l1_scale, l1_rotation, l1_offset);
+	coord1 += vec2(l0, 0.0) * l1_warp_strength;
+	float l1 = hash(coord1);
+	float l2 = gst_smoothstep(l0, l2_gst_smoothstep_edge0, l2_gst_smoothstep_edge1);
+	vec4 l3 = gradient_map(l2, l3_gradient_map_color_a, l3_gradient_map_color_b);
+	vec4 l4 = texture(TEXTURE, space_coord);
+	vec4 l5;
+	{
+		vec2 cell = max(vec2(l5_pixelate_cell_size), vec2(0.0001));
+		vec2 snapped = floor(UV / cell) * cell + cell * 0.5;
+		l5 = texture(TEXTURE, snapped);
+	}
+	float l6 = invert(luma(l5));
+	vec4 l7 = color_mix(l3, l5, l6);
+	COLOR = vec4(l7.rgb, texture(TEXTURE, UV).a);
+}
+"""
+
+
+## A stack with no v0.2 field regenerates the body main produced, byte for
+## byte, so GSTOverwriteCheck does not flag an unedited v0.1 export
+## (decision 23).
+func test_schema_1_stack_body_is_byte_identical_to_main() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var generated: GSTCodegenResult = GSTCodegen.generate_result(_build_parity_stack(lib), lib)
+	assert_true(generated.ok(), "parity stack generates: %s" % generated.error)
+	var body: String = GSTOverwriteCheck.find_header_line(generated.code)["body"]
+	assert_eq(body, PARITY_BODY_FROM_MAIN, "schema 1 body matches the fixture captured from main")
+	assert_true(GSTShaderCompile.compiles(generated.code), "parity stack compiles")
+
+
 func test_check_reports_a_difference_after_mutating_one_character() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var stack: GSTStack = _build_stack(lib)
