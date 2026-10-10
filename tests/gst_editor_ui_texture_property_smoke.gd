@@ -58,20 +58,19 @@ func run(plugin: EditorPlugin) -> void:
 	var texture: Texture2D = load(texture_path) as Texture2D
 	_check("texture_load", texture != null, "preview_default.png loads")
 
-	var property_changed_fired: bool = false
-	var property_changed_name: StringName = &""
-	var property_changed_value: Variant = null
-	var signal_connection = editor_property.property_changed.connect(func(prop: StringName, value: Variant) -> void:
-		property_changed_fired = true
-		property_changed_name = prop
-		property_changed_value = value
+	var seen: Dictionary = {"fired": false, "name": &"", "value": null}
+	var on_changed: Callable = func(prop: StringName, value: Variant, _field: StringName, _changing: bool) -> void:
+		seen.fired = true
+		seen.name = prop
+		seen.value = value
 		resource.set(prop, value)
-	)
+
+	editor_property.property_changed.connect(on_changed)
 
 	editor_property.emit_changed(&"image", texture)
 	await plugin.get_tree().process_frame
-	var emit_ok: bool = property_changed_fired and property_changed_name == &"image" and property_changed_value == texture
-	_check("property_changed_emitted", emit_ok, "emit_changed fired property_changed signal with image and texture")
+	var emit_ok: bool = seen.fired and seen.name == &"image" and seen.value == texture and resource.image == texture
+	_check("property_changed_emitted", emit_ok, "emit_changed fired property_changed signal with image and texture resource.image=%s" % resource.image)
 
 	editor_property.update_property()
 	await plugin.get_tree().process_frame
@@ -82,11 +81,11 @@ func run(plugin: EditorPlugin) -> void:
 	var updated_ok: bool = updated_picker != null and updated_picker.edited_resource == texture
 	_check("update_after_set", updated_ok, "update_property shows the set texture picker.edited_resource=%s (expect %s)" % [updated_picker.edited_resource if updated_picker != null else null, texture])
 
-	property_changed_fired = false
+	seen.fired = false
 	editor_property.emit_changed(&"image", null)
 	await plugin.get_tree().process_frame
-	var cleared_ok: bool = property_changed_fired and property_changed_name == &"image" and property_changed_value == null
-	_check("property_changed_cleared", cleared_ok, "emit_changed(null) fired property_changed with null")
+	var cleared_ok: bool = seen.fired and seen.name == &"image" and seen.value == null and resource.image == null
+	_check("property_changed_cleared", cleared_ok, "emit_changed(null) fired property_changed with null resource.image=%s" % resource.image)
 
 	editor_property.update_property()
 	await plugin.get_tree().process_frame
@@ -107,7 +106,7 @@ func run(plugin: EditorPlugin) -> void:
 	var outside_ok: bool = editor_property.get_parent() == panel and editor_property.get_edited_object() != null and no_inspector_ancestor
 	_check("outside_inspector", outside_ok, "editor exists outside EditorInspector parent=%s has_inspector_ancestor=%s" % [editor_property.get_parent() == panel, not no_inspector_ancestor])
 
-	editor_property.disconnect(signal_connection)
+	editor_property.property_changed.disconnect(on_changed)
 	editor_property.queue_free()
 	_finish(plugin)
 

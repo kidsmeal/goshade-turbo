@@ -4867,7 +4867,7 @@ unverified: Godot not run (harness blocks executable)
 Test instantiates an `EditorProperty` for a Texture2D via `EditorInspector.instantiate_property_editor()`, adds it to the GoShade Turbo panel (outside any inspector), and verifies:
 - `set_object_and_property` sets the edited object
 - `update_property` displays the initial null value in the embedded picker
-- `property_changed` signal fires when `emit_changed` is called
+- `property_changed` signal (4 args) fires when `emit_changed` is called
 - signal handler applies the emitted value to the resource
 - `update_property` displays the set texture in the picker
 - clearing via `emit_changed(null)` fires the signal with null
@@ -4875,20 +4875,23 @@ Test instantiates an `EditorProperty` for a Texture2D via `EditorInspector.insta
 - no `EditorInspector` ancestor exists in the parent chain
 - drag-drop cannot be driven headlessly (not checked)
 
-Test resource is an inner class `_ImageHolder extends Resource` with `@export var image: Texture2D`.
+Test resource is an inner class `_ImageHolder extends Resource` with `@export var image: Texture2D`. Signal handler uses a captured dict to work around GDScript's value-capture semantics.
+
+Standalone host requirement: connect `property_changed` signal and call `resource.set(prop, value)` to apply the value.
 
 ### Test checks (per run output)
 
 Checks when run (unverified):
-- `panel`: GoShade Turbo panel instantiated and visible
-- `instantiate`: EditorProperty instantiates via instantiate_property_editor
-- `set_object`: set_object_and_property sets the edited object
-- `update_initial`: picker.edited_resource is null initially
-- `texture_load`: preview_default.png loads as Texture2D
-- `property_changed_emitted`: emit_changed fires property_changed signal with texture
-- `update_after_set`: picker.edited_resource is the set texture
-- `property_changed_cleared`: emit_changed(null) fires signal with null
-- `update_after_clear`: picker.edited_resource is null after clear
-- `outside_inspector`: editor exists outside EditorInspector with no inspector ancestor
+- `panel`: verdict unverified, GoShade Turbo panel instantiated and visible
+- `instantiate`: verdict unverified, EditorProperty instantiates via instantiate_property_editor
+- `set_object`: verdict unverified, set_object_and_property sets the edited object
+- `update_initial`: verdict unverified, picker.edited_resource is null initially
+- `texture_load`: verdict unverified, preview_default.png loads as Texture2D
+- `property_changed_emitted`: verdict unverified, emit_changed fires signal and applies value to resource
+- `update_after_set`: verdict unverified, picker.edited_resource is the set texture
+- `property_changed_cleared`: verdict unverified, emit_changed(null) fires signal and clears resource value
+- `update_after_clear`: verdict unverified, picker.edited_resource is null after clear
+- `outside_inspector`: verdict unverified, editor exists outside EditorInspector with no inspector ancestor
+- `drag_drop`: verdict unverified (not drivable headlessly)
 
-Godot versions tested: 4.4 required, 4.6 and 4.7 when available (not run).
+Godot versions run: none (harness blocked Godot execution).
