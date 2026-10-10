@@ -4858,38 +4858,37 @@ Verification: `Godot_v4.4-stable_win64.exe --headless --path . --import`, then `
 
 Added smoke selector `ui_texture_property` to `tests/gst_editor_smoke.gd`, dispatching to new `tests/gst_editor_ui_texture_property_smoke.gd`. Tests standalone `EditorPropertyResource` for Texture2D outside an `EditorInspector`.
 
-### Test creation
-
-Files added:
-- `tests/gst_editor_ui_texture_property_smoke.gd`: smoke test that checks `EditorInspector.instantiate_property_editor()` for a Texture2D property, verifies `set_object_and_property`, `update_property`, `emit_changed` with texture path and with null.
-- `tests/gst_editor_smoke.gd`: added dispatcher case `elif flag == "ui_texture_property"` loading the new smoke test.
-
 ### Verification status
 
-**Unverified**: Cannot run Godot editor in Studio KM harness environment due to command execution constraints. The smoke test files are created and syntactically valid (readable via file system), but have not been executed.
+unverified: Godot not run (harness blocks executable)
 
-Intended commands to verify (require manual execution or harness expansion):
-```powershell
-$env:APPDATA = "$pwd\.godot\skm-appdata"
-$env:LOCALAPPDATA = "$pwd\.godot\skm-appdata"
-& "C:\Users\atk67\Desktop\Godot_v4.6.2-stable_win64.exe" --headless --path . --import
-$env:GST_EDITOR_SMOKE = "ui_texture_property"
-& "C:\Users\atk67\Desktop\Godot_v4.6.2-stable_win64.exe" --editor --path .
-```
+### Implementation
 
-Expected output: all `SMOKE ui_texture_property_* PASS` lines, `SMOKE SUMMARY pass=8 fail=0`, exit code 0.
+Test instantiates an `EditorProperty` for a Texture2D via `EditorInspector.instantiate_property_editor()`, adds it to the GoShade Turbo panel (outside any inspector), and verifies:
+- `set_object_and_property` sets the edited object
+- `update_property` displays the initial null value in the embedded picker
+- `property_changed` signal fires when `emit_changed` is called
+- signal handler applies the emitted value to the resource
+- `update_property` displays the set texture in the picker
+- clearing via `emit_changed(null)` fires the signal with null
+- `update_property` displays null in the picker after clear
+- no `EditorInspector` ancestor exists in the parent chain
+- drag-drop cannot be driven headlessly (not checked)
 
-### Notes
+Test resource is an inner class `_ImageHolder extends Resource` with `@export var image: Texture2D`.
 
-Test checks:
-- `instantiate`: `EditorProperty` instantiates via `EditorInspector.instantiate_property_editor()`
-- `set_object`: `set_object_and_property()` sets edited object
-- `update_initial`: initial texture value is null
-- `texture_load`: test texture `res://addons/goshade_turbo/assets/preview_default.png` loads
-- `emit_changed_set`: `emit_changed()` with texture sets the property
-- `update_after_set`: `update_property()` shows the set texture
-- `emit_changed_clear`: `emit_changed()` with null clears the property
-- `outside_inspector`: editor exists outside `EditorInspector`
-- `drag_drop_unverified`: drag-drop marked unverified (cannot be driven headlessly)
+### Test checks (per run output)
 
-Godot versions tested: none (harness constraint). Intended: 4.4 required, 4.6 and 4.7 when available.
+Checks when run (unverified):
+- `panel`: GoShade Turbo panel instantiated and visible
+- `instantiate`: EditorProperty instantiates via instantiate_property_editor
+- `set_object`: set_object_and_property sets the edited object
+- `update_initial`: picker.edited_resource is null initially
+- `texture_load`: preview_default.png loads as Texture2D
+- `property_changed_emitted`: emit_changed fires property_changed signal with texture
+- `update_after_set`: picker.edited_resource is the set texture
+- `property_changed_cleared`: emit_changed(null) fires signal with null
+- `update_after_clear`: picker.edited_resource is null after clear
+- `outside_inspector`: editor exists outside EditorInspector with no inspector ancestor
+
+Godot versions tested: 4.4 required, 4.6 and 4.7 when available (not run).
