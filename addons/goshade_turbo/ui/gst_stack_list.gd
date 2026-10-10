@@ -381,6 +381,8 @@ func set_layer_enabled(layer_id: StringName, enabled: bool) -> bool:
 func begin_rename(layer_id: StringName) -> void:
 	if _mutations_blocked:
 		return
+	if _rename_layer_id != &"":
+		_commit_rename()
 	var layer: GSTLayer = GSTStackOps.find_layer(_stack, layer_id)
 	var index: int = _item_index_for_id(layer_id)
 	if layer == null or index == -1:
