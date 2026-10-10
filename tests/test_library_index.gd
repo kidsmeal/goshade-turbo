@@ -22,7 +22,7 @@ const EXPECTED_LIBRARY_IDS: Array[String] = [
 	"generative/voronoi",
 	"sdf/box", "sdf/circle", "sdf/intersect", "sdf/line", "sdf/polygon", "sdf/ring",
 	"sdf/rounded_box", "sdf/smooth_union", "sdf/star", "sdf/subtract", "sdf/union",
-	"source/screen", "source/texture",
+	"source/image", "source/screen", "source/texture",
 ]
 
 
@@ -36,7 +36,7 @@ func test_scan_indexes_the_full_library_roster() -> void:
 	actual_sorted.sort()
 	var expected_sorted: Array[String] = EXPECTED_LIBRARY_IDS.duplicate()
 	expected_sorted.sort()
-	assert_eq(actual_sorted, expected_sorted, "library roster matches the expected 58-entry id set (%s)" % _roster_diff_message(actual_ids, EXPECTED_LIBRARY_IDS))
+	assert_eq(actual_sorted, expected_sorted, "library roster matches the expected 59-entry id set (%s)" % _roster_diff_message(actual_ids, EXPECTED_LIBRARY_IDS))
 	assert_not_null(lib.get_entry("generative/hash"), "hash manifest is indexed")
 	assert_not_null(lib.get_entry("generative/snoise"), "snoise manifest is indexed")
 	assert_not_null(lib.get_entry("generative/fbm"), "fbm manifest is indexed")
@@ -84,18 +84,42 @@ func test_every_manifest_kind_field_is_a_valid_gst_layer_kind() -> void:
 			assert_true(valid_kinds.has(input["kind"]), "%s input %s kind is a valid GSTLayer.Kind value" % [id, input["name"]])
 
 
-## GSTLayer._property_type_for maps exactly these five type strings; any
+## GSTLayer._property_type_for maps exactly these six type strings; any
 ## other value falls back to TYPE_FLOAT with a push_warning. Every shipped
 ## manifest param type must be in the known set.
 func test_every_manifest_param_type_is_known() -> void:
 	var lib: GSTLibrary = GSTLibrary.new()
 	lib.scan()
-	var known_types: Array[String] = ["int", "float", "color", "vec2", "vec3"]
+	var known_types: Array[String] = ["int", "float", "color", "vec2", "vec3", "texture"]
 	for id: String in lib.entries.keys():
 		var manifest_entry: GSTManifestEntry = lib.get_entry(id)
 		for param: Dictionary in manifest_entry.params:
 			var param_type: String = String(param.get("type", ""))
 			assert_true(known_types.has(param_type), "%s param %s has known type '%s'" % [id, param["name"], param_type])
+
+
+## Decision 28: source/image is a color source with a coord block and one
+## texture param `image`, function name `image`.
+func test_source_image_is_indexed_with_one_texture_param() -> void:
+	var lib: GSTLibrary = GSTLibrary.new()
+	lib.scan()
+	var entry: GSTManifestEntry = lib.get_entry("source/image")
+	assert_not_null(entry, "source/image manifest is indexed")
+	if entry == null:
+		return
+	assert_eq(entry.function, "image", "source/image declares function image")
+	assert_eq(entry.kind_out, GSTLayer.Kind.COLOR, "source/image outputs a color")
+	assert_true(entry.coord, "source/image carries a coord block")
+	assert_true(entry.is_source(), "source/image is a source entry")
+	assert_true(entry.inputs.is_empty(), "source/image has no inputs")
+	assert_eq(entry.code, "", "source/image carries no template")
+	assert_eq(entry.params.size(), 1, "source/image declares one param")
+	if entry.params.size() == 1:
+		var param: Dictionary = entry.params[0]
+		assert_eq(String(param.get("name", "")), "image", "the param is named image")
+		assert_eq(String(param.get("type", "")), "texture", "the param is a texture")
+		for key: String in ["min", "max", "default"]:
+			assert_false(param.has(key), "the texture param carries no %s" % key)
 
 
 func test_every_manifest_input_and_param_has_editor_metadata() -> void:

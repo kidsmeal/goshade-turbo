@@ -23,13 +23,15 @@ extends Resource
 ## Slider schema: [{name, type, min, max, default, label, description}].
 ## label and description are required editor metadata; serialization and
 ## uniform names use name. Optional editor: "color_rgb" presents a vec3 as a
-## native RGB color picker.
+## native RGB color picker. A `type: "texture"` param (decision 27) carries
+## no min, max or default: its value is a Texture2D or null, and an absent
+## value reads as null (param_default()).
 @export var params: Array[Dictionary] = []
 ## True for generators: the layer carries a coord block.
 @export var coord: bool = false
 ## True for filters. GSTStackOps.assign_slot refuses any input for this slot
-## that is not a "source/texture" or "source/screen" layer; filter-of-filter
-## is refused.
+## that is not a GSTStackOps.SOURCE_ENTRIES layer; filter-of-filter is
+## refused.
 ##
 ## Filter calling convention: filters cannot be GLSL functions. `TEXTURE`
 ## inside a user function fails with `Unknown identifier`, and `TEXTURE`
@@ -65,7 +67,21 @@ extends Resource
 @export var code: String = ""
 
 
-## True for a source entry ("source/texture", "source/screen"), identified by
-## the "source/" id prefix. Source entries carry no function body.
+## True for a source entry ("source/texture", "source/screen",
+## "source/image"), identified by the "source/" id prefix. Source entries
+## carry no function body.
 func is_source() -> bool:
 	return id.begins_with("source/")
+
+
+## True for a `type: "texture"` param schema (decision 27).
+static func is_texture_param(param: Dictionary) -> bool:
+	return String(param.get("type", "")) == "texture"
+
+
+## The value an absent param reads as: the manifest `default`, or null for a
+## texture param, which has no default key (decision 27).
+static func param_default(param: Dictionary) -> Variant:
+	if is_texture_param(param):
+		return null
+	return param["default"]

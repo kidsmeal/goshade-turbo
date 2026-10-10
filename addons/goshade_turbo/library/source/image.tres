@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="GSTManifestEntry" format=3]
+
+[ext_resource type="Script" path="res://addons/goshade_turbo/model/gst_manifest_entry.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "source/image"
+function = "image"
+description = "reads a chosen image file at the layer's own coordinates"
+source_math = "Godot 4 shading language built-in: texture() on a uniform sampler2D (Godot shading language reference, uniforms and built-in functions)."
+source_code_url = ""
+source_code_license = ""
+kind_out = 1
+inputs = Array[Dictionary]([])
+params = Array[Dictionary]([{
+"name": "image",
+"type": "texture",
+"label": "Image",
+"description": "The image file this layer shows."
+}])
+coord = true
+samples_source = false
+depends = Array[String]([])
+code = ""

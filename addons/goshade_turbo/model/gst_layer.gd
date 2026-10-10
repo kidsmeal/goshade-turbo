@@ -66,7 +66,10 @@ func _validate_property(property: Dictionary) -> void:
 
 ## One dynamic property per manifest param. float and int params get
 ## PROPERTY_HINT_RANGE from the manifest's min/max. A vec3 with
-## editor = color_rgb uses a native RGB picker with Vector3 storage.
+## editor = color_rgb uses a native RGB picker with Vector3 storage. A
+## texture param is a TYPE_OBJECT with PROPERTY_HINT_RESOURCE_TYPE
+## "Texture2D", so the inspector builds the native Texture2D editor
+## (decision 27).
 ## PROPERTY_USAGE_EDITOR only: `params` is the stored source of truth, so
 ## ResourceSaver never writes these to the .tres.
 func _get_property_list() -> Array[Dictionary]:
@@ -83,6 +86,9 @@ func _get_property_list() -> Array[Dictionary]:
 		if _uses_rgb_editor(param):
 			prop["type"] = TYPE_COLOR
 			prop["hint"] = PROPERTY_HINT_COLOR_NO_ALPHA
+		elif GSTManifestEntry.is_texture_param(param):
+			prop["hint"] = PROPERTY_HINT_RESOURCE_TYPE
+			prop["hint_string"] = "Texture2D"
 		elif param_type == "float" or param_type == "int":
 			prop["hint"] = PROPERTY_HINT_RANGE
 			prop["hint_string"] = range_hint_string(param_type, float(param["min"]), float(param["max"]))
@@ -109,11 +115,13 @@ static func float_step(minimum: float, maximum: float) -> float:
 	return pow(10.0, floor(log(span / 100.0) / log(10.0) + 0.000000001))
 
 
+## An absent texture param reads as null: texture params carry no manifest
+## default (decision 27).
 func _get(property: StringName) -> Variant:
 	var param: Variant = _find_param(property)
 	if param == null:
 		return null
-	var value: Variant = params.get(String(property), (param as Dictionary)["default"])
+	var value: Variant = params.get(String(property), GSTManifestEntry.param_default(param))
 	if _uses_rgb_editor(param):
 		var rgb: Vector3 = value
 		return Color(rgb.x, rgb.y, rgb.z, 1.0)
@@ -176,6 +184,8 @@ func _property_type_for(param_type: String, param_name: String) -> int:
 			return TYPE_VECTOR2
 		"vec3":
 			return TYPE_VECTOR3
+		"texture":
+			return TYPE_OBJECT
 		_:
 			push_warning("GSTLayer entry %s param %s has unknown type '%s'; falling back to TYPE_FLOAT" % [entry, param_name, param_type])
 			return TYPE_FLOAT
