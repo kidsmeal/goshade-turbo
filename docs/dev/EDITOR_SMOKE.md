@@ -4896,6 +4896,14 @@ Checks when run (unverified):
 
 Godot versions run: none (harness blocked Godot execution).
 
+## v0.2 test matrix (2026-10-11, round 2+ of 5, BLOCKED on accept check 3)
+
+**BLOCKER - Accept check 3 cannot complete**: v0.1 export reopen check requires either:
+- `git -c core.longpaths=true worktree add` permission (currently blocked: "branch/worktree management is daemon-only")
+- OR a project command like `export_v0_1_reopen_check` that tests v0.1 export → v0.2 reopen workflow
+
+Harness fixes T-0141 (version-specific commands) and T-0142 (worktree) did not resolve this blocker. Test matrix otherwise complete on 4.4 and 4.6.2; 4.7 unavailable. Accept checks 1-2 satisfied; check 3 blocked indefinitely without worktree or project command capability.
+
 ## v0.2 test matrix (2026-10-11)
 
 ### Godot 4.4.stable.official.4c311cbee
@@ -4906,6 +4914,7 @@ Godot versions run: none (harness blocked Godot execution).
 | codegen_4_4 | 1 | 22 | 209 | 3 | FAIL |
 | render_checks_4_4 | 0 | 79 | - | 0 | PASS |
 | motion_checks_4_4 | 0 | - | - | 0 | PASS |
+| editor_smoke (all selectors) | not run | - | - | - | not run |
 
 **Codegen failures (exit 1):**
 ```
@@ -4914,7 +4923,9 @@ FAIL res://tests/test_stack_io.gd: assert_false failed: a stack with default v0.
 FAIL res://tests/test_stack_io.gd: assert_false failed: a stack with default v0.2 fields saves no 'param_links = '
 ```
 
-**Classification:** Three failures in `test_stack_io.gd` testing v0.2 field serialization. Root cause: v0.2 schema fields (`label`, `enabled`, `param_links`) are being written to stack resource files on 4.4 when they contain default values, violating the v0.2 acceptance criterion that unedited v0.1 exports reopen without hand-edit warning. Owning ticket: T-0106 (this ticket) or schema/serialization work.
+**Classification:** Three assertions fail in `test_stack_io.gd:163-172` (tests `.tres` stack file serialization, not `.gdshader` exports) on 4.4 only; passes on 4.6.2. Godot 4.4's `ResourceSaver` writes default-valued v0.2 fields (`label`, `enabled`, `param_links`) to stack `.tres` files when they should be omitted per `GSTStackIO.save` logic (commit `5e984da`). Version-specific `ResourceSaver` behavior difference between 4.4 and 4.6.2. Owning ticket: v0.2 schema implementation (commit `5e984da bump header schema to 2...`), needs investigation for 4.4-specific `ResourceSaver` difference.
+
+**Editor smoke:** No `editor_smoke_4_4` project command in harness. All `GST_EDITOR_SMOKE` selectors cannot run on 4.4.
 
 ### Godot 4.6.2.stable.official.71f334935
 
