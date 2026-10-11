@@ -55,6 +55,13 @@ var _link_buttons: Dictionary = {}
 var _link_refusal_labels: Dictionary = {}
 var _unlink_buttons: Dictionary = {}
 var _link_amount_editors: Dictionary = {}
+## param name -> refusal Label under a texture param's native Texture2D row
+## (decision 27). Rebuilt with the parameter rows.
+var _texture_refusal_labels: Dictionary = {}
+
+## Shown beside a texture row when an assigned texture has no file of its own
+## (owner decision open, recommendation applied 2026-10-11).
+const TEXTURE_NO_PATH_REASON: String = "This texture is not saved as its own file. Save it to a file first; the stack stores the texture by its file path."
 
 
 func _ready() -> void:
@@ -290,6 +297,7 @@ func _rebuild_parameter_rows() -> void:
 	_link_refusal_labels.clear()
 	_unlink_buttons.clear()
 	_link_amount_editors.clear()
+	_texture_refusal_labels.clear()
 	if _layer == null:
 		return
 	for property: Dictionary in _layer.get_property_list():
@@ -300,8 +308,28 @@ func _rebuild_parameter_rows() -> void:
 		if metadata.is_empty():
 			continue
 		var editor: EditorProperty = _build_property_row(_parameter_rows_box, "param", _layer, property, String(metadata["label"]), String(metadata["description"]))
-		if editor != null and String(metadata.get("type", "")) in GSTStackOps.LINKABLE_PARAM_TYPES:
+		if editor == null:
+			continue
+		if String(metadata.get("type", "")) in GSTStackOps.LINKABLE_PARAM_TYPES:
 			_add_link_controls(editor, String(property_name), String(metadata["label"]))
+		elif GSTManifestEntry.is_texture_param(metadata):
+			var refusal: Label = _build_refusal_label(_layer.id, String(property_name), "texture")
+			(editor.get_parent().get_parent() as VBoxContainer).add_child(refusal)
+			_texture_refusal_labels[String(property_name)] = refusal
+
+
+## Reason a texture cannot be assigned to a texture param, or "" when it can.
+## A texture with no file of its own (empty resource_path: unsaved or created
+## in the picker; or a "::" sub-resource path inside a scene or resource) has
+## no path for the header json to store (decision 27). Null clears the param
+## and is always allowed.
+static func texture_refusal_reason(value: Variant) -> String:
+	if not (value is Texture2D):
+		return ""
+	var path: String = (value as Texture2D).resource_path
+	if path.is_empty() or path.contains("::"):
+		return TEXTURE_NO_PATH_REASON
+	return ""
 
 
 ## Link button beside a float or int param's slider (decision 30), its
@@ -473,6 +501,14 @@ func _on_bound_property_changed(property: StringName, value: Variant, field: Str
 	var property_name: StringName = entry["property"]
 	if property != property_name:
 		return
+	if target == _layer and _texture_refusal_labels.has(String(property_name)):
+		# A refused texture never reaches the layer: the native picker already
+		# shows it, so update_property() puts the stored value back.
+		var reason: String = texture_refusal_reason(value)
+		set_refusal(_layer.id, String(property_name), "texture", reason)
+		if not reason.is_empty():
+			(entry["editor"] as EditorProperty).update_property()
+			return
 	var new_value: Variant = _merge_component_value(target.get(property_name), value, field)
 	if bool(state["active"]):
 		target.set(property_name, new_value)
@@ -1015,6 +1051,11 @@ func get_link_refusal_label(param_name: String) -> Label:
 	return _link_refusal_labels.get(param_name) as Label
 
 
+## Wired-by: tests/gst_editor_ui_texture_param_smoke.gd.
+func get_texture_refusal_label(param_name: String) -> Label:
+	return _texture_refusal_labels.get(param_name) as Label
+
+
 func get_warp_button(axis: String) -> Button:
 	return _warp_buttons.get(axis) as Button
 
@@ -1032,10 +1073,11 @@ func set_refusal(layer_id: StringName, slot_name: String, purpose: String, reaso
 		}
 	if _layer == null or _layer.id != layer_id:
 		return
-	if purpose == "link":
+	if purpose == "link" or purpose == "texture":
 		# Writes the label in place: rebuilding the parameter rows would free
 		# native rows that may hold a gesture.
-		var label: Label = _link_refusal_labels.get(slot_name) as Label
+		var labels: Dictionary = _link_refusal_labels if purpose == "link" else _texture_refusal_labels
+		var label: Label = labels.get(slot_name) as Label
 		if label != null:
 			label.text = reason
 			label.visible = not reason.is_empty()

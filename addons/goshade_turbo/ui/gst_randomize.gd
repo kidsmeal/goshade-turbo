@@ -11,8 +11,9 @@ extends RefCounted
 ## Every param on every layer, resolved against `library`, mapped to a
 ## uniform-random value inside the manifest min/max: int inclusive, float
 ## continuous, color random RGB with alpha 1, vec2/vec3 per component within
-## the manifest range or [0, 1] when none is declared. A layer whose entry
-## does not resolve or declares no params contributes nothing. Returns
+## the manifest range or [0, 1] when none is declared. A `texture` param is
+## skipped and keeps its value (decision 27). A layer whose entry does not
+## resolve or declares no randomizable params contributes nothing. Returns
 ## {layer_id: {param_name: new_value}}.
 static func randomize(stack: GSTStack, library: GSTLibrary, rng: RandomNumberGenerator) -> Dictionary:
 	var changes: Dictionary = {}
@@ -22,8 +23,11 @@ static func randomize(stack: GSTStack, library: GSTLibrary, rng: RandomNumberGen
 			continue
 		var layer_changes: Dictionary = {}
 		for param: Dictionary in entry.params:
+			if GSTManifestEntry.is_texture_param(param):
+				continue
 			layer_changes[String(param["name"])] = _random_value(param, rng)
-		changes[layer.id] = layer_changes
+		if not layer_changes.is_empty():
+			changes[layer.id] = layer_changes
 	return changes
 
 

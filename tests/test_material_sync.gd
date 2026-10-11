@@ -194,6 +194,53 @@ func test_sync_writes_the_amount_uniform_of_a_linked_param() -> void:
 	assert_true(GSTShaderCompile.compiles(material.shader.code), "the linked shader compiles")
 
 
+func _build_image_stack() -> Dictionary:
+	var stack: GSTStack = GSTStack.new()
+	var image: GSTLayer = GSTStackOps.add_layer(stack, "source/image", GSTLayer.Kind.COLOR, true)
+	stack.output_color = image.id
+	return {"stack": stack, "image": image}
+
+
+func _solid_texture() -> Texture2D:
+	return ImageTexture.create_from_image(Image.create(2, 2, false, Image.FORMAT_RGBA8))
+
+
+## A texture param writes its Texture2D to the sampler uniform (decision 27).
+func test_sync_writes_a_texture_param_to_its_sampler() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var ctx: Dictionary = _build_image_stack()
+	var image: GSTLayer = ctx["image"]
+	var texture: Texture2D = _solid_texture()
+	image.params["image"] = texture
+	var material: ShaderMaterial = ShaderMaterial.new()
+
+	var result: GSTCodegenResult = GSTMaterialSync.sync(ctx["stack"], lib, material, &"", Vector2(256.0, 256.0))
+
+	assert_true(result.ok(), "sync of a source/image stack succeeds: %s" % result.error)
+	assert_true(is_same(material.get_shader_parameter(GSTUniformNames.param_uniform(image.id, "image", "image")), texture), "the sampler uniform holds the layer's texture")
+
+
+## A null texture leaves the sampler unset, including after a texture was
+## written by an earlier sync.
+func test_sync_leaves_a_null_texture_param_unset() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var ctx: Dictionary = _build_image_stack()
+	var image: GSTLayer = ctx["image"]
+	var uniform_name: String = GSTUniformNames.param_uniform(image.id, "image", "image")
+	var material: ShaderMaterial = ShaderMaterial.new()
+
+	var unset_result: GSTCodegenResult = GSTMaterialSync.sync(ctx["stack"], lib, material, &"", Vector2(256.0, 256.0))
+	assert_true(unset_result.ok(), "sync with an absent texture param succeeds: %s" % unset_result.error)
+	assert_eq(material.get_shader_parameter(uniform_name), null, "an absent texture param leaves the sampler unset")
+
+	image.params["image"] = _solid_texture()
+	GSTMaterialSync.sync(ctx["stack"], lib, material, &"", Vector2(256.0, 256.0))
+	image.params.erase("image")
+	var cleared_result: GSTCodegenResult = GSTMaterialSync.sync(ctx["stack"], lib, material, &"", Vector2(256.0, 256.0))
+	assert_true(cleared_result.ok(), "resync after clearing the texture succeeds: %s" % cleared_result.error)
+	assert_eq(material.get_shader_parameter(uniform_name), null, "clearing the texture param unsets the sampler")
+
+
 func test_codegen_failure_leaves_material_code_and_uniforms_unchanged() -> void:
 	var lib: GSTLibrary = _scanned_library()
 	var ctx: Dictionary = _build_stack(lib)

@@ -61,6 +61,9 @@ func run(plugin: EditorPlugin) -> void:
 	elif flag == "ui_labels":
 		var labels_smoke: RefCounted = load("res://tests/gst_editor_ui_labels_smoke.gd").new()
 		await labels_smoke.run(plugin)
+	elif flag == "ui_texture_param":
+		var texture_param_smoke: RefCounted = load("res://tests/gst_editor_ui_texture_param_smoke.gd").new()
+		await texture_param_smoke.run(plugin)
 	elif flag == "ui_texture_property":
 		var texture_property_smoke: RefCounted = load("res://tests/gst_editor_ui_texture_property_smoke.gd").new()
 		await texture_property_smoke.run(plugin)

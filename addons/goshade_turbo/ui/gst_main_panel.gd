@@ -1681,7 +1681,17 @@ func _open_path_for(message_doc: GSTDocument, path: String) -> void:
 		return
 	var opened: GSTDocument = await open_document(result["stack"], path, false)
 	if opened != null:
-		_set_operation_message_for(opened, "Open", "")
+		_set_operation_message_for(opened, "Open", _missing_textures_text(result))
+
+
+## One line per texture path in a load result's `missing_textures`
+## (GSTStackIO.load, GSTHeader.parse via GSTExport.reopen), or "" when none
+## is missing. The stack still opens with those params unset (decision 27).
+static func _missing_textures_text(result: Dictionary) -> String:
+	var lines: Array[String] = []
+	for path: Variant in result.get("missing_textures", []):
+		lines.append("texture file %s is missing; its texture param stays unset." % String(path))
+	return "\n".join(lines)
 
 
 func _recipe_names() -> Array[String]:
@@ -1717,7 +1727,7 @@ func open_recipe(name: String) -> void:
 		return
 	var opened: GSTDocument = await open_document(result["stack"], "", true, name)
 	if opened != null:
-		_set_operation_message_for(opened, "Recipes", "")
+		_set_operation_message_for(opened, "Recipes", _missing_textures_text(result))
 
 
 func _on_save_pressed() -> void:
@@ -1909,10 +1919,13 @@ func _reopen_shader_path_for(message_doc: GSTDocument, path: String) -> void:
 	var opened: GSTDocument = await open_document(result["stack"], "", false, "", true)
 	if opened == null:
 		return
+	var lines: Array[String] = []
 	if result["body_differs"]:
-		_set_operation_message_for(opened, "Reopen Shader", "%s reopened: its body differs from a fresh codegen of the header (hand edits detected)" % path)
-	else:
-		_set_operation_message_for(opened, "Reopen Shader", "")
+		lines.append("%s reopened: its body differs from a fresh codegen of the header (hand edits detected)" % path)
+	var missing: String = _missing_textures_text(result)
+	if not missing.is_empty():
+		lines.append(missing)
+	_set_operation_message_for(opened, "Reopen Shader", "\n".join(lines))
 
 
 func _on_layer_selected(layer_id: StringName) -> void:
@@ -2507,11 +2520,13 @@ func _set_operation_message_for(doc: GSTDocument, control: String, reason: Strin
 
 
 ## Rebuilds _message_label from _active_document.operation_messages; called
-## from _set_operation_message_for and _install_stack.
+## from _set_operation_message_for and _install_stack. A multi-line reason
+## (one missing texture per line) gets its control prefix on every line.
 func _refresh_operation_message_label() -> void:
 	var lines: Array[String] = []
 	if _active_document != null:
 		for name: Variant in _active_document.operation_messages:
-			lines.append("%s: %s" % [String(name), _active_document.operation_messages[name]])
+			for reason_line: String in String(_active_document.operation_messages[name]).split("\n"):
+				lines.append("%s: %s" % [String(name), reason_line])
 	_message_label.text = "\n".join(lines)
 	_message_label.visible = not lines.is_empty()

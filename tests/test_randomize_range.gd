@@ -60,6 +60,9 @@ func test_every_recipe_randomize_stays_inside_manifest_range() -> void:
 				var layer_changes: Dictionary = changes.get(layer.id, {})
 				for param: Dictionary in entry.params:
 					var param_name: String = String(param["name"])
+					if GSTManifestEntry.is_texture_param(param):
+						assert_false(layer_changes.has(param_name), "%s layer %s texture param %s was not randomized" % [path, String(layer.id), param_name])
+						continue
 					assert_true(layer_changes.has(param_name), "%s layer %s param %s was randomized" % [path, String(layer.id), param_name])
 					checked_values += 1
 					_assert_in_range(path, layer.entry, param, layer_changes.get(param_name))
@@ -135,6 +138,28 @@ func test_stack_with_no_params_yields_empty_change_set() -> void:
 	rng.randomize()
 	var changes: Dictionary = GSTRandomize.randomize(stack, lib, rng)
 	assert_true(changes.is_empty(), "a stack with only a param-less layer yields an empty change set (got %s)" % changes)
+
+
+## A texture param is never randomized (decision 27): across 50 seeds the
+## source/image layer has no change entry and its texture stays assigned,
+## while the fbm below still randomizes.
+func test_texture_param_untouched_across_seeds() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = GSTStack.new()
+	var fbm: GSTLayer = GSTStackOps.add_layer(stack, "generative/fbm", GSTLayer.Kind.FIELD, true)
+	fbm.manifest = lib.get_entry("generative/fbm")
+	var image: GSTLayer = GSTStackOps.add_layer(stack, "source/image", GSTLayer.Kind.COLOR, true)
+	image.manifest = lib.get_entry("source/image")
+	var texture: Texture2D = ImageTexture.create_from_image(Image.create(2, 2, false, Image.FORMAT_RGBA8))
+	image.params["image"] = texture
+	for seed_value: int in range(50):
+		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		rng.seed = seed_value
+		var changes: Dictionary = GSTRandomize.randomize(stack, lib, rng)
+		assert_false(changes.has(image.id), "seed %d: source/image has no randomize entry (got %s)" % [seed_value, changes.get(image.id)])
+		assert_true(changes.has(fbm.id), "seed %d: fbm still randomizes" % seed_value)
+		GSTRandomize.apply(stack, changes)
+		assert_true(is_same(image.params.get("image"), texture), "seed %d: the texture stays assigned" % seed_value)
 
 
 ## GSTRandomize.apply writes every changed value through the layer's own

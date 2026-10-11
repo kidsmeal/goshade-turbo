@@ -135,7 +135,9 @@ static func _write_coord_uniforms(layer: GSTLayer, material: ShaderMaterial, dec
 ## float uniform there, so it is written as float here. A `type: "texture"`
 ## param carries no "default" key (decision 27), same as
 ## _param_uniform_line's early branch, so it is written before the
-## `param["default"]` lookup below ever runs.
+## `param["default"]` lookup below ever runs. A null texture (absent param,
+## missing file on reopen) goes through set_shader_parameter as null, which
+## clears any earlier value and leaves the sampler unset.
 ##
 ## A linked float or int param (decision 29) also writes its amount uniform,
 ## GSTUniformNames.param_amount_uniform, so an amount edit reaches the
