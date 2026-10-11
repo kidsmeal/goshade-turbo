@@ -13,6 +13,10 @@ signal chooser_requested(purpose: String, layer_id: StringName, slot_name: Strin
 
 ## Row suffix for a layer with enabled == false (decision 26).
 const BYPASSED_SUFFIX: String = "  bypassed"
+## Row suffix prefixes for a layer the selected layer reads, and a layer that
+## reads the selected layer (decision 35).
+const FEEDS_PREFIX: String = "  feeds: "
+const READS_PREFIX: String = "  reads: "
 
 @onready var _list: ItemList = %List
 @onready var _rename_edit: LineEdit = %RenameEdit
@@ -71,12 +75,10 @@ func refresh() -> void:
 	_list.clear()
 	for i: int in range(_stack.layers.size() - 1, -1, -1):
 		var layer: GSTLayer = _stack.layers[i]
-		var entry: GSTManifestEntry = _library.get_entry(layer.entry)
-		var kind_label: String = "field" if layer.kind_out == GSTLayer.Kind.FIELD else "color"
-		var function_name: String = entry.function if entry != null else layer.entry
-		_list.add_item(_row_text(layer, function_name, kind_label))
+		_list.add_item(_row_text(layer))
 		_list.set_item_metadata(_list.item_count - 1, layer.id)
 	_select_layer_silently(selected_id)
+	_apply_dependency_marks()
 	if _rename_layer_id != &"" and GSTStackOps.find_layer(_stack, _rename_layer_id) == null:
 		cancel_rename()
 	if anchor_id != &"":
@@ -85,12 +87,59 @@ func refresh() -> void:
 
 ## Label then function name; the function name stays visible on every row
 ## (decision 25). A bypassed layer ends in BYPASSED_SUFFIX (decision 26).
-func _row_text(layer: GSTLayer, function_name: String, kind_label: String) -> String:
+func _row_text(layer: GSTLayer) -> String:
+	var function_name: String = _function_name(layer)
+	var kind_label: String = "field" if layer.kind_out == GSTLayer.Kind.FIELD else "color"
 	var name_text: String = function_name if layer.label.is_empty() else "%s %s" % [layer.label, function_name]
 	var text: String = "l%s  %s (%s)" % [String(layer.id), name_text, kind_label]
 	if not layer.enabled:
 		text += BYPASSED_SUFFIX
 	return text
+
+
+func _function_name(layer: GSTLayer) -> String:
+	var entry: GSTManifestEntry = _library.get_entry(layer.entry)
+	return entry.function if entry != null else layer.entry
+
+
+## Rewrites every row's text and tint in place from the selected layer's
+## direct edges (decision 35). A row the selected layer reads ends in
+## FEEDS_PREFIX, a row that reads it ends in READS_PREFIX, each followed by
+## the selected layer's label or function name; both rows take the editor
+## accent color. Marks come after BYPASSED_SUFFIX. Writes no model field and
+## no history entry.
+func _apply_dependency_marks() -> void:
+	if _stack == null or _library == null:
+		return
+	var marks: Dictionary = _dependency_marks(get_selected_layer_id())
+	var accent: Color = get_theme_color(&"accent_color", &"Editor")
+	for i: int in range(_list.item_count):
+		var layer: GSTLayer = GSTStackOps.find_layer(_stack, get_item_id(i))
+		if layer == null:
+			continue
+		var mark: String = String(marks.get(layer.id, ""))
+		_list.set_item_text(i, _row_text(layer) + mark)
+		# ItemList treats Color() as no custom color.
+		_list.set_item_custom_fg_color(i, Color() if mark.is_empty() else accent)
+
+
+## Layer id to mark suffix for every row one direct edge from selected_id:
+## slots, warp_x, warp_y and param_links targets (GSTStackOps.edges_of).
+## Single selection, so each suffix names one layer; several edges between
+## the same pair mark the row once.
+func _dependency_marks(selected_id: StringName) -> Dictionary:
+	var marks: Dictionary = {}
+	var selected: GSTLayer = GSTStackOps.find_layer(_stack, selected_id)
+	if selected == null:
+		return marks
+	var selected_name: String = selected.label if not selected.label.is_empty() else _function_name(selected)
+	for edge: Dictionary in GSTStackOps.edges_of(selected):
+		marks[edge["target"]] = FEEDS_PREFIX + selected_name
+	for layer: GSTLayer in _stack.layers:
+		for edge: Dictionary in GSTStackOps.edges_of(layer):
+			if edge["target"] == selected_id:
+				marks[layer.id] = READS_PREFIX + selected_name
+	return marks
 
 
 ## Wired-by: tests/gst_editor_ui_layer_ops_smoke.gd.
@@ -101,8 +150,18 @@ func get_row_text(layer_id: StringName) -> String:
 	return _list.get_item_text(index)
 
 
+## Custom text color of layer_id's row; Color() when unmarked.
+## Wired-by: tests/gst_editor_ui_dependency_marks_smoke.gd.
+func get_row_color(layer_id: StringName) -> Color:
+	var index: int = _item_index_for_id(layer_id)
+	if index == -1:
+		return Color()
+	return _list.get_item_custom_fg_color(index)
+
+
 func select_layer(layer_id: StringName) -> void:
 	_select_layer_silently(layer_id)
+	_apply_dependency_marks()
 	layer_selected.emit(layer_id)
 
 
@@ -116,6 +175,7 @@ func _select_layer_silently(layer_id: StringName) -> void:
 
 
 func _on_item_selected(index: int) -> void:
+	_apply_dependency_marks()
 	layer_selected.emit(_list.get_item_metadata(index) as StringName)
 
 
@@ -240,6 +300,7 @@ func _row_height() -> float:
 ## Wired-by: gst_main_panel.gd (document activation).
 func clear_selection() -> void:
 	_list.deselect_all()
+	_apply_dependency_marks()
 
 
 ## Pairs with get_scroll_anchor_id: the scroll offset in pixels within the

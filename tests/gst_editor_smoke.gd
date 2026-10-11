@@ -58,6 +58,9 @@ func run(plugin: EditorPlugin) -> void:
 	elif flag == "ui_param_links":
 		var param_links_smoke: RefCounted = load("res://tests/gst_editor_ui_param_links_smoke.gd").new()
 		await param_links_smoke.run(plugin)
+	elif flag == "ui_dependency_marks":
+		var dependency_marks_smoke: RefCounted = load("res://tests/gst_editor_ui_dependency_marks_smoke.gd").new()
+		await dependency_marks_smoke.run(plugin)
 	elif flag == "ui_labels":
 		var labels_smoke: RefCounted = load("res://tests/gst_editor_ui_labels_smoke.gd").new()
 		await labels_smoke.run(plugin)
