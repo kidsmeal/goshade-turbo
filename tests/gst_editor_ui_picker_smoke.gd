@@ -181,8 +181,9 @@ func run(plugin: EditorPlugin) -> void:
 
 	(panel.get_node("%RecipesButton") as Button).pressed.emit()
 	await _frames(2)
-	_check("recipes", picker.get_all_entry_ids().has("fire"), "Recipes uses shared chooser")
-	picker.activate_value("fire")
+	var fire_path: String = GSTMainPanel.RECIPES_DIR.path_join("fire.tres")
+	_check("recipes", picker.get_all_entry_ids().has(fire_path), "Recipes uses shared chooser")
+	picker.activate_value(fire_path)
 	await _frames(5)
 	_check("recipe_apply", panel.get_stack() != stack and panel.get_randomize_button().disabled == false and not panel.is_picker_open(), "recipe replacement applied")
 	stack = panel.get_stack()

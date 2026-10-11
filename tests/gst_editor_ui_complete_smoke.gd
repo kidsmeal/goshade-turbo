@@ -139,7 +139,7 @@ func run(plugin: EditorPlugin) -> void:
 	var doc_before_recipe: GSTDocument = panel.get_active_document()
 	(panel.get_node("%RecipesButton") as Button).pressed.emit()
 	await _frames(2)
-	picker.activate_value("fire")
+	picker.activate_value(GSTMainPanel.RECIPES_DIR.path_join("fire.tres"))
 	await _frames(6)
 	var doc_recipe: GSTDocument = panel.get_active_document()
 	history = panel.get_watched_history()

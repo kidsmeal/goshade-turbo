@@ -1842,6 +1842,9 @@ func _save_recipe_for(doc: GSTDocument, confirm: bool) -> Dictionary:
 	result["path"] = path
 	_set_operation_message_for(doc, "Save as Recipe", result["reason"])
 	if result["ok"]:
+		# Lists the new file in the FileSystem dock without waiting for a scan.
+		if Engine.is_editor_hint() and path.begins_with("res://"):
+			EditorInterface.get_resource_filesystem().update_file(path)
 		refresh_recipe_lists()
 	return result
 
@@ -2510,10 +2513,8 @@ func _choice_rows(tab: int) -> Array[Dictionary]:
 		return rows
 	if purpose == "recipe":
 		for recipe: Dictionary in _recipe_rows():
-			if bool(recipe["user"]):
-				rows.append({"value": recipe["path"], "title": recipe["name"], "category": "User recipes", "kind": "stack", "description": "Open this user recipe as an editable stack.", "conversion": ""})
-			else:
-				rows.append({"value": recipe["path"], "title": recipe["name"], "category": "Recipes", "kind": "stack", "description": "Open this bundled recipe as an editable stack.", "conversion": ""})
+			var user: bool = bool(recipe["user"])
+			rows.append({"value": recipe["path"], "title": recipe["name"], "category": "User recipes" if user else "Recipes", "kind": "stack", "description": "Open this %s recipe as an editable stack." % ("user" if user else "bundled"), "conversion": ""})
 		return rows
 	if purpose == "link":
 		return _link_choice_rows(dest)
