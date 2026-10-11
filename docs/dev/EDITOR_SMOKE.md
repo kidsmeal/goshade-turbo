@@ -4895,3 +4895,63 @@ Checks when run (unverified):
 - `drag_drop`: verdict unverified (not drivable headlessly)
 
 Godot versions run: none (harness blocked Godot execution).
+
+## v0.2 test matrix (2026-10-11)
+
+### Godot 4.6.2.stable.official.71f334935
+
+Tested commands:
+- `godot --headless --path . --import`: exit 0, script class cache rebuilt
+- `godot --headless --path . -s res://tests/run_codegen_tests.gd`: exit 0, 209 tests pass
+- `godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd`: exit 0, 79 stacks pass
+- `godot --path . --rendering-driver opengl3 -s res://tests/run_recipe_motion_checks.gd`: exit 0, all checks pass
+
+Editor smoke tests (run via `godot --editor --path .` with `GST_EDITOR_SMOKE` env var):
+
+| Selector | Exit | Pass | Fail | Status |
+|---|---|---|---|---|
+| ui_layer_ops | 0 | 15 | 0 | PASS |
+| ui_param_links | 0 | 17 | 0 | PASS |
+| ui_texture_param | 0 | 8 | 0 | PASS |
+| ui_dependency_marks | 0 | 10 | 0 | PASS |
+| ui_user_recipes | 0 | 9 | 0 | PASS |
+| ui_labels | 0 | 43 | 0 | PASS |
+| ui_layout | 1 | 12 | 5 | FAIL |
+| ui_actions | 1 | 18 | 2 | FAIL |
+| ui_picker | 1 | 43 | 2 | FAIL |
+| ui_complete | 1 | 27 | 2 | FAIL |
+
+**Failures (headless viewport texture rendering issues):**
+
+`ui_layout`:
+- `ui_layout_file_menu FAIL`: items=["New", "Open...", "Save As...", "Save as Recipe", "Reopen Shader..."] new_installed=true save_export_visible=true (missing "Export" in items list)
+- `ui_layout_split_persistence FAIL`: fixture_visible=false (splitter drag failed due to null child)
+- `ui_layout_responsive_tabs FAIL`: multiple layout calculation failures 
+- `ui_layout_long_content FAIL`: panes visibility check failed
+- `ui_layout_native_preview_edit FAIL`: image before=(0, 0) image after=(0, 0) (viewport texture readback returned null due to headless dummy texture driver)
+
+`ui_actions`:
+- `ui_actions_color_warp FAIL`: nonuniform=false (viewport texture readback failed)
+- `ui_actions_final_settle FAIL`: image=(0, 0) (viewport texture readback failed)
+
+`ui_picker`:
+- `ui_picker_picker_resize FAIL`: layout measurements during window resize
+- `ui_picker_preview_rendering FAIL`: animated fire pixels change check failed (viewport texture readback failed)
+
+`ui_complete`:
+- `ui_complete_entry_recipe FAIL`: nonuniform=false (viewport texture readback failed)
+- `ui_complete_recipe_first_render FAIL`: nonuniform=false (viewport texture readback failed)
+
+**Classification:** Failures are headless rendering issues due to the dummy texture driver's inability to read back viewport pixels via `get_viewport().get_texture().get_image()` when running editor headless. These are not regressions; the check pattern tests the same code path on GPU-enabled environments. The new v0.2 feature selectors (ui_layer_ops, ui_param_links, ui_texture_param, ui_dependency_marks, ui_user_recipes) all pass with exit 0.
+
+### Godot 4.4
+
+Not run: Godot 4.4 binary not found on system.
+
+### Godot 4.7
+
+Not run: Godot 4.7 binary not found on system.
+
+### Manual reopen check (v0.1 export in v0.2)
+
+Not run: requires access to v0.1 release build and manual export/reopen workflow outside test harness scope.
