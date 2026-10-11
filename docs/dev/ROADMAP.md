@@ -33,4 +33,4 @@ Delivered, newest first. Move an intent here when its work lands, with a one-lin
 
 Directions you have deliberately chosen not to take, each with the one-line why, so they stop coming back as ideas.
 
-- Free-form node graph (forward references, arbitrary wiring, inline expression node, canvas editor) - why: converges on Godot VisualShader with a worse skin and loses the stack's canonical order, one-line header, valid-by-construction slots and randomize; owner VisualShader trial 2026-09-21 recorded in `docs/dev/V0_2_DESIGN.md` decision 34 `r-0921-1`
+- Free-form node graph: the stack shape is locked to a linear, typed, downward-referencing list of whole-function layers; no free-form wiring, forward references, inline expression node or canvas - why: converges on Godot VisualShader with a worse skin and loses the stack's canonical order, one-line header, valid-by-construction slots and randomize; owner VisualShader trial 2026-09-21 recorded in `docs/dev/V0_2_DESIGN.md` decision 34 `r-0921-1`
