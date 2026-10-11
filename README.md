@@ -102,7 +102,7 @@ Panel, picker, coordinate spaces, export header: `docs/USAGE.md`. Writing a new 
 - `sdf`: shapes as distance fields (circle, box, star, polygon, ring, line) and ways to combine them.
 - `fieldops`: math on fields (remap, smoothstep, invert, ease, min, max, mix).
 - `color`: fill, gradient map, palette, blend modes, hue, saturation, posterize.
-- `source`: the node's own texture, or the screen behind it.
+- `source`: the node's own texture, the screen behind it, or a chosen image.
 - `filter`: blur, pixelate, dither, outline, chromatic split of a source.
 
 Kind signatures and math sources for each: `docs/LIBRARY.md`.

@@ -3,9 +3,9 @@
 62 functions, one row per manifest under `addons/goshade_turbo/library/`.
 The kind signature reads `(input kinds) -> output kind`. `field` is a
 scalar, `color` is a `vec4`. `(generator)` entries take a coord block
-instead of input slots. `(source)` entries read `TEXTURE` or the screen
-texture. `(filter)` entries take a `texture` or `screen` source layer and
-sample it at neighbor offsets.
+instead of input slots. `(source)` entries read `TEXTURE`, the screen
+texture, or a chosen image (`source/image`). `(filter)` entries take a
+`texture` or `screen` source layer and sample it at neighbor offsets.
 
 Regenerate this table after a library change and paste the output over it:
 
