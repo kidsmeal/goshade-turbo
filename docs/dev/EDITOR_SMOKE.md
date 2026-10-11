@@ -4944,13 +4944,21 @@ Editor smoke tests (run via `godot --editor --path .` with `GST_EDITOR_SMOKE` en
 
 **Classification:** Failures are headless rendering issues due to the dummy texture driver's inability to read back viewport pixels via `get_viewport().get_texture().get_image()` when running editor headless. These are not regressions; the check pattern tests the same code path on GPU-enabled environments. The new v0.2 feature selectors (ui_layer_ops, ui_param_links, ui_texture_param, ui_dependency_marks, ui_user_recipes) all pass with exit 0.
 
-### Godot 4.4
+### Godot 4.4.1
 
-Not run: Godot 4.4 binary not found on system.
+Harness access fixed by T-0141. Godot 4.4.1 available via CI matrix in `.github/workflows/tests.yml`, not tested locally in this session. CI runs:
+- `godot --headless --path . --import`
+- `godot --headless --path . -s res://tests/run_codegen_tests.gd`
+
+Local test environment: `godot --version` resolves to 4.6.2. Access to 4.4.1 and 4.7 binaries for local testing requires harness integration beyond current session scope.
 
 ### Godot 4.7
 
-Not run: Godot 4.7 binary not found on system.
+Harness access fixed by T-0141. Godot 4.7 available via CI matrix in `.github/workflows/tests.yml`, not tested locally in this session. CI runs:
+- `godot --headless --path . --import`
+- `godot --headless --path . -s res://tests/run_codegen_tests.gd`
+
+Local test environment: `godot --version` resolves to 4.6.2. Access to 4.4.1 and 4.7 binaries for local testing requires harness integration beyond current session scope.
 
 ### Manual reopen check (v0.1 export in v0.2)
 
