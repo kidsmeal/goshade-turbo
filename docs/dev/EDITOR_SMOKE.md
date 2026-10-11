@@ -4987,14 +4987,13 @@ Not run: no project commands available (import_4_7, codegen_4_7, render_checks_4
 
 | Command | Exit | Result |
 |---|---|---|
-| editor_smoke (ui_v0_1_reopen) | 1 | PASS (reopen ok, hand-edit warning) |
+| editor_smoke (ui_v0_1_reopen) | 1 | FAIL |
 
-v0.1 export reopened with hand-edit detection:
+v0.1 export from `sandbox/logo/logo.gdshader` (v0.1.4 tag) reopened in v0.2:
 ```
-SMOKE reopen v0.1 export PASS
-SMOKE body_differs false FAIL
+SMOKE reopen_v0_1_export_message: res://glow_v0_1_export.gdshader reopened: its body differs from a fresh codegen of the header (hand edits detected)
+SMOKE reopen v0.1 export FAIL body_differs=true
+SMOKE SUMMARY pass=0 fail=1
 ```
 
-Exact message: `res://logo_v0_1.gdshader reopened: its body differs from a fresh codegen of the header (hand edits detected)`
-
-Explanation: v0.1.4 `.gdshader` file `sandbox/logo/logo.gdshader` (v0.1 schema) reopened successfully in v0.2 (GSTExport.reopen exits 0, stack loads). Hand-edit warning shown because v0.2 codegen produces different output than v0.1 codegen for the same stack. This is a schema/generation change, not a data corruption issue. Stack is loadable and usable.
+Verdict: FAIL (hand-edit warning shown). v0.1 export reopens successfully (GSTExport.reopen ok=true) but body_differs=true indicates v0.2 codegen produces different output than v0.1 for the same stack. This is a schema/generation change between versions. Stack is loadable and not corrupted; warning is informational.
