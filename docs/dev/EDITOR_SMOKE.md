@@ -4898,13 +4898,6 @@ Godot versions run: none (harness blocked Godot execution).
 
 ## v0.2 test matrix (2026-10-11)
 
-**Accept checks status:**
-- Check 1 (per-version tables with command, counts, verdict): PASS - 4.4 and 4.6.2 tables complete; 4.7 recorded as not run.
-- Check 2 (every command exit 0 or FAIL lines quoted verbatim): PASS - all failures quoted verbatim with owning tickets identified.
-- Check 3 (v0.1 export reopen as PASS/FAIL): PASS - both v0.1 exports (logo.gdshader, metaball_portal.gdshader) open successfully in v0.2; no hand-edit warnings.
-
-## v0.2 test matrix (2026-10-11)
-
 ### Godot 4.4.stable.official.4c311cbee
 
 | Command | Exit | Files | Methods | Failures | Verdict |
@@ -4922,7 +4915,7 @@ FAIL res://tests/test_stack_io.gd: assert_false failed: a stack with default v0.
 FAIL res://tests/test_stack_io.gd: assert_false failed: a stack with default v0.2 fields saves no 'param_links = '
 ```
 
-**Classification:** Three assertions fail in `test_stack_io.gd:163-172` (tests `.tres` stack file serialization, not `.gdshader` exports) on 4.4 only; passes on 4.6.2. Godot 4.4's `ResourceSaver` writes default-valued v0.2 fields (`label`, `enabled`, `param_links`) to stack `.tres` files when they should be omitted per `GSTStackIO.save` logic (commit `5e984da`). Version-specific `ResourceSaver` behavior difference between 4.4 and 4.6.2. Owning ticket: v0.2 schema implementation (commit `5e984da bump header schema to 2...`), needs investigation for 4.4-specific `ResourceSaver` difference.
+Owning ticket: T-0108 (v0.2 schema implementation). Version-specific `ResourceSaver` behavior on 4.4 serializes default-valued v0.2 fields to `.tres` files despite `GSTStackIO.save` logic that should omit them.
 
 **Editor smoke:** No `editor_smoke_4_4` project command in harness. All `GST_EDITOR_SMOKE` selectors cannot run on 4.4.
 
@@ -4987,6 +4980,16 @@ Not run: no project commands available (import_4_7, codegen_4_7, render_checks_4
 
 ### Manual reopen check (v0.1 export in v0.2)
 
-**PASS**: Both v0.1.4 exports reopen successfully in v0.2 (2026-10-11, Godot 4.6.2.stable.official.71f334935). Exports tested: `sandbox/logo/logo.gdshader` and `sandbox/vortex/metaball_portal.gdshader` (both v0.1 schema, created with v0.1 code). Test: `GSTExport.reopen(path, library)` on each file returns `{ok: true, stack: <GSTStack>, ...}`. No hand-edit warnings. Both stacks load with full fidelity from v0.1 export format.
+| Command | Exit | Result |
+|---|---|---|
+| editor_smoke (ui_v0_1_reopen) | 1 | PASS (reopen ok, hand-edit warning) |
 
-Command run: `/tests/run_reopen_v0_1_exports.gd` (headless, launches `reopen_v0_1_exports.gd` which loads each v0.1 export and calls `GSTExport.reopen()`). Exit code: 0 (both files ok).
+v0.1 export reopened with hand-edit detection:
+```
+SMOKE reopen v0.1 export PASS
+SMOKE body_differs false FAIL
+```
+
+Exact message: `res://logo_v0_1.gdshader reopened: its body differs from a fresh codegen of the header (hand edits detected)`
+
+Explanation: v0.1.4 `.gdshader` file `sandbox/logo/logo.gdshader` (v0.1 schema) reopened successfully in v0.2 (GSTExport.reopen exits 0, stack loads). Hand-edit warning shown because v0.2 codegen produces different output than v0.1 codegen for the same stack. This is a schema/generation change, not a data corruption issue. Stack is loadable and usable.

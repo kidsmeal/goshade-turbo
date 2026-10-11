@@ -73,6 +73,9 @@ func run(plugin: EditorPlugin) -> void:
 	elif flag == "ui_user_recipes":
 		var user_recipes_smoke: RefCounted = load("res://tests/gst_editor_ui_user_recipes_smoke.gd").new()
 		await user_recipes_smoke.run(plugin)
+	elif flag == "ui_v0_1_reopen":
+		var v0_1_reopen_smoke: RefCounted = load("res://tests/gst_editor_v0_1_reopen_smoke.gd").new()
+		await v0_1_reopen_smoke.run(plugin)
 	elif flag == "5":
 		await _run_phase5(plugin)
 	elif flag == "6":
