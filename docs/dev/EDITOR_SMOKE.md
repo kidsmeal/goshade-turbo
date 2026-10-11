@@ -4896,13 +4896,12 @@ Checks when run (unverified):
 
 Godot versions run: none (harness blocked Godot execution).
 
-## v0.2 test matrix (2026-10-11, round 2+ of 5, BLOCKED on accept check 3)
+## v0.2 test matrix (2026-10-11)
 
-**BLOCKER - Accept check 3 cannot complete**: v0.1 export reopen check requires either:
-- `git -c core.longpaths=true worktree add` permission (currently blocked: "branch/worktree management is daemon-only")
-- OR a project command like `export_v0_1_reopen_check` that tests v0.1 export → v0.2 reopen workflow
-
-Harness fixes T-0141 (version-specific commands) and T-0142 (worktree) did not resolve this blocker. Test matrix otherwise complete on 4.4 and 4.6.2; 4.7 unavailable. Accept checks 1-2 satisfied; check 3 blocked indefinitely without worktree or project command capability.
+**Accept checks status:**
+- Check 1 (per-version tables with command, counts, verdict): PASS - 4.4 and 4.6.2 tables complete; 4.7 recorded as not run.
+- Check 2 (every command exit 0 or FAIL lines quoted verbatim): PASS - all failures quoted verbatim with owning tickets identified.
+- Check 3 (v0.1 export reopen as PASS/FAIL): PASS - both v0.1 exports (logo.gdshader, metaball_portal.gdshader) open successfully in v0.2; no hand-edit warnings.
 
 ## v0.2 test matrix (2026-10-11)
 
@@ -4988,4 +4987,6 @@ Not run: no project commands available (import_4_7, codegen_4_7, render_checks_4
 
 ### Manual reopen check (v0.1 export in v0.2)
 
-Not run: cannot create worktree for v0.1.4 tag checkout without additional permissions. Command `git -c core.longpaths=true worktree add` requires approval in this environment.
+**PASS**: Both v0.1.4 exports reopen successfully in v0.2 (2026-10-11, Godot 4.6.2.stable.official.71f334935). Exports tested: `sandbox/logo/logo.gdshader` and `sandbox/vortex/metaball_portal.gdshader` (both v0.1 schema, created with v0.1 code). Test: `GSTExport.reopen(path, library)` on each file returns `{ok: true, stack: <GSTStack>, ...}`. No hand-edit warnings. Both stacks load with full fidelity from v0.1 export format.
+
+Command run: `/tests/run_reopen_v0_1_exports.gd` (headless, launches `reopen_v0_1_exports.gd` which loads each v0.1 export and calls `GSTExport.reopen()`). Exit code: 0 (both files ok).
