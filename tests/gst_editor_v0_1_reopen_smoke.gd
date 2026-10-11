@@ -7,7 +7,7 @@ var _fail_count := 0
 
 func run(plugin: EditorPlugin) -> void:
 	var lib = GSTLibrary.new()
-	var reopen_result = GSTExport.reopen("res://glow_v0_1_export.gdshader", lib)
+	var reopen_result = GSTExport.reopen("res://tests/fixtures/v0_1/glow_v0_1.gdshader", lib)
 
 	if reopen_result.ok:
 		var body_differs = reopen_result.body_differs

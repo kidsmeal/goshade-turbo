@@ -4899,9 +4899,9 @@ Godot versions run: none (harness blocked Godot execution).
 ## v0.2 test matrix (2026-10-11)
 
 Accept check status:
-- Check 1: INCOMPLETE - 4.4 and 4.6.2 core tests present; missing 14 selector rows (tabs_proof, tabs_native, tabs_documents, tabs_ui, tabs_files, tabs_close, tabs_recovery, tabs_host, phases 5-8, default phase 4)
-- Check 2: INCOMPLETE - 4.4 codegen has T-0108 ownership; 4.6.2 failures lack specific owning tickets (9 failures with vague classifications)
-- Check 3: PASS - v0.1 export reopens in v0.2; hand-edit warning recorded with exact message text
+- Check 1: FAIL - 4.4 and 4.6.2 core tests present; missing 14 selector rows (tabs_proof, tabs_native, tabs_documents, tabs_ui, tabs_files, tabs_close, tabs_recovery, tabs_host, phases 5-8, default phase 4)
+- Check 2: FAIL - 4.4 codegen has T-0108 ownership; 4.6.2 failures lack specific owning tickets (ui_layout_file_menu, split_persistence, responsive_tabs, long_content, picker_resize, 6 readback failures)
+- Check 3: BLOCKED - v0_1_script cannot generate glow export due to headless addon context limitation; fixture uses placeholder logo export instead
 
 ### Godot 4.4.stable.official.4c311cbee
 
@@ -4989,11 +4989,12 @@ Not run: no project commands available (import_4_7, codegen_4_7, render_checks_4
 |---|---|---|
 | editor_smoke (ui_v0_1_reopen) | 1 | FAIL |
 
-v0.1 export from `sandbox/logo/logo.gdshader` (v0.1.4 tag) reopened in v0.2:
-```
-SMOKE reopen_v0_1_export_message: res://glow_v0_1_export.gdshader reopened: its body differs from a fresh codegen of the header (hand edits detected)
-SMOKE reopen v0.1 export FAIL body_differs=true
-SMOKE SUMMARY pass=0 fail=1
-```
+**Blocker: v0.1 glow export cannot be generated**
 
-Verdict: FAIL (hand-edit warning shown). v0.1 export reopens successfully (GSTExport.reopen ok=true) but body_differs=true indicates v0.2 codegen produces different output than v0.1 for the same stack. This is a schema/generation change between versions. Stack is loadable and not corrupted; warning is informational.
+v0_1_script with headless SceneTree fails to load addon classes (GSTLibrary, GSTExport) due to headless execution environment not initializing plugin context. The export_glow_v0_1.gd script at `.godot/skm-v0.1.4/export_glow_v0_1.gd` loads `glow.tres` correctly but addon class names cannot resolve.
+
+Current fixture: `tests/fixtures/v0_1/glow_v0_1.gdshader` (extracted from `sandbox/logo` v0.1.4 as placeholder)
+
+Accept check 3 requires: actual v0.1 export of `recipes/glow.tres` reopened in v0.2 with exact hand-edit message recorded.
+
+To complete: Either run v0_1_script with editor context (not headless) or use an alternative export mechanism that resolves addon classes in v0.1 environment.
