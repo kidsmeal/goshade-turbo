@@ -49,6 +49,31 @@ func test_recipes_save_and_load_round_trip_every_field() -> void:
 		DirAccess.remove_absolute(temp_path)
 
 
+## Save as Recipe path (decision 33): a stack saved into a user recipes
+## folder created on demand reloads with every field equal.
+func test_stack_saved_to_user_recipes_folder_reloads_equal() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var stack: GSTStack = _load_recipe("dissolve", lib)
+	if stack == null:
+		return
+	var user_dir: String = "user://gst_test_user_recipes/nested"
+	var made: Error = DirAccess.make_dir_recursive_absolute(user_dir)
+	assert_eq(made, OK, "user recipes folder created: %s" % error_string(made))
+	var path: String = user_dir.path_join("dissolve.tres")
+	var save_result: Dictionary = GSTStackIO.save(stack, path)
+	assert_true(save_result["ok"], "save into user folder succeeds: %s" % save_result["reason"])
+
+	var reload_result: Dictionary = GSTStackIO.load(path, lib)
+	assert_true(reload_result["ok"], "reload from user folder succeeds: %s" % reload_result["reason"])
+	if reload_result["ok"]:
+		var mismatches: Array[String] = _compare_stacks(stack, reload_result["stack"])
+		assert_true(mismatches.is_empty(), "user folder round trip field mismatches (%d): %s" % [mismatches.size(), mismatches])
+
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(user_dir)
+	DirAccess.remove_absolute(user_dir.get_base_dir())
+
+
 ## Export, parse the header back into a stack, re-codegen: the body compares
 ## byte-equal to the exported body. Uses the real GSTExport.write/reopen file
 ## path; tests/test_header_roundtrip.gd covers the in-memory GSTHeader.parse

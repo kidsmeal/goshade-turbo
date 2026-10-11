@@ -8,6 +8,8 @@ var _panel: Control = null
 
 
 func _enter_tree() -> void:
+	# Before the panel's _ready lists user recipes from the setting.
+	_register_recipes_dir_setting()
 	_panel = load("res://addons/goshade_turbo/ui/gst_main_panel.tscn").instantiate()
 	get_editor_interface().get_editor_main_screen().add_child(_panel)
 	_panel.set_editor_plugin(self)
@@ -16,6 +18,19 @@ func _enter_tree() -> void:
 	if not smoke_flag.is_empty() and ResourceLoader.exists("res://tests/gst_editor_smoke.gd"):
 		var smoke: RefCounted = load("res://tests/gst_editor_smoke.gd").new()
 		await smoke.run(self)
+
+
+## Registers `goshade_turbo/recipes_dir` (decision 33), a folder picker in
+## Project Settings, setting the default value only when absent. The default
+## is also the initial value, so ProjectSettings.save() omits it and
+## project.godot changes only once the user sets another folder.
+func _register_recipes_dir_setting() -> void:
+	var setting: String = GSTMainPanel.RECIPES_DIR_SETTING
+	if not ProjectSettings.has_setting(setting):
+		ProjectSettings.set_setting(setting, GSTMainPanel.USER_RECIPES_DIR_DEFAULT)
+	ProjectSettings.set_initial_value(setting, GSTMainPanel.USER_RECIPES_DIR_DEFAULT)
+	ProjectSettings.set_as_basic(setting, true)
+	ProjectSettings.add_property_info({"name": setting, "type": TYPE_STRING, "hint": PROPERTY_HINT_DIR})
 
 
 func _exit_tree() -> void:

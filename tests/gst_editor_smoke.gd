@@ -70,6 +70,9 @@ func run(plugin: EditorPlugin) -> void:
 	elif flag == "ui_texture_property":
 		var texture_property_smoke: RefCounted = load("res://tests/gst_editor_ui_texture_property_smoke.gd").new()
 		await texture_property_smoke.run(plugin)
+	elif flag == "ui_user_recipes":
+		var user_recipes_smoke: RefCounted = load("res://tests/gst_editor_ui_user_recipes_smoke.gd").new()
+		await user_recipes_smoke.run(plugin)
 	elif flag == "5":
 		await _run_phase5(plugin)
 	elif flag == "6":

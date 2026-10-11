@@ -34,6 +34,8 @@ signal stack_changed
 @onready var _error_scroll: ScrollContainer = %ErrorScroll
 @onready var _start_screen: VBoxContainer = %StartScreen
 @onready var _recipe_grid: GridContainer = %RecipeGrid
+@onready var _user_recipes_heading: Label = %UserRecipesHeading
+@onready var _user_recipe_grid: GridContainer = %UserRecipeGrid
 @onready var _create_empty: Button = %CreateEmpty
 @onready var _start_open: Button = %StartOpen
 @onready var _coord_space_option: OptionButton = %CoordSpaceOption
@@ -59,6 +61,10 @@ signal stack_changed
 const COORD_SPACE_NAMES: Array[String] = ["uv", "screen_uv", "local"]
 ## Every .tres here is listed by the Recipes picker and the start screen.
 const RECIPES_DIR: String = "res://addons/goshade_turbo/recipes"
+## Project setting naming the user recipes folder (decision 33). plugin.gd
+## registers it; its .tres files list after the bundled ones.
+const RECIPES_DIR_SETTING: String = "goshade_turbo/recipes_dir"
+const USER_RECIPES_DIR_DEFAULT: String = "res://goshade_recipes/"
 const LAYOUT_METADATA_SECTION: String = "goshade_turbo/layout"
 const DEFAULT_MAIN_RATIO: float = 0.6
 const DEFAULT_INNER_RATIO: float = 0.42
@@ -73,6 +79,7 @@ const FILE_NEW: int = 0
 const FILE_OPEN: int = 1
 const FILE_SAVE_AS: int = 2
 const FILE_REOPEN_SHADER: int = 3
+const FILE_SAVE_AS_RECIPE: int = 4
 ## %LayerMenu item ids. Duplicate, Rename and Bypass sit in the selected
 ## layer's secondary menu (EDITOR_UI_DESIGN_reviewed.md decision 14, owner
 ## placement recommendation in v0-2-stack-features.md).
@@ -97,6 +104,7 @@ var _undo: GSTUndo = null
 var _preview_sync: GSTMaterialSync = GSTMaterialSync.new()
 var _material: ShaderMaterial = _preview_sync.get_material()
 var _preview_layer_id: StringName = &""
+## Recipe .tres path -> start-screen Button, rebuilt by _refresh_recipe_buttons.
 var _start_recipe_buttons: Dictionary = {}
 ## Guards programmatic _coord_space_option.select() calls from re-entering
 ## _on_coord_space_selected.
@@ -128,7 +136,8 @@ var _close_discard_button: Button = null
 var _next_file_request_id: int = 0
 var _pending_save_as: Dictionary = {}
 var _pending_export: Dictionary = {}
-## Also carries "path": the export target this confirmation answers.
+## Also carries "path": the file this confirmation answers, and for Save as
+## Recipe "target": "recipe" (absent for an export).
 var _pending_overwrite: Dictionary = {}
 var _pending_open: Dictionary = {}
 var _pending_reopen: Dictionary = {}
@@ -245,6 +254,7 @@ func _ready() -> void:
 	file_popup.add_item("Open...", FILE_OPEN)
 	file_popup.add_separator()
 	file_popup.add_item("Save As...", FILE_SAVE_AS)
+	file_popup.add_item("Save as Recipe", FILE_SAVE_AS_RECIPE)
 	file_popup.add_item("Reopen Shader...", FILE_REOPEN_SHADER)
 	file_popup.id_pressed.connect(_on_file_menu_pressed)
 	_style_file_menu_as_button()
@@ -417,16 +427,7 @@ func _style_file_menu_as_button() -> void:
 
 
 func _build_start_screen() -> void:
-	for recipe_name: String in _recipe_names():
-		var button: Button = Button.new()
-		button.text = recipe_name.replace("_", " ").capitalize()
-		button.tooltip_text = "Open %s as an editable stack." % button.text
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.custom_minimum_size.y = RECIPE_BUTTON_HEIGHT * EditorInterface.get_editor_scale()
-		button.clip_text = true
-		button.pressed.connect(open_recipe.bind(recipe_name))
-		_recipe_grid.add_child(button)
-		_start_recipe_buttons[recipe_name] = button
+	_refresh_recipe_buttons()
 	_create_empty.pressed.connect(_on_new_pressed)
 	_start_open.pressed.connect(_on_open_pressed)
 	_editing_content.hide()
@@ -445,9 +446,48 @@ func is_start_screen_visible() -> bool:
 	return _start_screen.visible
 
 
+## Rebuilds the start-screen recipe buttons from _recipe_rows(): bundled ones
+## in %RecipeGrid, user ones in %UserRecipeGrid under %UserRecipesHeading,
+## which hides when the user folder lists none (decision 33).
+func _refresh_recipe_buttons() -> void:
+	for grid: GridContainer in [_recipe_grid, _user_recipe_grid]:
+		for child: Node in grid.get_children():
+			grid.remove_child(child)
+			child.queue_free()
+	_start_recipe_buttons.clear()
+	for row: Dictionary in _recipe_rows():
+		var button: Button = Button.new()
+		button.text = String(row["name"]).replace("_", " ").capitalize()
+		button.tooltip_text = "Open %s as an editable stack." % button.text
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.custom_minimum_size.y = RECIPE_BUTTON_HEIGHT * EditorInterface.get_editor_scale()
+		button.clip_text = true
+		button.disabled = is_picker_open()
+		button.pressed.connect(open_recipe_path.bind(String(row["path"])))
+		(_user_recipe_grid if bool(row["user"]) else _recipe_grid).add_child(button)
+		_start_recipe_buttons[String(row["path"])] = button
+	_user_recipes_heading.visible = _user_recipe_grid.get_child_count() > 0
+
+
+## The bundled recipe button for `recipe_name`.
 ## Wired-by: none (editor smoke seam).
 func get_start_recipe_button(recipe_name: String) -> Button:
-	return _start_recipe_buttons.get(recipe_name) as Button
+	return get_start_recipe_button_for_path(RECIPES_DIR.path_join("%s.tres" % recipe_name))
+
+
+## Wired-by: none (editor smoke seam).
+func get_start_recipe_button_for_path(path: String) -> Button:
+	return _start_recipe_buttons.get(path) as Button
+
+
+## Wired-by: none (editor smoke seam).
+func get_recipes_button() -> Button:
+	return _recipes_button
+
+
+## Wired-by: none (editor smoke seam).
+func get_file_menu() -> MenuButton:
+	return _file_menu
 
 
 ## Wired-by: none (editor smoke seam).
@@ -1628,6 +1668,8 @@ func _on_file_menu_pressed(id: int) -> void:
 			_on_open_pressed()
 		FILE_SAVE_AS:
 			_on_save_as_pressed()
+		FILE_SAVE_AS_RECIPE:
+			save_as_recipe(false)
 		FILE_REOPEN_SHADER:
 			_on_reopen_shader_pressed()
 
@@ -1694,40 +1736,133 @@ static func _missing_textures_text(result: Dictionary) -> String:
 	return "\n".join(lines)
 
 
-func _recipe_names() -> Array[String]:
-	var names: Array[String] = []
-	var dir: DirAccess = DirAccess.open(RECIPES_DIR)
+## Every recipe the Recipes picker and the start screen list: bundled ones
+## from RECIPES_DIR, then user ones from user_recipes_dir() (decision 33).
+## Rows are `{name, path, user}`, sorted by name within each group. A user
+## recipe may share a bundled name; its row carries its own path.
+func _recipe_rows() -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	for path: String in _recipe_paths_in(RECIPES_DIR):
+		rows.append({"name": path.get_file().get_basename(), "path": path, "user": false})
+	for path: String in _recipe_paths_in(user_recipes_dir()):
+		rows.append({"name": path.get_file().get_basename(), "path": path, "user": true})
+	return rows
+
+
+## The user recipes folder from the `goshade_turbo/recipes_dir` project
+## setting, USER_RECIPES_DIR_DEFAULT when unset.
+static func user_recipes_dir() -> String:
+	return String(ProjectSettings.get_setting(RECIPES_DIR_SETTING, USER_RECIPES_DIR_DEFAULT))
+
+
+## Sorted .tres paths directly inside `dir_path`. A missing folder lists
+## none and reports nothing.
+static func _recipe_paths_in(dir_path: String) -> Array[String]:
+	var paths: Array[String] = []
+	if not DirAccess.dir_exists_absolute(dir_path):
+		return paths
+	var dir: DirAccess = DirAccess.open(dir_path)
 	if dir == null:
-		return names
+		return paths
 	dir.list_dir_begin()
 	var entry_name: String = dir.get_next()
 	while entry_name != "":
 		if not dir.current_is_dir() and entry_name.ends_with(".tres"):
-			names.append(entry_name.get_basename())
+			paths.append(dir_path.path_join(entry_name))
 		entry_name = dir.get_next()
 	dir.list_dir_end()
-	names.sort()
-	return names
+	paths.sort()
+	return paths
 
 
-## Loads RECIPES_DIR/<name>.tres and installs it via open_document with an
-## empty current_path: a recipe is a template, so Save falls back to Save As
-## instead of overwriting the shipped file. Never reuses another open
-## document: the same recipe opened twice yields independent copies. Public
-## for editor smoke. Success targets the document open_document returned
-## (see _open_path_for); the failure branch has no navigation to await, so
-## _active_document is still the document this was called on.
+## Opens the bundled recipe RECIPES_DIR/<name>.tres through open_recipe_path.
+## Wired-by: none (editor smoke seam).
 func open_recipe(name: String) -> void:
+	await open_recipe_path(RECIPES_DIR.path_join("%s.tres" % name))
+
+
+## Loads the recipe .tres at `path` (bundled or user) and installs it via
+## open_document with an empty current_path: a recipe is a template, so Save
+## falls back to Save As instead of overwriting the recipe file. Never reuses
+## another open document: the same recipe opened twice yields independent
+## copies. Success targets the document open_document returned (see
+## _open_path_for); the failure branch has no navigation to await, so
+## _active_document is still the document this was called on.
+## Wired-by: start-screen recipe buttons (_refresh_recipe_buttons).
+func open_recipe_path(path: String) -> void:
 	if is_picker_open() and not _applying_choice:
 		return
-	var path: String = "%s/%s.tres" % [RECIPES_DIR, name]
 	var result: Dictionary = GSTStackIO.load(path, _library)
 	if not result["ok"]:
 		_set_operation_message("Recipes", result["reason"])
 		return
-	var opened: GSTDocument = await open_document(result["stack"], "", true, name)
+	var opened: GSTDocument = await open_document(result["stack"], "", true, path.get_file().get_basename())
 	if opened != null:
 		_set_operation_message_for(opened, "Recipes", _missing_textures_text(result))
+
+
+## File > Save as Recipe (decision 33). Writes the active stack to
+## <user_recipes_dir()>/<_recipe_file_name>.tres, creating the folder when
+## missing, and refreshes both recipe lists. Opens nothing and leaves the
+## document's path and dirty state unchanged. An existing file asks through
+## _overwrite_dialog (decision 9) unless `confirm`; `{ok, reason,
+## needs_confirmation, path}`.
+func save_as_recipe(confirm: bool) -> Dictionary:
+	return await _save_recipe_for(_active_document, confirm)
+
+
+func _save_recipe_for(doc: GSTDocument, confirm: bool) -> Dictionary:
+	if doc == null or not _documents.has(doc):
+		return {"ok": false, "reason": "This document is no longer open.", "needs_confirmation": false, "path": ""}
+	var dir_path: String = user_recipes_dir()
+	var path: String = dir_path.path_join("%s.tres" % _recipe_file_name(doc))
+	var conflict: GSTDocument = _find_document_by_path(path)
+	if conflict != null and conflict != doc:
+		var refused: Dictionary = {"ok": false, "reason": "%s is already open in another tab." % path, "needs_confirmation": false, "path": path}
+		_set_operation_message_for(doc, "Save as Recipe", refused["reason"])
+		return refused
+	if not confirm and FileAccess.file_exists(path):
+		_next_file_request_id += 1
+		_pending_overwrite = {"request_id": _next_file_request_id, "doc_id": doc.session_id, "path": path, "target": "recipe"}
+		_overwrite_dialog.dialog_text = "%s already exists. Overwrite it?" % path
+		_overwrite_dialog.popup_centered()
+		return {"ok": false, "reason": "", "needs_confirmation": true, "path": path}
+	if _overwrite_dialog.visible:
+		_overwrite_dialog.hide()
+	if doc == _active_document:
+		await _finish_pending_edits()
+	if not DirAccess.dir_exists_absolute(dir_path):
+		var made: Error = DirAccess.make_dir_recursive_absolute(dir_path)
+		if made != OK:
+			var failed: Dictionary = {"ok": false, "reason": "failed to create %s: %s" % [dir_path, error_string(made)], "needs_confirmation": false, "path": path}
+			_set_operation_message_for(doc, "Save as Recipe", failed["reason"])
+			return failed
+	var result: Dictionary = GSTStackIO.save(doc.stack, path)
+	result["needs_confirmation"] = false
+	result["path"] = path
+	_set_operation_message_for(doc, "Save as Recipe", result["reason"])
+	if result["ok"]:
+		refresh_recipe_lists()
+	return result
+
+
+## Save as Recipe's file name: the saved file's base name, the recipe name
+## before a first save, else the lowercased "untitled_<n>" tab name.
+func _recipe_file_name(doc: GSTDocument) -> String:
+	if not doc.current_path.is_empty():
+		return doc.current_path.get_file().get_basename()
+	if not doc.recipe_name.is_empty():
+		return doc.recipe_name
+	return _describe_document(doc).to_lower().replace(" ", "_")
+
+
+## Rebuilds the start-screen buttons and, while the Recipes picker is open,
+## its rows.
+## Wired-by: _save_recipe_for; editor smoke after changing the setting.
+func refresh_recipe_lists() -> void:
+	_refresh_recipe_buttons()
+	if is_picker_open() and _picker_context.get("purpose", "") == "recipe":
+		_picker.set_choices(_choice_rows(_picker.get_tab_index()))
 
 
 func _on_save_pressed() -> void:
@@ -1866,15 +2001,20 @@ func _refresh_exported_shader(path: String, code: String) -> void:
 		EditorInterface.get_resource_filesystem().update_file(path)
 
 
-## Re-targets the document _export_stack_to_path captured in
-## _pending_overwrite. A stale/closed target only hides the dialog.
+## Re-targets the document _export_stack_to_path or _save_recipe_for
+## captured in _pending_overwrite; "target" "recipe" marks a Save as Recipe
+## request. A stale/closed target only hides the dialog.
 func _on_overwrite_confirmed() -> void:
 	var doc: GSTDocument = _resolve_pending_document(_pending_overwrite)
 	var path: String = String(_pending_overwrite.get("path", ""))
+	var target: String = String(_pending_overwrite.get("target", "export"))
 	_pending_overwrite = {}
 	if doc == null:
 		if _overwrite_dialog.visible:
 			_overwrite_dialog.hide()
+		return
+	if target == "recipe":
+		await _save_recipe_for(doc, true)
 		return
 	await _export_stack_to_path(doc, path, true)
 
@@ -2369,8 +2509,11 @@ func _choice_rows(tab: int) -> Array[Dictionary]:
 			rows.append({"value": id, "title": entry.function, "category": id.get_slice("/", 0), "kind": "(%s) -> %s" % [", ".join(input_kinds), _kind_name(entry.kind_out)], "description": entry.description, "conversion": _conversion(entry.kind_out, wanted_kind)})
 		return rows
 	if purpose == "recipe":
-		for name: String in _recipe_names():
-			rows.append({"value": name, "title": name, "category": "Recipes", "kind": "stack", "description": "Open this bundled recipe as an editable stack.", "conversion": ""})
+		for recipe: Dictionary in _recipe_rows():
+			if bool(recipe["user"]):
+				rows.append({"value": recipe["path"], "title": recipe["name"], "category": "User recipes", "kind": "stack", "description": "Open this user recipe as an editable stack.", "conversion": ""})
+			else:
+				rows.append({"value": recipe["path"], "title": recipe["name"], "category": "Recipes", "kind": "stack", "description": "Open this bundled recipe as an editable stack.", "conversion": ""})
 		return rows
 	if purpose == "link":
 		return _link_choice_rows(dest)
@@ -2481,14 +2624,15 @@ func _on_picker_choice(choice: Dictionary) -> void:
 			if _stack.output_alpha != StringName(value):
 				result = _undo.set_output_alpha(StringName(value))
 		"recipe":
-			var loaded: Dictionary = GSTStackIO.load("%s/%s.tres" % [RECIPES_DIR, value], _library)
+			# value is the row's full recipe path (bundled or user).
+			var loaded: Dictionary = GSTStackIO.load(value, _library)
 			result = loaded
 			if loaded["ok"]:
 				# open_document awaits _finish_pending_edits(), which suspends
 				# across a native color-popup commit; without this await the
 				# success tail below would run against the previous
 				# _active_document.
-				await open_document(loaded["stack"], "", true, value)
+				await open_document(loaded["stack"], "", true, value.get_file().get_basename())
 	_applying_choice = false
 	if not result["ok"]:
 		_picker_refusal(result["reason"])
