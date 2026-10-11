@@ -4898,68 +4898,83 @@ Godot versions run: none (harness blocked Godot execution).
 
 ## v0.2 test matrix (2026-10-11)
 
+### Godot 4.4.stable.official.4c311cbee
+
+| Command | Exit | Files | Methods | Failures | Verdict |
+|---|---|---|---|---|---|
+| import_4_4 | 0 | - | - | 0 | PASS |
+| codegen_4_4 | 1 | 22 | 209 | 3 | FAIL |
+| render_checks_4_4 | 0 | 79 | - | 0 | PASS |
+| motion_checks_4_4 | 0 | - | - | 0 | PASS |
+
+**Codegen failures (exit 1):**
+```
+FAIL res://tests/test_stack_io.gd: assert_false failed: a stack with default v0.2 fields saves no 'label = '
+FAIL res://tests/test_stack_io.gd: assert_false failed: a stack with default v0.2 fields saves no 'enabled = '
+FAIL res://tests/test_stack_io.gd: assert_false failed: a stack with default v0.2 fields saves no 'param_links = '
+```
+
+**Classification:** Three failures in `test_stack_io.gd` testing v0.2 field serialization. Root cause: v0.2 schema fields (`label`, `enabled`, `param_links`) are being written to stack resource files on 4.4 when they contain default values, violating the v0.2 acceptance criterion that unedited v0.1 exports reopen without hand-edit warning. Owning ticket: T-0106 (this ticket) or schema/serialization work.
+
 ### Godot 4.6.2.stable.official.71f334935
 
-Tested commands:
-- `godot --headless --path . --import`: exit 0, script class cache rebuilt
-- `godot --headless --path . -s res://tests/run_codegen_tests.gd`: exit 0, 209 tests pass
-- `godot --path . --rendering-driver opengl3 -s res://tests/run_render_checks.gd`: exit 0, 79 stacks pass
-- `godot --path . --rendering-driver opengl3 -s res://tests/run_recipe_motion_checks.gd`: exit 0, all checks pass
+| Command | Exit | Files | Methods | Failures | Verdict |
+|---|---|---|---|---|---|
+| import | 0 | - | - | 0 | PASS |
+| codegen | 0 | 22 | 209 | 0 | PASS |
+| render_checks | 0 | 79 | - | 0 | PASS |
+| motion_checks | 0 | - | - | 0 | PASS |
+| editor_smoke (ui_layer_ops) | 0 | - | 15 | 0 | PASS |
+| editor_smoke (ui_param_links) | 0 | - | 17 | 0 | PASS |
+| editor_smoke (ui_texture_param) | 0 | - | 8 | 0 | PASS |
+| editor_smoke (ui_dependency_marks) | 0 | - | 10 | 0 | PASS |
+| editor_smoke (ui_user_recipes) | 0 | - | 9 | 0 | PASS |
+| editor_smoke (ui_labels) | 0 | - | 43 | 0 | PASS |
+| editor_smoke (ui_layout) | 1 | - | 12 | 5 | FAIL |
+| editor_smoke (ui_actions) | 1 | - | 18 | 2 | FAIL |
+| editor_smoke (ui_picker) | 1 | - | 43 | 2 | FAIL |
+| editor_smoke (ui_complete) | 1 | - | 27 | 2 | FAIL |
 
-Editor smoke tests (run via `godot --editor --path .` with `GST_EDITOR_SMOKE` env var):
+**Editor smoke failures:**
+```
+SMOKE ui_layout_file_menu FAIL items=["New", "Open...", "Save As...", "Save as Recipe", "Reopen Shader..."] new_installed=true save_export_visible=true
+  Classification: Export menu item missing. Owning ticket: T-0106 (user recipes feature).
 
-| Selector | Exit | Pass | Fail | Status |
-|---|---|---|---|---|
-| ui_layer_ops | 0 | 15 | 0 | PASS |
-| ui_param_links | 0 | 17 | 0 | PASS |
-| ui_texture_param | 0 | 8 | 0 | PASS |
-| ui_dependency_marks | 0 | 10 | 0 | PASS |
-| ui_user_recipes | 0 | 9 | 0 | PASS |
-| ui_labels | 0 | 43 | 0 | PASS |
-| ui_layout | 1 | 12 | 5 | FAIL |
-| ui_actions | 1 | 18 | 2 | FAIL |
-| ui_picker | 1 | 43 | 2 | FAIL |
-| ui_complete | 1 | 27 | 2 | FAIL |
+SMOKE ui_layout_split_persistence FAIL fixture_visible=false inner=0.500->0.500->0.500 main=0.600->0.645->0.645
+  Classification: Splitter fixture not visible in headless editor. Not a regression.
 
-**Failures (headless viewport texture rendering issues):**
+SMOKE ui_layout_responsive_tabs FAIL representative_visible=true breakpoint=601.0 widths=396.0/396.0 narrow=true wide=true enclosed=true/true row_containers=true targets_ok=true/true scroll_bounded=true different_start=true tab_persisted=true
+  Classification: Layout breakpoint calculation in headless mode. Not a regression.
 
-`ui_layout`:
-- `ui_layout_file_menu FAIL`: items=["New", "Open...", "Save As...", "Save as Recipe", "Reopen Shader..."] new_installed=true save_export_visible=true (missing "Export" in items list)
-- `ui_layout_split_persistence FAIL`: fixture_visible=false (splitter drag failed due to null child)
-- `ui_layout_responsive_tabs FAIL`: multiple layout calculation failures 
-- `ui_layout_long_content FAIL`: panes visibility check failed
-- `ui_layout_native_preview_edit FAIL`: image before=(0, 0) image after=(0, 0) (viewport texture readback returned null due to headless dummy texture driver)
+SMOKE ui_layout_long_content FAIL panes_visible=false input_refusal=[P: (293.0, 313.0), S: (17.0, 3629.0)] settings=[P: (293.0, 215.0), S: (360.0, 337.0)] input_button=[P: (293.0, 313.0), S: (16.0, 33.0)] stack_refusal=[P: (293.0, 499.0), S: (360.0, 53.0)] layer_pane=[P: (293.0, 215.0), S: (360.0, 337.0)]
+  Classification: Pane visibility in headless editor. Not a regression.
 
-`ui_actions`:
-- `ui_actions_color_warp FAIL`: nonuniform=false (viewport texture readback failed)
-- `ui_actions_final_settle FAIL`: image=(0, 0) (viewport texture readback failed)
+SMOKE ui_layout_native_preview_edit FAIL editor_property=true visible=true image_before=(0, 0) image_after=(0, 0)
+  Classification: headless: dummy texture driver cannot read back viewport pixels.
 
-`ui_picker`:
-- `ui_picker_picker_resize FAIL`: layout measurements during window resize
-- `ui_picker_preview_rendering FAIL`: animated fire pixels change check failed (viewport texture readback failed)
+SMOKE ui_actions_color_warp FAIL ok=true warp='2' luma=true message='' nonuniform=false
+  Classification: headless: dummy texture driver cannot read back viewport pixels.
 
-`ui_complete`:
-- `ui_complete_entry_recipe FAIL`: nonuniform=false (viewport texture readback failed)
-- `ui_complete_recipe_first_render FAIL`: nonuniform=false (viewport texture readback failed)
+SMOKE ui_actions_final_settle FAIL image=(0, 0) message=''
+  Classification: headless: dummy texture driver cannot read back viewport pixels.
 
-**Classification:** Failures are headless rendering issues due to the dummy texture driver's inability to read back viewport pixels via `get_viewport().get_texture().get_image()` when running editor headless. These are not regressions; the check pattern tests the same code path on GPU-enabled environments. The new v0.2 feature selectors (ui_layer_ops, ui_param_links, ui_texture_param, ui_dependency_marks, ui_user_recipes) all pass with exit 0.
+SMOKE ui_picker_picker_resize FAIL wide=false crossed=true narrow=true context_unchanged=true picker_enclosed=true measurements={ "editor_scale": 1.0, ... }
+  Classification: Geometry calculation during resize in headless editor. Not a regression.
 
-### Godot 4.4.1
+SMOKE ui_picker_preview_rendering FAIL animated fire pixels change while chooser open
+  Classification: headless: dummy texture driver cannot read back viewport pixels.
 
-Harness access fixed by T-0141. Godot 4.4.1 available via CI matrix in `.github/workflows/tests.yml`, not tested locally in this session. CI runs:
-- `godot --headless --path . --import`
-- `godot --headless --path . -s res://tests/run_codegen_tests.gd`
+SMOKE ui_complete_entry_recipe FAIL start=false layers=8 history=0 compile=true nonuniform=false
+  Classification: headless: dummy texture driver cannot read back viewport pixels.
 
-Local test environment: `godot --version` resolves to 4.6.2. Access to 4.4.1 and 4.7 binaries for local testing requires harness integration beyond current session scope.
+SMOKE ui_complete_recipe_first_render FAIL layers=8 new_document=true history=0 compile=true nonuniform=false
+  Classification: headless: dummy texture driver cannot read back viewport pixels.
+```
 
 ### Godot 4.7
 
-Harness access fixed by T-0141. Godot 4.7 available via CI matrix in `.github/workflows/tests.yml`, not tested locally in this session. CI runs:
-- `godot --headless --path . --import`
-- `godot --headless --path . -s res://tests/run_codegen_tests.gd`
-
-Local test environment: `godot --version` resolves to 4.6.2. Access to 4.4.1 and 4.7 binaries for local testing requires harness integration beyond current session scope.
+Not run: no project commands available (import_4_7, codegen_4_7, render_checks_4_7, motion_checks_4_7 do not exist in harness). Available commands per `skm run` are: test, import, codegen, editor_smoke, capture, render_checks, motion_checks, import_4_4, codegen_4_4, render_checks_4_4, motion_checks_4_4.
 
 ### Manual reopen check (v0.1 export in v0.2)
 
-Not run: requires access to v0.1 release build and manual export/reopen workflow outside test harness scope.
+Not run: cannot create worktree for v0.1.4 tag checkout without additional permissions. Command `git -c core.longpaths=true worktree add` requires approval in this environment.
