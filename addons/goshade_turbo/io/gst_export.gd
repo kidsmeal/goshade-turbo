@@ -40,10 +40,12 @@ static func write(stack: GSTStack, library: GSTLibrary, path: String, confirm_ov
 
 
 ## Reopens a stack from an exported .gdshader's embedded header.
-## `{ok, stack, reason, body_differs}`. A missing file, a missing "// stack:"
-## header, or an unparsable/unknown-schema header refuses with `ok = false`;
-## no empty stack is offered. On success `body_differs` is GSTOverwriteCheck's
-## verdict: true means the body was edited after export.
+## `{ok, stack, reason, body_differs}`, plus `missing_textures` on success. A
+## missing file, a missing "// stack:" header, or an unparsable/unknown-schema
+## header refuses with `ok = false`; no empty stack is offered. On success
+## `body_differs` is GSTOverwriteCheck's verdict: true means the body was
+## edited after export. `missing_textures` is GSTHeader.parse's list of
+## texture paths that did not load (decision 27).
 static func reopen(path: String, library: GSTLibrary) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {"ok": false, "stack": null, "reason": "%s does not exist" % path, "body_differs": false}
@@ -71,4 +73,4 @@ static func reopen(path: String, library: GSTLibrary) -> Dictionary:
 		}
 
 	var check_result: Dictionary = GSTOverwriteCheck.check(path, library)
-	return {"ok": true, "stack": parsed["stack"], "reason": "", "body_differs": check_result["differs"]}
+	return {"ok": true, "stack": parsed["stack"], "reason": "", "body_differs": check_result["differs"], "missing_textures": parsed["missing_textures"]}
