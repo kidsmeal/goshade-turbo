@@ -4898,10 +4898,10 @@ Godot versions run: none (harness blocked Godot execution).
 
 ## v0.2 test matrix (2026-10-11)
 
-**Outstanding: accept checks 1 and 2 require completion**
-- Accept check 1: missing selector rows (tabs_proof, tabs_native, tabs_documents, tabs_ui, tabs_files, tabs_close, tabs_recovery, tabs_host, phases 5-8, default phase 4)
-- Accept check 2: owning tickets needed for 4.6.2 smoke failures (currently vague classifications like "Not a regression", "env", "headless")
-- Accept check 3: PASS - v0.1 export reopens in v0.2 with documented hand-edit warning
+Accept check status:
+- Check 1: INCOMPLETE - 4.4 and 4.6.2 core tests present; missing 14 selector rows (tabs_proof, tabs_native, tabs_documents, tabs_ui, tabs_files, tabs_close, tabs_recovery, tabs_host, phases 5-8, default phase 4)
+- Check 2: INCOMPLETE - 4.4 codegen has T-0108 ownership; 4.6.2 failures lack specific owning tickets (9 failures with vague classifications)
+- Check 3: PASS - v0.1 export reopens in v0.2; hand-edit warning recorded with exact message text
 
 ### Godot 4.4.stable.official.4c311cbee
 
