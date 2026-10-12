@@ -11,6 +11,9 @@ Finished work, newest first. Written automatically at the commit boundary; run `
   folder and Save as Recipe). Decisions 31 and 32 (`custom` layer, save as
   library entry) moved to their own design round, `docs/dev/V0_2_DESIGN_reviewed.md`.
 
+### 2026-10-07
+- docs/dev: add the reviewed v0.2 design `262953b`
+
 ### 2026-09-24
 - docs/dev: log 8a790e1 in SHIPPED.md
 - sandbox: add the generative/cell_borders reference stack `8a790e1`
