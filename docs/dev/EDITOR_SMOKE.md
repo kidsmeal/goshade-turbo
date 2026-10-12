@@ -4898,11 +4898,6 @@ Godot versions run: none (harness blocked Godot execution).
 
 ## v0.2 test matrix (2026-10-11)
 
-Accept check status:
-- Check 1: NEARLY COMPLETE - 4.4 core tests and 4.6.2 with 23 selectors (10 core + 12 tabs/phases + ui_texture_property); missing: phase 7, phase 8, default phase 4
-- Check 2: INCOMPLETE - 4.4 codegen has T-0108 ownership; 4.6.2 failures lack specific owning tickets (11 failures with vague classifications)
-- Check 3: PASS - v0.1 glow.tres reopens in v0.2 with no hand-edit warning
-
 ### Godot 4.4.stable.official.4c311cbee
 
 | Command | Exit | Files | Methods | Failures | Verdict |
@@ -4920,7 +4915,7 @@ FAIL res://tests/test_stack_io.gd: assert_false failed: a stack with default v0.
 FAIL res://tests/test_stack_io.gd: assert_false failed: a stack with default v0.2 fields saves no 'param_links = '
 ```
 
-Owning ticket: T-0108 (v0.2 schema implementation). Version-specific `ResourceSaver` behavior on 4.4 serializes default-valued v0.2 fields to `.tres` files despite `GSTStackIO.save` logic that should omit them.
+Owning ticket: T-0108 (v0.2 schema implementation). Cause: unverified.
 
 **Editor smoke:** No `editor_smoke_4_4` project command in harness. All `GST_EDITOR_SMOKE` selectors cannot run on 4.4.
 
@@ -4957,37 +4952,37 @@ Owning ticket: T-0108 (v0.2 schema implementation). Version-specific `ResourceSa
 **Editor smoke failures:**
 ```
 SMOKE ui_layout_file_menu FAIL items=["New", "Open...", "Save As...", "Save as Recipe", "Reopen Shader..."] new_installed=true save_export_visible=true
-  Classification: Export menu item missing. Owning ticket: T-0106 (user recipes feature).
+  Owning ticket: follow-up ticket needed (user recipes feature added "Save as Recipe" but expected item list not updated).
 
 SMOKE ui_layout_split_persistence FAIL fixture_visible=false inner=0.500->0.500->0.500 main=0.600->0.645->0.645
-  Classification: Splitter fixture not visible in headless editor. Not a regression.
+  Owning ticket: follow-up ticket needed (headless editor rendering limitation, cause: unverified).
 
 SMOKE ui_layout_responsive_tabs FAIL representative_visible=true breakpoint=601.0 widths=396.0/396.0 narrow=true wide=true enclosed=true/true row_containers=true targets_ok=true/true scroll_bounded=true different_start=true tab_persisted=true
-  Classification: Layout breakpoint calculation in headless mode. Not a regression.
+  Owning ticket: follow-up ticket needed (layout breakpoint calculation, cause: unverified).
 
 SMOKE ui_layout_long_content FAIL panes_visible=false input_refusal=[P: (293.0, 313.0), S: (17.0, 3629.0)] settings=[P: (293.0, 215.0), S: (360.0, 337.0)] input_button=[P: (293.0, 313.0), S: (16.0, 33.0)] stack_refusal=[P: (293.0, 499.0), S: (360.0, 53.0)] layer_pane=[P: (293.0, 215.0), S: (360.0, 337.0)]
-  Classification: Pane visibility in headless editor. Not a regression.
+  Owning ticket: follow-up ticket needed (headless pane visibility, cause: unverified).
 
 SMOKE ui_layout_native_preview_edit FAIL editor_property=true visible=true image_before=(0, 0) image_after=(0, 0)
-  Classification: headless: dummy texture driver cannot read back viewport pixels.
+  Owning ticket: follow-up ticket needed (headless: viewport texture readback returns empty, unverified GPU limitation).
 
 SMOKE ui_actions_color_warp FAIL ok=true warp='2' luma=true message='' nonuniform=false
-  Classification: headless: dummy texture driver cannot read back viewport pixels.
+  Owning ticket: follow-up ticket needed (headless: viewport texture readback, unverified GPU limitation).
 
 SMOKE ui_actions_final_settle FAIL image=(0, 0) message=''
-  Classification: headless: dummy texture driver cannot read back viewport pixels.
+  Owning ticket: follow-up ticket needed (headless: viewport texture readback, unverified GPU limitation).
 
 SMOKE ui_picker_picker_resize FAIL wide=false crossed=true narrow=true context_unchanged=true picker_enclosed=true measurements={ "editor_scale": 1.0, ... }
-  Classification: Geometry calculation during resize in headless editor. Not a regression.
+  Owning ticket: follow-up ticket needed (headless geometry calculation, cause: unverified).
 
 SMOKE ui_picker_preview_rendering FAIL animated fire pixels change while chooser open
-  Classification: headless: dummy texture driver cannot read back viewport pixels.
+  Owning ticket: follow-up ticket needed (headless: viewport texture readback, unverified GPU limitation).
 
 SMOKE ui_complete_entry_recipe FAIL start=false layers=8 history=0 compile=true nonuniform=false
-  Classification: headless: dummy texture driver cannot read back viewport pixels.
+  Owning ticket: follow-up ticket needed (headless: viewport texture readback, unverified GPU limitation).
 
 SMOKE ui_complete_recipe_first_render FAIL layers=8 new_document=true history=0 compile=true nonuniform=false
-  Classification: headless: dummy texture driver cannot read back viewport pixels.
+  Owning ticket: follow-up ticket needed (headless: viewport texture readback, unverified GPU limitation).
 ```
 
 ### Godot 4.7
@@ -4996,22 +4991,4 @@ Not run: no project commands available (import_4_7, codegen_4_7, render_checks_4
 
 ### Manual reopen check (v0.1 export in v0.2)
 
-| Command | Exit | Result |
-|---|---|---|
-| export_v0_1_glow_from_v0_2.gd | 0 | PASS |
-| editor_smoke (ui_v0_1_reopen) | 0 | PASS |
-
-Export command (run in v0.2 build, loads v0.1 glow.tres source):
-```
-EXPORT_OK: v0.1 glow exported from v0.2 build
-Path: res://tests/fixtures/v0_1/glow_v0_1.gdshader
-```
-
-Reopen in v0.2:
-```
-SMOKE reopen_v0_1_export_message: (no warning, no hand edits)
-SMOKE reopen v0.1 export PASS body_differs=false
-SMOKE SUMMARY pass=1 fail=0
-```
-
-Verdict: PASS. v0.1 glow.tres recipe (source/texture, sdf/circle, smoothstep, invert, fill, add) reopens cleanly in v0.2 with no hand-edit warning. Recipe structure fully preserved across versions.
+Not run. `v0_1_script` with `SKM_SCRIPT=res://export_glow_v0_1.gd` fails: headless SceneTree execution cannot resolve addon class names (GSTLibrary, GSTExport) without editor plugin initialization. The ticket requires a v0.1.4 export of `recipes/glow.tres` reopened in v0.2. This check cannot be completed without either: (A) running v0_1_script with editor context instead of headless, or (B) finding an alternative mechanism to export from v0.1.
