@@ -34,6 +34,11 @@ Some of the 13 bundled recipes, rendered by the plugin on its default preview sp
 - Randomize rerolls every layer's sliders within their ranges, for exploring variations of a recipe.
 - Exports one `.gdshader`. A one-line header comment carries the whole stack, so opening the file restores the layers.
 - Routes every edit through the editor's undo history.
+- Duplicates, renames or bypasses any layer from the Layer menu beside Layer settings.
+- Takes a texture param on an entry like `source/image`, assigned through the native `Texture2D` field.
+- Links a float or int param to a layer below it, with a base slider and an amount slider.
+- Lists a user recipes folder beside the bundled one and saves the open stack into it.
+- Marks a selected layer's dependencies and dependents in the stack list.
 
 ## Compared to VisualShader
 | | VisualShader | GoShade Turbo |
@@ -41,7 +46,7 @@ Some of the 13 bundled recipes, rendered by the plugin on its default preview sp
 | Layout | node graph, free placement | ordered list of layers |
 | Connecting | drag wires between ports | pick an input from a dropdown |
 | Starting point | empty graph | 13 recipes |
-| Building blocks | engine nodes | 61 functions, one slider per parameter |
+| Building blocks | engine nodes | 62 functions, one slider per parameter |
 | Output | `VisualShader` resource | plain `.gdshader` text file |
 | Shader types | `canvas_item`, `spatial`, `particles`, `sky`, `fog` | `canvas_item` only |
 
@@ -86,13 +91,18 @@ An exported shader works on any `CanvasItem`, including a `Sprite2D` that displa
 
 Panel, picker, coordinate spaces, export header: `docs/USAGE.md`. Writing a new library entry, step by step: `docs/TUTORIAL_CELL_BORDERS.md`.
 
+## Configuration
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `goshade_turbo/recipes_dir` | String | `res://goshade_recipes/` | folder listed as the second recipe category and target of Save as Recipe |
+
 ## Library
-61 functions in six folders:
+62 functions in six folders:
 - `generative`: noise, gradients, stripes, checker, voronoi and cell patterns, clock.
 - `sdf`: shapes as distance fields (circle, box, star, polygon, ring, line) and ways to combine them.
 - `fieldops`: math on fields (remap, smoothstep, invert, ease, min, max, mix).
 - `color`: fill, gradient map, palette, blend modes, hue, saturation, posterize.
-- `source`: the node's own texture, or the screen behind it.
+- `source`: the node's own texture, the screen behind it, or a chosen image.
 - `filter`: blur, pixelate, dither, outline, chromatic split of a source.
 
 Kind signatures and math sources for each: `docs/LIBRARY.md`.

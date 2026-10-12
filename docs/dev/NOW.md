@@ -17,11 +17,11 @@ Last touched: 2026-10-07
 
 ## Active thread (only one)
 
-**GoShade Turbo v0.2: one schema bump, layer ops, texture param and source/image, param links (base plus amount), user recipes**
+**GoShade Turbo v0.2 shipped: decisions 23-35 (`docs/dev/SHIPPED.md` 2026-10-11). No active thread.**
 
 Next physical action:
 
-- [ ] resolve the 4 open markers in docs/dev/V0_2_DESIGN_reviewed.md, then /claudhd:plan
+- [ ] no roadmap item committed next; `/claudhd:roadmap` the `custom` layer / save as library entry round (decisions 31, 32, `docs/dev/V0_2_DESIGN_reviewed.md`) or another `docs/dev/IDEAS.md` item, then `/claudhd:start`
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously commit the next one to the roadmap (`/claudhd:roadmap <intent>`) and activate it in its turn (`/claudhd:start <id>`).
 

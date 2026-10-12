@@ -26,6 +26,56 @@ Stack rules:
 - Every stack edit goes through the editor's undo history. Slider edits go
   through the inspector, so they do too.
 
+## Layer ops
+
+Duplicate, Rename and Bypass sit in the Layer menu beside the Layer
+settings heading, enabled while a layer is selected.
+
+Rename a layer:
+
+1. Select the layer in Layers.
+2. Layer menu > Rename. An inline edit opens over the row, prefilled with
+   the current label and the function name as a placeholder.
+3. Type a label and press Enter, or click elsewhere to commit; Escape
+   cancels. An empty label is legal and the row falls back to the function
+   name.
+
+Bypass a layer:
+
+1. Select the layer in Layers.
+2. Layer menu > Bypass. An operator emits its first same-kind input
+   unchanged, converting it when no same-kind input exists; a filter
+   emits its source unchanged.
+3. A generator, a source, or any layer with no input refuses bypass; the
+   stack list's refusal line gives the reason and the toggle stays
+   unchecked.
+4. Layer menu > Bypass again restores the layer.
+
+## Param links
+
+A link button sits beside every `float` or `int` param's slider in Layer
+settings. `color`, `vec3` and `texture` params do not link.
+
+1. Select the layer whose param should follow another layer.
+2. Click Link beside the param's slider. The picker opens listing only
+   field and color layers below the current layer; a `color` target
+   converts through luma.
+3. Pick a target. The row keeps its base slider and adds a target line:
+   the target's label or function name, and an amount slider from `-1`
+   to `1`, default `1.0`.
+4. Click Unlink to remove the target line; the base slider keeps its
+   value.
+
+## `source/image`
+
+1. Add `source/image` from the picker's `source` group.
+2. In Layer settings, assign a `Texture2D` to its `Image` field, the
+   entry's one texture param, the same as any native texture property.
+3. Scale, offset, rotation, scroll and distortion apply through the
+   entry's own Position and movement group.
+4. Reopening a stack whose image file is missing still opens the stack
+   and reports the missing path in the document's message label.
+
 ## Recipes
 
 `Recipes` in the toolbar lists the `.tres` files under
@@ -34,6 +84,18 @@ Stack rules:
 `Randomize` is enabled while a recipe is open. It sets every layer's
 sliders to random values inside their ranges and leaves Position and
 movement untouched. One undo reverts it.
+
+Save a recipe:
+
+1. File > Save as Recipe.
+2. The file name comes from the open file's name, the open recipe's
+   name, or the tab name; it writes into the folder named by the
+   `goshade_turbo/recipes_dir` project setting (default
+   `res://goshade_recipes/`), creating the folder if missing.
+3. An existing file of that name asks before overwriting. Save as Recipe
+   leaves the open document unchanged and opens nothing.
+4. The saved recipe lists in `Recipes` after the bundled ones; a user
+   recipe can share a bundled recipe's name.
 
 ## Export
 

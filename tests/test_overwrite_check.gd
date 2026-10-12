@@ -100,6 +100,44 @@ func test_unedited_v0_1_export_reports_no_hand_edit() -> void:
 	DirAccess.remove_absolute(path)
 
 
+## The first line where `a` and `b` differ, as "line N: <a> | <b>", or "" when
+## equal. Names the drifted codegen line in a failure message.
+func _first_line_difference(a: String, b: String) -> String:
+	var a_lines: PackedStringArray = a.split("\n")
+	var b_lines: PackedStringArray = b.split("\n")
+	for i: int in range(maxi(a_lines.size(), b_lines.size())):
+		var a_line: String = a_lines[i] if i < a_lines.size() else "<end>"
+		var b_line: String = b_lines[i] if i < b_lines.size() else "<end>"
+		if a_line != b_line:
+			return "line %d: %s | %s" % [i + 1, a_line, b_line]
+	return ""
+
+
+## The real v0.1.4 export sandbox/logo/logo.gdshader, unedited since that
+## tag, never reopens with the hand-edit warning. With a scanned library it
+## reopens with `body_differs == false`. With an unscanned library (the call
+## that reported the bug) no manifest resolves and reopen refuses naming the
+## entry, where it used to report the regeneration failure as
+## `body_differs == true` (decision 23).
+func test_v0_1_4_logo_export_reopen_does_not_flag_hand_edit() -> void:
+	var lib: GSTLibrary = _scanned_library()
+	var path: String = "res://sandbox/logo/logo.gdshader"
+
+	var reopen_result: Dictionary = GSTExport.reopen(path, lib)
+	assert_true(reopen_result["ok"], "the v0.1.4 logo export reopens: %s" % reopen_result["reason"])
+	if reopen_result["ok"]:
+		var regenerated: GSTCodegenResult = GSTCodegen.generate_result(reopen_result["stack"], lib)
+		assert_true(regenerated.ok(), "the reopened logo stack regenerates: %s" % regenerated.error)
+		var on_disk_body: String = GSTOverwriteCheck.find_header_line(_read_text(path))["body"]
+		var fresh_body: String = GSTOverwriteCheck.find_header_line(regenerated.code)["body"]
+		assert_false(reopen_result["body_differs"], "reopen does not flag the v0.1.4 logo body as hand-edited, first difference (on disk | fresh): %s" % _first_line_difference(on_disk_body, fresh_body))
+
+	var unscanned_result: Dictionary = GSTExport.reopen(path, GSTLibrary.new())
+	assert_false(unscanned_result["body_differs"], "an unscanned library does not report the logo body as hand-edited")
+	assert_false(unscanned_result["ok"], "an unscanned library refuses the reopen")
+	assert_true(String(unscanned_result["reason"]).contains("unresolved entry source/texture"), "the refusal names the first unresolved entry: %s" % unscanned_result["reason"])
+
+
 ## A schema 1 stack touching every body path codegen emits: a generator with
 ## scroll, warp and tuned params, a field op, a color-to-field luma slot, a
 ## field-to-color op, a texture source, a filter and a three-input color op.

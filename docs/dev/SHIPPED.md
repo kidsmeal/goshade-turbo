@@ -4,6 +4,16 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
+### 2026-10-11
+- GoShade Turbo v0.2: decisions 23 through 35 shipped (schema bump; layer
+  duplicate, rename, bypass; texture param type and `source/image`; param
+  links with link UI; dependency marks in the stack list; user recipes
+  folder and Save as Recipe). Decisions 31 and 32 (`custom` layer, save as
+  library entry) moved to their own design round, `docs/dev/V0_2_DESIGN_reviewed.md`.
+
+### 2026-10-07
+- docs/dev: add the reviewed v0.2 design `262953b`
+
 ### 2026-09-24
 - docs/dev: log 8a790e1 in SHIPPED.md
 - sandbox: add the generative/cell_borders reference stack `8a790e1`

@@ -1,11 +1,11 @@
 # Library
 
-61 functions, one row per manifest under `addons/goshade_turbo/library/`.
+62 functions, one row per manifest under `addons/goshade_turbo/library/`.
 The kind signature reads `(input kinds) -> output kind`. `field` is a
 scalar, `color` is a `vec4`. `(generator)` entries take a coord block
-instead of input slots. `(source)` entries read `TEXTURE` or the screen
-texture. `(filter)` entries take a `texture` or `screen` source layer and
-sample it at neighbor offsets.
+instead of input slots. `(source)` entries read `TEXTURE`, the screen
+texture, or a chosen image (`source/image`). `(filter)` entries take a
+`texture` or `screen` source layer and sample it at neighbor offsets.
 
 Regenerate this table after a library change and paste the output over it:
 
@@ -74,6 +74,7 @@ godot --headless --path . -s res://tests/print_roster.gd
 | `sdf/star` | `sdf_star` | () -> field (generator) | own construction: fold the angle into one of 5 sectors, linearly interpolate the local radius between the outer radius and radius * inner_ratio across the sector, then subtract from length(p). In the spirit of the polar-coordinate constructions in Inigo Quilez's "2D distance functions", https://iquilezles.org/articles/distfunctions2d/, entry "Star 5" (which this does not reproduce verbatim). |
 | `sdf/subtract` | `sdf_subtract` | (field, field) -> field | opSubtraction(d1, d2) = max(-d1, d2), applied here as subtract(a, b) = max(a, -b) so b is the shape removed from a. Inigo Quilez, "2D distance functions", https://iquilezles.org/articles/distfunctions2d/, section "Combinations". |
 | `sdf/union` | `sdf_union` | (field, field) -> field | opUnion(d1, d2) = min(d1, d2). Inigo Quilez, "2D distance functions", https://iquilezles.org/articles/distfunctions2d/, section "Combinations". |
+| `source/image` | `image` | () -> color (source) | Godot 4 shading language built-in: texture() on a uniform sampler2D (Godot shading language reference, uniforms and built-in functions). |
 | `source/screen` | `gst_source_screen` | () -> color (source) | Godot 4 canvas_item shader built-in: hint_screen_texture sampler2D read at SCREEN_UV (Godot shading language reference, canvas_item built-ins). |
 | `source/texture` | `gst_source_texture` | () -> color (source) | Godot 4 canvas_item shader built-in: TEXTURE sampler2D (Godot shading language reference, canvas_item built-ins). |
 
