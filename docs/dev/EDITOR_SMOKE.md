@@ -4948,6 +4948,9 @@ Owning ticket: T-0108 (v0.2 schema implementation). Cause: unverified.
 | editor_smoke (ui_texture_property) | 0 | - | 8 | 0 | PASS |
 | editor_smoke (5) | 1 | - | 14 | 3 | FAIL |
 | editor_smoke (6) | 1 | - | 22 | 1 | FAIL |
+| editor_smoke (7) | 0 | - | 25 | 0 | PASS |
+| editor_smoke (8) | 1 | - | 16 | 1 | FAIL |
+| editor_smoke (default phase 4) | 0 | - | 50 | 0 | PASS |
 
 **Editor smoke failures:**
 ```
@@ -4983,6 +4986,15 @@ SMOKE ui_complete_entry_recipe FAIL start=false layers=8 history=0 compile=true 
 
 SMOKE ui_complete_recipe_first_render FAIL layers=8 new_document=true history=0 compile=true nonuniform=false
   Owning ticket: follow-up ticket needed (headless: viewport texture readback, unverified GPU limitation).
+
+SMOKE restoration_before_entry FAIL start_screen_hidden=false untitled_ok=false failed_ok=false document_count=1
+  Owning ticket: follow-up ticket needed (document recovery initialization, cause: unverified).
+
+SMOKE post_restart_save_cleanup FAIL save_result={  }
+  Owning ticket: follow-up ticket needed (post-restart save cleanup, cause: unverified).
+
+SMOKE post_restart_discard_cleanup FAIL discard_ok=false
+  Owning ticket: follow-up ticket needed (post-restart discard cleanup, cause: unverified).
 ```
 
 ### Godot 4.7
