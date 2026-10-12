@@ -4,6 +4,9 @@ Finished work, newest first. Written automatically at the commit boundary; run `
 
 <!-- last-sha: 9b3b15d3efbd6ab1c2c391227b7f62f930f18eb9 -->
 
+### 2026-10-07
+- docs/dev: add the reviewed v0.2 design `262953b`
+
 ### 2026-09-24
 - docs/dev: log 8a790e1 in SHIPPED.md
 - sandbox: add the generative/cell_borders reference stack `8a790e1`
