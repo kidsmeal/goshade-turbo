@@ -4975,7 +4975,7 @@ SMOKE ui_actions_color_warp FAIL ok=true warp='2' luma=true message='' nonunifor
 SMOKE ui_actions_final_settle FAIL image=(0, 0) message=''
   Owning ticket: follow-up ticket needed (headless: viewport texture readback, unverified GPU limitation).
 
-SMOKE ui_picker_picker_resize FAIL wide=false crossed=true narrow=true context_unchanged=true picker_enclosed=true measurements={ "editor_scale": 1.0, ... }
+SMOKE ui_picker_picker_resize FAIL wide=false crossed=true narrow=true context_unchanged=true picker_enclosed=true measurements={ "editor_scale": 1.0, "host_rect": [P: (287.0, 80.0), S: (623.0, 511.0)], "root_rect": [P: (287.0, 80.0), S: (623.0, 511.0)], "editing_rect": [P: (287.0, 177.0), S: (396.0, 414.0)], "preview_area_rect": [P: (686.0, 177.0), S: (224.0, 414.0)], "preview_rect": [P: (686.0, 259.0), S: (224.0, 180.0)], "output_rect": [P: (686.0, 488.0), S: (224.0, 103.0)], "editing_minimum": (384.0, 0.0), "preview_minimum": (220.0, 180.0), "main_divider_width": 3.0, "main_minimums_permit_default": false, "main_ratio": 0.63870967741935, "inner_ratio": 0.5, "main_ratio_min": 0.61935483870968, "main_ratio_max": 0.64516129032258, "inner_ratio_min": 0.27864583333333, "inner_ratio_max": 0.5, "tab_breakpoint": 601.0, "narrow": true }
   Owning ticket: follow-up ticket needed (headless geometry calculation, cause: unverified).
 
 SMOKE ui_picker_preview_rendering FAIL animated fire pixels change while chooser open
@@ -4986,6 +4986,42 @@ SMOKE ui_complete_entry_recipe FAIL start=false layers=8 history=0 compile=true 
 
 SMOKE ui_complete_recipe_first_render FAIL layers=8 new_document=true history=0 compile=true nonuniform=false
   Owning ticket: follow-up ticket needed (headless: viewport texture readback, unverified GPU limitation).
+
+SMOKE tabs_proof_probe FAIL shutdown probe plugin is not active
+  Owning ticket: follow-up ticket needed (tabs proof shutdown, cause: unverified).
+
+SMOKE phase5_1 FAIL checker layer nonuniform=false UI checker outside viewport=true img_null=true
+  Owning ticket: follow-up ticket needed (phase 5 checker render, cause: unverified).
+
+SMOKE phase5_2 FAIL checker scale via real production EditorProperty row found=true coord.scale=(6.0, 6.0) uniform=(6.0, 6.0) (expect (6.0, 6.0)) image_changed=false
+  Owning ticket: follow-up ticket needed (phase 5 checker scale, cause: unverified).
+
+SMOKE phase5_3a FAIL preset=text material_same=true message='Preview: Text preview: use screen_uv for coordinates across the screen.' text_nonuniform=false differs_from_sprite=false
+  Owning ticket: follow-up ticket needed (phase 5 preset text, cause: unverified).
+
+SMOKE phase5_3b FAIL full_rect_nonuniform=false sprite_nonuniform=false material_still_same=true
+  Owning ticket: follow-up ticket needed (phase 5 full rect, cause: unverified).
+
+SMOKE phase5_5 FAIL texture source center pixel got=(0.0, 0.0, 0.0, 1.0) want=(0.0, 0.0, 0.0, 1.0) alpha_delta=0.0000
+  Owning ticket: follow-up ticket needed (phase 5 texture source, cause: unverified).
+
+SMOKE phase5_6 FAIL screen source center pixel got=(0.0, 0.0, 0.0, 1.0) want=(0.0, 0.0, 0.0, 1.0) alpha_delta=0.0000
+  Owning ticket: follow-up ticket needed (phase 5 screen source, cause: unverified).
+
+SMOKE phase5_7d1 FAIL uv checker corner samples=[(0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0)] (expect not all equal)
+  Owning ticket: follow-up ticket needed (phase 5 uv checker corners, cause: unverified).
+
+SMOKE phase5_7d2 FAIL local corner samples=[(0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0)] match uv corner samples=[(0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0)] (tolerance 0.05)
+  Owning ticket: follow-up ticket needed (phase 5 local corners, cause: unverified).
+
+SMOKE phase5_7d3 FAIL local rotation=0.4 same_frame_size=false changed_fraction=0.0000 (expect >=0.1)
+  Owning ticket: follow-up ticket needed (phase 5 local rotation, cause: unverified).
+
+SMOKE phase6_4 FAIL _on_open_file_selected: ids_match=true params_match=true (octaves=6) preview_nonuniform=false current_path='res://sandbox/stacks/gst_editor_smoke_phase6.tres' (expect 'res://sandbox/stacks/gst_editor_smoke_phase6.tres')
+  Owning ticket: follow-up ticket needed (phase 6 open file, cause: unverified).
+
+SMOKE phase8_3 FAIL preview renders non-uniform pixels after randomize (img_null=true)
+  Owning ticket: follow-up ticket needed (phase 8 randomize preview, cause: unverified).
 
 SMOKE restoration_before_entry FAIL start_screen_hidden=false untitled_ok=false failed_ok=false document_count=1
   Owning ticket: follow-up ticket needed (document recovery initialization, cause: unverified).
@@ -5003,4 +5039,16 @@ Not run: no project commands available (import_4_7, codegen_4_7, render_checks_4
 
 ### Manual reopen check (v0.1 export in v0.2)
 
-Not run. Attempted `v0_1_script` with `SKM_SCRIPT=res://export_glow_v0_1.gd`. Blocker: headless SceneTree execution cannot resolve addon class names. Requires: (1) run `checkout_v0_1` to initialize v0.1 class cache, (2) capture verbatim error output from `v0_1_script`, (3) determine if v0.1 export mechanism is feasible or requires alternative approach.
+Not feasible. Ran `checkout_v0_1`, then `v0_1_script` with `SKM_SCRIPT=res://export_glow_v0_1.gd` using load() for class references. Result: addon class resolution fails in v0.1 headless context.
+
+Verbatim error output:
+```
+ERROR: Attempt to open script 'res://addons/goshade_turbo/model/gst_library.gd' resulted in error 'File not found'.
+SCRIPT ERROR: Parse Error: Could not find type "GSTStack" in the current scope.
+SCRIPT ERROR: Parse Error: Could not find type "GSTLibrary" in the current scope.
+SCRIPT ERROR: Parse Error: Could not find type "GSTCodegenResult" in the current scope.
+ERROR: Failed to load script "res://addons/goshade_turbo/io/gst_export.gd" with error "Parse error".
+SCRIPT ERROR: Attempt to call function 'new' in base 'null instance' on a null instance.
+```
+
+Conclusion: v0.1 addon structure differs from v0.2; addon classes unavailable in headless SceneTree. Export reopen validation requires manual inspection or v0.1 compatible export mechanism.
