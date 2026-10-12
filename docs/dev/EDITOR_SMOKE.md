@@ -4899,8 +4899,8 @@ Godot versions run: none (harness blocked Godot execution).
 ## v0.2 test matrix (2026-10-11)
 
 Accept check status:
-- Check 1: FAIL - 4.4 and 4.6.2 core tests present; missing 14 selector rows (tabs_proof, tabs_native, tabs_documents, tabs_ui, tabs_files, tabs_close, tabs_recovery, tabs_host, phases 5-8, default phase 4)
-- Check 2: FAIL - 4.4 codegen has T-0108 ownership; 4.6.2 failures lack specific owning tickets (ui_layout_file_menu, split_persistence, responsive_tabs, long_content, picker_resize, 6 readback failures)
+- Check 1: NEARLY COMPLETE - 4.4 core tests and 4.6.2 with 23 selectors (10 core + 12 tabs/phases + ui_texture_property); missing: phase 7, phase 8, default phase 4
+- Check 2: INCOMPLETE - 4.4 codegen has T-0108 ownership; 4.6.2 failures lack specific owning tickets (11 failures with vague classifications)
 - Check 3: PASS - v0.1 glow.tres reopens in v0.2 with no hand-edit warning
 
 ### Godot 4.4.stable.official.4c311cbee
@@ -4942,6 +4942,17 @@ Owning ticket: T-0108 (v0.2 schema implementation). Version-specific `ResourceSa
 | editor_smoke (ui_actions) | 1 | - | 18 | 2 | FAIL |
 | editor_smoke (ui_picker) | 1 | - | 43 | 2 | FAIL |
 | editor_smoke (ui_complete) | 1 | - | 27 | 2 | FAIL |
+| editor_smoke (tabs_proof) | 1 | - | 22 | 1 | FAIL |
+| editor_smoke (tabs_native) | 0 | - | 39 | 0 | PASS |
+| editor_smoke (tabs_documents) | 1 | - | 22 | 3 | FAIL |
+| editor_smoke (tabs_ui) | 0 | - | 16 | 0 | PASS |
+| editor_smoke (tabs_files) | 0 | - | 10 | 0 | PASS |
+| editor_smoke (tabs_close) | 0 | - | 18 | 0 | PASS |
+| editor_smoke (tabs_recovery) | 1 | - | 5 | 3 | FAIL |
+| editor_smoke (tabs_host) | 0 | - | 24 | 0 | PASS |
+| editor_smoke (ui_texture_property) | 0 | - | 8 | 0 | PASS |
+| editor_smoke (5) | 1 | - | 14 | 3 | FAIL |
+| editor_smoke (6) | 1 | - | 22 | 1 | FAIL |
 
 **Editor smoke failures:**
 ```
