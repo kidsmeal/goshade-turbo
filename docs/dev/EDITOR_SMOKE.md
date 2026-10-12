@@ -5003,4 +5003,4 @@ Not run: no project commands available (import_4_7, codegen_4_7, render_checks_4
 
 ### Manual reopen check (v0.1 export in v0.2)
 
-Not run. `v0_1_script` with `SKM_SCRIPT=res://export_glow_v0_1.gd` fails: headless SceneTree execution cannot resolve addon class names (GSTLibrary, GSTExport) without editor plugin initialization. The ticket requires a v0.1.4 export of `recipes/glow.tres` reopened in v0.2. This check cannot be completed without either: (A) running v0_1_script with editor context instead of headless, or (B) finding an alternative mechanism to export from v0.1.
+Not run. Attempted `v0_1_script` with `SKM_SCRIPT=res://export_glow_v0_1.gd`. Blocker: headless SceneTree execution cannot resolve addon class names. Requires: (1) run `checkout_v0_1` to initialize v0.1 class cache, (2) capture verbatim error output from `v0_1_script`, (3) determine if v0.1 export mechanism is feasible or requires alternative approach.
